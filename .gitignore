@@ -1,0 +1,32 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# Local tool downloads (quarto CLI tarball, etc.) - not part of the repo
+.tools/
+
+# rv already ships its own rv/.gitignore (ignores rv/library/) in each
+# rv-managed subproject (r/, examples/demo-report/) - nothing needed here.
+
+# Generated build artifacts - regenerate with `quartifyr-styling build`
+templates/*.docx
+
+# Quarto render intermediates
+/.quarto/
+*_files/
+
+# reportifyr working documents (project-specific, not toolkit source)
+examples/*/report/shell/*.docx
+examples/*/report/draft/*
+examples/*/report/final/*
+!examples/*/report/draft/readme.txt
+!examples/*/report/final/readme.txt
+
+# OS
+.DS_Store
+
+# Personal Claude Code permissions/settings, not project source
+.claude/settings.local.json

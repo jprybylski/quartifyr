@@ -1,0 +1,75 @@
+# Default quartifyr style preset: Times New Roman, black text, flat/neutral
+# tables — a plain "professional industrial" look with no brand color baked
+# in. Per-org looks are a second YAML deep-merged over this one (see
+# quartifyr_styling.schema.StyleConfig.load), so branding a new org is a
+# YAML diff, not a round of clicking through Word's style pane.
+
+fonts:
+  body: "Times New Roman"
+  heading: "Times New Roman"
+  monospace: "Courier New"
+  sizes:
+    body: 11
+    title: 26
+    subtitle: 16
+    heading:
+      1: 16
+      2: 14
+      3: 12
+      4: 11
+      5: 11
+      6: 11
+    caption: 10
+    footnote: 9
+    toc: 11
+
+colors:
+  text: "#000000"
+  heading: "#000000"
+  title: "#000000"
+  caption: "#000000"
+  table_header_fill: "#D9D9D9"
+  table_border: "#000000"
+  rule: "#000000"
+
+page:
+  size: "letter"
+  margins_in:
+    top: 1
+    bottom: 1
+    left: 1
+    right: 1
+
+paragraph:
+  line_spacing: 1.15
+  space_after_pt: 8
+
+heading:
+  bold: true
+  space_before_pt: 12
+  space_after_pt: 6
+  keep_with_next: true
+
+table:
+  style: "Table Grid"
+  header_bold: true
+  banding: false
+
+title_page:
+  show_rule_under_title: true
+  fields:
+    - report_type
+    - title
+    - subtitle
+    - date
+    - lead_scientist
+    - version
+    - confidentiality
+
+footer:
+  show_page_number: true
+  text: ""
+
+identity:
+  org_name: ""
+  logo_path: ""
