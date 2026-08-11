@@ -27,6 +27,7 @@ end
 local doc_title = nil
 local doc_subtitle = nil
 local report_type = nil
+local document_status = nil
 local report_date = nil
 local lead_scientist = nil
 local report_version = nil
@@ -64,6 +65,30 @@ local function spacer_paragraph()
   return [[<w:p/>]]
 end
 
+-- A bordered box rather than a colored watermark, so DRAFT/FINAL stays
+-- prominent without breaking the black/Times-New-Roman "professional
+-- industrial" default look (see styling/styles/default.yaml).
+local function status_box(text)
+  return string.format(
+    [[
+  <w:p>
+    <w:pPr>
+      <w:pBdr>
+        <w:top w:val="single" w:sz="8" w:space="6" w:color="000000"/>
+        <w:left w:val="single" w:sz="8" w:space="6" w:color="000000"/>
+        <w:bottom w:val="single" w:sz="8" w:space="6" w:color="000000"/>
+        <w:right w:val="single" w:sz="8" w:space="6" w:color="000000"/>
+      </w:pBdr>
+      <w:jc w:val="center"/>
+      <w:spacing w:before="120" w:after="240"/>
+    </w:pPr>
+    <w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">%s</w:t></w:r>
+  </w:p>
+  ]],
+    utils.escape_xml(string.upper(text))
+  )
+end
+
 local function page_break_paragraph()
   return [[<w:p><w:r><w:br w:type="page"/></w:r></w:p>]]
 end
@@ -74,6 +99,11 @@ return {
       doc_title = stringify_or_nil(meta.title)
       doc_subtitle = stringify_or_nil(meta.subtitle)
       report_type = stringify_or_nil(meta["report-type"])
+      -- Always shown (unlike the other optional fields below): the
+      -- draft/final state is meant to be impossible to miss, and lines up
+      -- with reportifyr's own report/draft vs report/final convention
+      -- (see the repo-root README's orchestration section).
+      document_status = stringify_or_nil(meta["document-status"]) or "DRAFT"
       report_date = stringify_or_nil(meta.date)
       lead_scientist = stringify_or_nil(meta["lead-scientist"])
       report_version = stringify_or_nil(meta.version)
@@ -118,6 +148,8 @@ return {
       if doc_subtitle then
         table.insert(parts, styled_paragraph("Subtitle", doc_subtitle))
       end
+
+      table.insert(parts, status_box(document_status))
 
       table.insert(parts, spacer_paragraph())
 

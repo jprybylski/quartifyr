@@ -26,6 +26,7 @@ quarto add jprybylski/quartifyr
 title: "Population PK Analysis of Compound X"
 subtitle: "Final Report"
 report-type: "Clinical Study Report"
+document-status: "draft"   # or "final" -- see Title page below
 date: "2026-08-11"
 lead-scientist: "Jane Doe, PharmD"
 version: "1.0"
@@ -67,6 +68,19 @@ suppresses pandoc's own automatic title-block (which would otherwise
 duplicate `title`/`subtitle`/`date`), so no other title-related frontmatter
 handling is needed.
 
+`document-status` renders as a bordered, bold, uppercase box right under
+the title (a "stamp" rather than a colored watermark, to stay inside the
+black/Times-New-Roman default look) -- unlike the other fields, it's
+*always* shown, defaulting to `DRAFT` if omitted, since it's meant to be
+impossible to miss. This is the same draft/final distinction `reportifyr`
+already tracks via its `report/draft/` vs `report/final/` directories and
+`finalize_document()` (which strips reportifyr's own bookmarks/magic
+strings) -- `document-status` doesn't read that state automatically (the
+Quarto render happens before any of reportifyr's pass-2 steps), so the
+orchestration driver is responsible for keeping the two in sync: render
+with `document-status: DRAFT` for anything headed to `report/draft/`, and
+`FINAL` when producing what will become `report/final/`.
+
 ### Contributor / approval signature pages
 
 Right after the title page, `contributors:` (with `authors:`/`reviewers:`
@@ -85,6 +99,34 @@ handful of contributors they'll naturally share a page; Word just flows
 onto a new page once the content no longer fits. The only explicit break
 this filter inserts is right after the title page (before "Contributors")
 and once more after the last section (before the rest of the document).
+
+### Appendices
+
+```
+{{< appendix "StatsAppendix" "Statistical Analysis Details" >}}
+
+... appendix body ...
+
+{{< appendix "DataListings" "Data Listings" >}}
+```
+
+Each `{{< appendix "BookmarkId" "Title" >}}` renders an "Appendix A: ...",
+"Appendix B: ...", ... heading using a native Word `SEQ Appendix \*
+ALPHABETIC` field — reordering, adding, or removing appendices never
+requires manual relettering, just a field recalculation (see the
+repo-root README's field-recalculation step). It uses the `Heading 1`
+style so appendices show up in the ToC the same as any other top-level
+heading, no `toc-style-map` entry needed.
+
+Reference an appendix from body text with
+`{{< appendix_crossref "BookmarkId" >}}`, which resolves to "Appendix A"
+(etc.) via a `REF` field to the bookmark `appendix` set.
+
+Note: figure/table numbering from `quarto-plus`'s own `fig_caption`/
+`tbl_caption` shortcodes is intentionally left continuous through
+appendices (e.g. "Figure 12" inside Appendix B, not "Figure B-1") — see
+the comment at the top of `appendix.lua` for why and how that could be
+extended later.
 
 ### Styling
 

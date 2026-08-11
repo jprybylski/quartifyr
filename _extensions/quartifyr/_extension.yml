@@ -3,6 +3,8 @@ author: jprybylski
 version: 0.1.0
 quarto-required: ">=1.6.36"
 contributes:
+  shortcodes:
+    - appendix.lua
   filters:
     # Both filters prepend their content at position 1, so list order here
     # is the REVERSE of final page order: signature_page runs first and
