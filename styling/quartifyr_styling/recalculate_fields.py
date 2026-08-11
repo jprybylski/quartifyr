@@ -22,11 +22,31 @@ What *is* left stale is the List of Figures/List of Tables bodies and any
 plain ``REF``-style cross-reference (e.g. this project's
 ``appendix_crossref`` shortcode) -- those still need a one-time manual
 update in Microsoft Word (Ctrl+A, then F9) after delivery.
+
+EXPERIMENTAL / UNRELIABLE (as of this writing): the underlying ``soffice
+--headless ... macro:///...`` invocation has three distinct observed
+failure modes across repeated real-world runs -- (1) hangs indefinitely
+(reproduced in a sandboxed environment *and* a plain native macOS
+terminal, ruling out sandboxing as the cause), (2) exits cleanly within
+seconds without the macro having actually run at all (file untouched), and
+(3) works correctly end-to-end, ToC genuinely recalculated. All three were
+observed against the *same* document across different runs, so this isn't
+document-specific either. This module now defends against (1) by killing
+the whole process group on timeout (not just the tracked PID, which can
+leave an orphaned ``soffice.bin`` worker behind) and against (2) by
+verifying the ToC placeholder actually disappeared rather than trusting
+the exit code -- but the underlying non-determinism itself is unresolved
+and looks like a genuine LibreOffice/macOS interaction bug outside
+quartifyr's control. Treat this feature as experimental until proven
+reliable in your own environment; it fails loudly and cleanly either way
+(no silent false "success").
 """
 
 from __future__ import annotations
 
+import os
 import shutil
+import signal
 import subprocess
 import tempfile
 from pathlib import Path
@@ -87,6 +107,27 @@ def _seed_profile(profile_dir: Path) -> None:
     (profile_dir / "user" / "basic" / "script.xlc").write_text(_SCRIPT_XLC)
 
 
+def _kill_process_tree(proc: subprocess.Popen) -> None:
+    """Kill proc's entire process group, not just the single tracked PID.
+
+    soffice's launcher can spawn a detached soffice.bin worker; a plain
+    proc.kill() only signals the PID Python is tracking and can leave that
+    worker running as an orphan. Reproduced: a real-world run left soffice
+    alive and unkillable via the ordinary timeout path for several minutes.
+    start_new_session=True (set where this process is started) puts the
+    whole tree in its own process group so os.killpg reaches all of it.
+    """
+    try:
+        pgid = os.getpgid(proc.pid)
+        os.killpg(pgid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
+
+
 def recalculate_fields(
     docx_path: str | Path,
     *,
@@ -126,33 +167,58 @@ def recalculate_fields(
         # succeeded when output went straight to a real fd (a terminal, or
         # here, a file).
         stderr_path = profile_dir / "soffice-stderr.log"
-        try:
-            with open(stderr_path, "wb") as stderr_file:
-                result = subprocess.run(
-                    [
-                        soffice_bin,
-                        "--headless",
-                        "--invisible",
-                        "--norestore",
-                        f"-env:UserInstallation=file://{profile_dir}",
-                        str(docx_path),
-                        "macro:///Standard.Module1.UpdateAndSave",
-                    ],
-                    stdout=subprocess.DEVNULL,
-                    stderr=stderr_file,
-                    timeout=timeout_seconds,
-                )
-        except subprocess.TimeoutExpired as exc:
-            raise FieldRecalculationError(
-                f"LibreOffice did not finish within {timeout_seconds}s recalculating {docx_path}. "
-                "This has been observed when a document's *non-index* text fields (not the main "
-                "ToC) trigger a LibreOffice headless hang -- see this module's docstring."
-            ) from exc
+        with open(stderr_path, "wb") as stderr_file:
+            proc = subprocess.Popen(
+                [
+                    soffice_bin,
+                    "--headless",
+                    "--invisible",
+                    "--norestore",
+                    f"-env:UserInstallation=file://{profile_dir}",
+                    str(docx_path),
+                    "macro:///Standard.Module1.UpdateAndSave",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=stderr_file,
+                start_new_session=True,  # own process group; see _kill_process_tree
+            )
+            try:
+                returncode = proc.wait(timeout=timeout_seconds)
+            except subprocess.TimeoutExpired:
+                _kill_process_tree(proc)
+                raise FieldRecalculationError(
+                    f"LibreOffice did not finish within {timeout_seconds}s recalculating {docx_path} "
+                    "and was force-killed. This has been observed to hang intermittently on macOS "
+                    "(reproduced both in a sandboxed environment and a plain native terminal) -- see "
+                    "this module's docstring and r/README.md's 'Word field recalculation' section."
+                ) from None
 
-        if result.returncode != 0:
+        if returncode != 0:
             stderr_text = stderr_path.read_text(errors="replace") if stderr_path.exists() else ""
             raise FieldRecalculationError(
-                f"LibreOffice field recalculation failed (exit {result.returncode}):\n{stderr_text}"
+                f"LibreOffice field recalculation failed (exit {returncode}):\n{stderr_text}"
             )
 
+    # A clean exit code alone isn't trustworthy here: reproduced a run that
+    # exited 0 within seconds without the macro actually having run (the
+    # file was untouched, ToC field still showing the un-recalculated
+    # placeholder). Verify the actual expected side effect happened rather
+    # than just trusting the process exit status.
+    if _still_has_unrecalculated_toc_placeholder(docx_path):
+        raise FieldRecalculationError(
+            f"LibreOffice exited successfully but {docx_path} still shows the "
+            "un-recalculated ToC placeholder ('Right-click to update field') -- the macro "
+            "did not actually run, or errored internally without a nonzero exit code."
+        )
+
     return docx_path
+
+
+def _still_has_unrecalculated_toc_placeholder(docx_path: Path) -> bool:
+    import docx as docx_lib  # local import: only needed for this check
+
+    document = docx_lib.Document(str(docx_path))
+    for paragraph in document.paragraphs:
+        if "Right-click to update field" in paragraph.text:
+            return True
+    return False

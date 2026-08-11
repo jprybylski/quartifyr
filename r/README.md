@@ -67,16 +67,24 @@ field" to real, correctly-paginated entries (" Contributors2", " Results5",
 etc.) after running it.
 
 It's off by default in `render_report()` (`recalculate_fields = FALSE`)
-because the underlying `soffice --headless` invocation has also been
-observed to hang intermittently in some environments, for reasons not
-fully root-caused yet (ruled out: Python venv env leakage, a real
-`subprocess.run(capture_output=True)` pipe-deadlock bug that's now fixed
-regardless, stale profile lock files). Turn it on
-(`render_report(..., recalculate_fields = TRUE)`) once you've confirmed
-`quartifyr-styling recalculate-fields --docx <file>` is reliable in your
-own environment. When it does fail, it only produces a warning, not a
-render failure -- the document is still fully usable, just needs a manual
-"select all, F9" in Word.
+and should be considered **experimental**: repeated real-world runs
+against the same document have shown three distinct outcomes -- it hangs
+indefinitely, it exits cleanly within seconds without the macro having
+actually run (file untouched), or it works correctly end-to-end. This has
+been reproduced both in a sandboxed environment and a plain native macOS
+terminal (ruling out sandboxing as the cause), so it looks like a genuine
+LibreOffice/macOS interaction bug outside quartifyr's control, not
+something fixable from here. The module now defends against the two
+failure modes it *can* control: the whole `soffice` process group gets
+killed on timeout (not just the tracked PID, which could otherwise leave
+an orphaned worker process running indefinitely), and it verifies the ToC
+placeholder actually disappeared rather than trusting a clean exit code --
+so a run either genuinely succeeds or fails loudly, never silently
+no-ops. Turn it on (`render_report(..., recalculate_fields = TRUE)`) only
+after you've confirmed it's reliable enough for your own use, and expect
+to sometimes need a manual re-run. When it does fail, it only produces a
+warning, not a render failure -- the document is still fully usable, just
+needs a manual "select all, F9" in Word.
 
 Known coverage gap even when it *does* work: LibreOffice only recognizes
 the main document ToC as an updatable index. `quarto-plus`'s List of
