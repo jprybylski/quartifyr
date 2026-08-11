@@ -25,6 +25,16 @@
 #'   `reportifyr::initialize_report_project()` creates, alongside `shell_qmd`.
 #' @param venv_bin Path to the `styling/` venv's `bin/` directory (holds the
 #'   `quartifyr-styling` CLI used for the abbreviations bridge).
+#' @param recalculate_fields Whether to run `quartifyr-styling
+#'   recalculate-fields` (headless LibreOffice) on each produced docx
+#'   afterward, so the delivered file's ToC page numbers/entries are
+#'   already resolved instead of showing "Right-click to update field".
+#'   Default `FALSE`: this step has been observed to hang intermittently in
+#'   some environments for reasons not yet root-caused (see
+#'   `recalculate_fields.py`'s docstring and `r/README.md`) -- opt in once
+#'   you've confirmed it's reliable in your own environment. A failure here
+#'   only warns, it never fails the overall render (the doc is still fully
+#'   usable, just needs a manual "select all, F9" in Word).
 #'
 #' @return A list with `shell`, `draft`, and (when `status = "final"`) `final`
 #'   docx paths.
@@ -50,7 +60,8 @@ render_report <- function(
   config_yaml = file.path(dirname(dirname(shell_qmd)), "config.yaml"),
   figures_path = file.path(dirname(dirname(dirname(shell_qmd))), "OUTPUTS", "figures"),
   tables_path = file.path(dirname(dirname(dirname(shell_qmd))), "OUTPUTS", "tables"),
-  venv_bin = file.path(toolkit_root, ".venv", "bin")
+  venv_bin = file.path(toolkit_root, ".venv", "bin"),
+  recalculate_fields = FALSE
 ) {
   status <- match.arg(status)
 
@@ -165,6 +176,27 @@ render_report <- function(
 
     out
   })
+
+  if (recalculate_fields) {
+    outputs <- Filter(Negate(is.null), list(result$draft, result$final))
+    for (output_path in outputs) {
+      recalc_result <- tryCatch(
+        processx::run(
+          command = quartifyr_styling_bin,
+          args = c("recalculate-fields", "--docx", output_path),
+          error_on_status = FALSE,
+          timeout = 150
+        ),
+        error = function(e) {
+          warning("quartifyr-styling recalculate-fields errored on ", output_path, ": ", conditionMessage(e))
+          NULL
+        }
+      )
+      if (!is.null(recalc_result) && recalc_result$status != 0) {
+        warning("quartifyr-styling recalculate-fields failed on ", output_path, ":\n", recalc_result$stderr)
+      }
+    }
+  }
 
   result
 }

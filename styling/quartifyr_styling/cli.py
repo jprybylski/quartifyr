@@ -7,6 +7,7 @@ import sys
 
 from .abbreviations import AbbreviationsError, build_abbreviations_tex
 from .build_template import build_reference_docx
+from .recalculate_fields import FieldRecalculationError, recalculate_fields
 from .schema import StyleConfig, StyleConfigError
 
 
@@ -31,6 +32,16 @@ def _cmd_abbrevs(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_recalculate_fields(args: argparse.Namespace) -> int:
+    try:
+        output_path = recalculate_fields(args.docx, timeout_seconds=args.timeout)
+    except (FieldRecalculationError, FileNotFoundError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"recalculated {output_path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="quartifyr-styling")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -47,6 +58,14 @@ def build_parser() -> argparse.ArgumentParser:
     abbrevs.add_argument("--footnotes", required=True, help="Path to standard_footnotes.yaml")
     abbrevs.add_argument("--out", default="abbreviations.tex", help="Output abbreviations.tex path")
     abbrevs.set_defaults(func=_cmd_abbrevs)
+
+    recalc = subparsers.add_parser(
+        "recalculate-fields",
+        help="Recalculate a docx's Word ToC (page numbers, entries) in place via headless LibreOffice",
+    )
+    recalc.add_argument("--docx", required=True, help="Path to the docx to recalculate (modified in place)")
+    recalc.add_argument("--timeout", type=int, default=120, help="Timeout in seconds (default: 120)")
+    recalc.set_defaults(func=_cmd_recalculate_fields)
 
     return parser
 

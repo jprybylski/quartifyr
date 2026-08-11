@@ -51,6 +51,38 @@ path, so this is load-bearing, not just a naming convention.
    from `OUTPUTS/`, producing `report/draft/<name>-draft.docx`.
 4. When `status = "final"`, also runs `reportifyr::finalize_document()`,
    producing `report/final/<name>-final.docx`.
+5. Optionally (`recalculate_fields = TRUE`, default off), runs
+   `quartifyr-styling recalculate-fields` on each produced docx -- see
+   "Word field recalculation" below.
+
+## Word field recalculation (optional, off by default)
+
+Quarto/pandoc docx output contains native Word field codes (`TOC`, `SEQ`,
+`REF`) that don't self-populate -- without recalculation, a delivered docx
+shows "Right-click to update field" instead of the actual ToC.
+`../styling/quartifyr_styling/recalculate_fields.py` drives headless
+LibreOffice to do that recalculation automatically, and it *works* --
+verified end-to-end: a real render's ToC went from "Right-click to update
+field" to real, correctly-paginated entries (" Contributors2", " Results5",
+etc.) after running it.
+
+It's off by default in `render_report()` (`recalculate_fields = FALSE`)
+because the underlying `soffice --headless` invocation has also been
+observed to hang intermittently in some environments, for reasons not
+fully root-caused yet (ruled out: Python venv env leakage, a real
+`subprocess.run(capture_output=True)` pipe-deadlock bug that's now fixed
+regardless, stale profile lock files). Turn it on
+(`render_report(..., recalculate_fields = TRUE)`) once you've confirmed
+`quartifyr-styling recalculate-fields --docx <file>` is reliable in your
+own environment. When it does fail, it only produces a warning, not a
+render failure -- the document is still fully usable, just needs a manual
+"select all, F9" in Word.
+
+Known coverage gap even when it *does* work: LibreOffice only recognizes
+the main document ToC as an updatable index. `quarto-plus`'s List of
+Figures/List of Tables and plain `REF`-style cross-references (e.g. this
+project's `appendix_crossref` shortcode) aren't recalculated by this step
+and still need that manual Word update.
 
 ## A load-bearing detail: working directory
 
