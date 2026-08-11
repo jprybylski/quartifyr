@@ -24,6 +24,7 @@ import docx
 from docx.oxml.ns import qn
 
 PROJECT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = PROJECT_DIR.parent.parent
 
 
 def _iter_paragraph_text(document: docx.Document):
@@ -41,6 +42,25 @@ def main() -> int:
     if shutil.which("quarto") is None:
         print("SKIP: quarto not found on PATH", file=sys.stderr)
         return 0
+
+    # Quarto's extension loader doesn't follow symlinks, so this demo
+    # carries a physical copy of _extensions/quartifyr/ rather than a
+    # symlink to the canonical one at the repo root -- which means it can
+    # silently drift out of sync with real fixes (this happened for real:
+    # a Heading1-vs-"Heading 1" style-ID bugfix landed in the canonical
+    # copy but the demo kept rendering with the stale, buggy version until
+    # caught). Fail fast, before wasting time on a render that would only
+    # prove the *old* code works.
+    sync_check = subprocess.run(
+        ["python3", str(REPO_ROOT / "scripts" / "sync_demo_extension.py"), "--check"],
+        capture_output=True,
+        text=True,
+    )
+    if sync_check.returncode != 0:
+        print("FAIL: demo's _extensions/quartifyr/ copy has drifted from the canonical one", file=sys.stderr)
+        print(sync_check.stdout, file=sys.stderr)
+        print(sync_check.stderr, file=sys.stderr)
+        return 1
 
     print("Running Rscript render.R --final ...")
     result = subprocess.run(
@@ -68,7 +88,7 @@ def main() -> int:
     checks: list[tuple[str, bool]] = []
 
     checks.append(("no leftover {rpfy}: magic strings", "{rpfy}:" not in joined))
-    checks.append(("at least 5 tables present (signatures + PK summary + abbreviations)", len(document.tables) >= 5))
+    checks.append(("at least 6 tables present (signatures + synopsis + PK summary + abbreviations)", len(document.tables) >= 6))
 
     with zipfile.ZipFile(final_docx) as z:
         images = [n for n in z.namelist() if n.startswith("word/media/")]
@@ -88,6 +108,16 @@ def main() -> int:
     checks.append(("appendix auto-lettered", "Appendix A: Statistical Methods" in joined))
     checks.append(
         ("PK summary table header present", any({"Cmax", "Cmin"}.issubset(set(row)) for row in all_rows))
+    )
+    checks.append(("synopsis section rendered", "Synopsis" in joined))
+    checks.append(
+        (
+            "synopsis title row has the real report title",
+            any(
+                len(row) >= 2 and row[0] == "Title" and row[1] == "Population Pharmacokinetics of Theophylline"
+                for row in all_rows
+            ),
+        )
     )
 
     failed = [name for name, ok in checks if not ok]

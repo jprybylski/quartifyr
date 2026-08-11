@@ -7,7 +7,11 @@
 -- B", ...) via a native Word SEQ field, so adding/removing/reordering
 -- appendices never requires manual renumbering -- just recalculate fields
 -- (Quarto's docx output flags fields dirty; see the repo-root README for
--- the field-recalculation step). It uses the "Heading 1" style so
+-- the field-recalculation step). It uses the "Heading 1" style (referenced
+-- by its style ID, "Heading1" with no space -- NOT its display name
+-- "Heading 1" with a space; using the display name renders visually fine
+-- but Word's ToC field silently fails to recognize the paragraph as a
+-- heading at all, confirmed via a real Word field-recalculation test) so
 -- appendices show up in quarto-plus's native ToC (`\o "1-3"`) the same way
 -- any other top-level heading does, no `toc-style-map` needed.
 --
@@ -47,7 +51,7 @@ return {
       [[
     <w:p>
       <w:pPr>
-        <w:pStyle w:val="Heading 1"/>
+        <w:pStyle w:val="Heading1"/>
       </w:pPr>
       <w:bookmarkStart w:id="%d" w:name="%s"/>
       <w:r>

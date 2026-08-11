@@ -137,7 +137,7 @@ Then:
 2. `Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'`
    to regenerate `.report_init.json` and the `report/`/`OUTPUTS/`
    structure for this project.
-3. Edit `report/shell/report.qmd`'s frontmatter (title, lead scientist,
+3. Edit `report.qmd`'s frontmatter (title, lead scientist,
    contributors/approvers, etc.) and body content.
 4. Extend `report/standard_footnotes.yaml` with any project-specific
    abbreviations (it starts from `reportifyr`'s org-wide defaults).

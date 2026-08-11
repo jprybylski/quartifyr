@@ -10,14 +10,25 @@ a real `reportifyr` fill pass.
 
 ## Layout
 
+- `report.qmd` -- the shell source, at the project root alongside
+  `_extensions/` (standard Quarto project layout). Frontmatter drives the
+  title page/signature pages, body uses `{rpfy}:` magic strings plus
+  `quarto-plus`/`quartifyr` shortcodes for captions, abbreviations, and the
+  appendix.
+- `_quarto.yml` -- sets `project: {output-dir: report/shell}`, which is
+  what actually redirects the render into `report/shell/`
+  (`reportifyr::make_doc_dirs()` needs the docx there, not the qmd).
+- `_extensions/quartifyr/` -- a **physical copy** of the repo-root
+  `_extensions/quartifyr/`, not a symlink (Quarto's extension loader
+  doesn't follow symlinks -- confirmed, `quarto render` fails outright
+  through one). Kept in sync via `scripts/sync_demo_extension.py`, checked
+  automatically by `smoke_test.py` (see below) -- if you edit the
+  repo-root extension, re-run that script before trusting this demo's
+  output.
 - `scripts/01_analysis.R` -- generates `OUTPUTS/tables/pk-summary.csv` and
   `OUTPUTS/figures/conc-time.png` (with reportifyr metadata sidecars) from
   `Theoph`. Already run; outputs are committed so the demo works
   immediately after a clone. Re-run it if you want to regenerate them.
-- `report/shell/report.qmd` -- the shell source: frontmatter drives the
-  title page/signature pages, body uses `{rpfy}:` magic strings plus
-  `quarto-plus`/`quartifyr` shortcodes for captions, abbreviations, and the
-  appendix.
 - `report/standard_footnotes.yaml`, `report/config.yaml` -- reportifyr's
   own defaults (via `reportifyr::initialize_report_project()`).
 - `render.R` -- runs the full pipeline via the toolkit's
@@ -45,12 +56,13 @@ source ../../.venv/bin/activate
 python3 smoke_test.py
 ```
 
-Runs `Rscript render.R --final` for real and asserts on the resulting
-docx: no leftover `{rpfy}:` magic strings, the PK summary table and
-concentration-time figure are actually filled in (not placeholders), the
-title page/status stamp/appendix lettering all rendered, and `\gls{PK}`
-resolved through the abbreviations bridge. Skips (exit 0) if `Rscript` or
-`quarto` aren't on `PATH`.
+First checks `_extensions/quartifyr/` hasn't drifted from the repo-root
+copy (see Layout above), then runs `Rscript render.R --final` for real and
+asserts on the resulting docx: no leftover `{rpfy}:` magic strings, the PK
+summary table and concentration-time figure are actually filled in (not
+placeholders), the title page/status stamp/appendix lettering all
+rendered, and `\gls{PK}` resolved through the abbreviations bridge. Skips
+(exit 0) if `Rscript` or `quarto` aren't on `PATH`.
 
 ## Why this project has its own `.here` file
 

@@ -22,7 +22,7 @@ scripts):
 source("R/render_report.R")
 
 result <- render_report(
-  shell_qmd = "/path/to/project/report/shell/report.qmd",
+  shell_qmd = "/path/to/project/report.qmd",
   status = "draft"   # or "final"
 )
 # result$shell, result$draft, result$final (NULL unless status == "final")
@@ -31,14 +31,18 @@ result <- render_report(
 As a one-shot CLI:
 
 ```bash
-Rscript render.R /path/to/project/report/shell/report.qmd
-Rscript render.R /path/to/project/report/shell/report.qmd --final
+Rscript render.R /path/to/project/report.qmd
+Rscript render.R /path/to/project/report.qmd --final
 ```
 
-`shell_qmd` must live under a `report/shell/` directory --
-`reportifyr::make_doc_dirs()` derives `report/draft/` and `report/final/`
-output paths by substring-replacing "shell" in the containing directory
-path, so this is load-bearing, not just a naming convention.
+`shell_qmd` lives at the project root alongside `_extensions/` (standard
+Quarto project layout -- extensions are discovered relative to the qmd
+being rendered). The project's `_quarto.yml` must set `project:
+{output-dir: report/shell}`, since `reportifyr::make_doc_dirs()` derives
+`report/draft/` and `report/final/` output paths by substring-replacing
+"shell" in the *rendered docx's* containing directory -- not the qmd's --
+so this is load-bearing, not just a naming convention. See
+`examples/demo-report/` for a working example of this layout.
 
 ## What `render_report()` actually does
 

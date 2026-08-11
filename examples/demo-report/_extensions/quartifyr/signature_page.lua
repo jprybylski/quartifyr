@@ -77,10 +77,16 @@ local function heading_paragraph(text)
   -- `[[ ]]` long-bracket string -- it would be the literal two characters
   -- `\` and `t` -- so the tab has to come from a normal quoted string.
   local tab_char = "\t"
+  -- pStyle must reference the style ID ("Heading1", no space), not the
+  -- display name ("Heading 1", with a space) -- the display name renders
+  -- visually fine but Word's ToC field silently fails to recognize the
+  -- paragraph as a heading at all, confirmed via a real Word
+  -- field-recalculation test (Contributors/Approvers were missing from a
+  -- real, recalculated ToC despite looking correctly styled).
   return string.format(
     [[
   <w:p>
-    <w:pPr><w:pStyle w:val="Heading 1"/></w:pPr>
+    <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
     <w:r><w:t xml:space="preserve">%s%s</w:t></w:r>
   </w:p>
   ]],
@@ -158,10 +164,15 @@ local function side_label_cell(width, text, vmerge_val)
   )
 end
 
+-- tblStyle references the style ID ("TableGrid"), not the display name
+-- ("Table Grid") -- same pStyle-vs-styleId pitfall as heading_paragraph()
+-- above; a wrong reference here just silently drops our reference-doc's
+-- customized borders/header shading rather than breaking a Word feature
+-- outright, so it's easier to miss without specifically checking for it.
 local TABLE_OPEN = [[
   <w:tbl>
     <w:tblPr>
-      <w:tblStyle w:val="Table Grid"/>
+      <w:tblStyle w:val="TableGrid"/>
       <w:tblW w:w="0" w:type="auto"/>
       <w:tblLook w:val="04A0" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>
     </w:tblPr>

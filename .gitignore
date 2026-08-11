@@ -20,7 +20,7 @@ templates/*.docx
 
 # reportifyr working documents (project-specific, not toolkit source)
 examples/*/report/shell/*.docx
-examples/*/report/shell/abbreviations.tex
+examples/*/abbreviations.tex
 examples/*/report/draft/*
 examples/*/report/final/*
 !examples/*/report/draft/readme.txt

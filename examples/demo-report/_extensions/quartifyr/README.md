@@ -8,8 +8,8 @@ page specifically — the same shell-generation approach is meant to extend
 to presentations, analysis plans, memos, and other standardized document
 kinds over time; this extension currently covers the front-matter pieces
 most of those document kinds tend to need: a dynamic title page (with a
-draft/final status stamp), contributor/approval signature pages, and
-numbered appendices.
+draft/final status stamp), contributor/approval signature pages, a
+synopsis summary table, and numbered appendices.
 
 This extension adds those on top of
 [`quarto-plus`](https://github.com/A2-ai/quarto-plus)'s ToC/List of
@@ -45,6 +45,10 @@ contributors:
 approvers:
   - name: "Alice Lee, MD"
     title: "Medical Director"
+synopsis:
+  objectives: "..."
+  methods: "..."
+  results: "..."
 format: docx
 filters:
   - quarto-plus
@@ -101,6 +105,37 @@ onto a new page once the content no longer fits. The only explicit break
 this filter inserts is right after the title page (before "Contributors")
 and once more after the last section (before the rest of the document).
 
+### Synopsis
+
+```
+Synopsis
+
+::: .synopsis
+:::
+```
+
+Renders a bordered, two-column summary table (Title/Objectives/Methods/
+Results — a standard CSR front-matter convention) from a `synopsis:`
+frontmatter block:
+
+```yaml
+synopsis:
+  objectives: "..."
+  methods: "..."
+  results: "..."
+```
+
+The "Title" row comes from the top-level `title:` field automatically.
+Row *labels* are fixed; *values* are dynamic per-project. **To turn it
+off, omit `synopsis:` from frontmatter entirely** — the `::: .synopsis
+:::` div then renders nothing, so a shared shell template can leave the
+div marker in unconditionally and let each project's frontmatter decide.
+
+Author placement of the `::: .synopsis :::` div controls where it lands —
+unlike the title page and signature pages (always first/second by
+construction), a synopsis's conventional position varies more by org, so
+this one isn't auto-inserted.
+
 ### Appendices
 
 ```
@@ -114,9 +149,12 @@ and once more after the last section (before the rest of the document).
 Each `{{< appendix "BookmarkId" "Title" >}}` renders an "Appendix A: ...",
 "Appendix B: ...", ... heading using a native Word `SEQ Appendix \*
 ALPHABETIC` field — reordering, adding, or removing appendices never
-requires manual relettering, just a field recalculation (a planned
-`r/` orchestration step, not yet built). It uses the `Heading 1`
-style so appendices show up in the ToC the same as any other top-level
+requires manual relettering, just a field recalculation (see
+`../../r/README.md`'s "Word field recalculation" section — experimental,
+off by default; without it, a delivered doc needs one manual "select all,
+F9" in Word). It uses the `Heading 1` style — referenced by style ID
+(`Heading1`), not display name, which matters: see "A pStyle gotcha"
+below — so appendices show up in the ToC the same as any other top-level
 heading, no `toc-style-map` entry needed.
 
 Reference an appendix from body text with
@@ -128,6 +166,35 @@ Note: figure/table numbering from `quarto-plus`'s own `fig_caption`/
 appendices (e.g. "Figure 12" inside Appendix B, not "Figure B-1") — see
 the comment at the top of `appendix.lua` for why and how that could be
 extended later.
+
+### Numbered sections
+
+```yaml
+number-sections: true
+```
+
+A plain pandoc/Quarto option, no quartifyr-specific code involved — it
+numbers real body headings (`# Introduction` → "1.", `## Background` →
+"1.1", `# Results` → "2.", ...) as static text baked in at render time,
+correctly nested by level. Verified it does **not** touch title/signature/
+appendix headings, since those are raw OOXML this extension injects
+directly rather than genuine pandoc `Header` nodes — `number-sections`
+only walks real ones. Per-project opt-in; see
+`examples/demo-report/report.qmd` for a working example.
+
+### A pStyle gotcha (if you're extending this extension)
+
+`<w:pStyle w:val="...">` must reference a style's **ID** (e.g.
+`Heading1`, `TableGrid` — no spaces), not its **display name** (`Heading
+1`, `Table Grid`). Word/LibreOffice render the display-name form visually
+fine via a fallback lookup, which makes this easy to miss — but Word's ToC
+field silently fails to recognize such a paragraph as a heading at all
+(confirmed via a real Word field-recalculation test: Contributors/
+Approvers/the appendix were rendering correctly but missing from the ToC
+entirely until this was fixed), and a wrong table style reference silently
+drops the reference-doc's customized borders/shading. If you add new raw
+OOXML in this extension referencing a multi-word built-in style, use the
+ID form.
 
 ### Styling
 

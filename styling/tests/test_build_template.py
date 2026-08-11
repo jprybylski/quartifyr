@@ -30,6 +30,25 @@ def test_default_preset_is_times_new_roman_and_black(tmp_path):
         assert str(style.font.color.rgb) == "000000", name
 
 
+def test_no_theme_font_references_survive_on_styled_elements(tmp_path):
+    # Regression test: python-docx's bundled default template gives Title/
+    # Subtitle/Heading N BOTH a literal ascii font AND a *Theme reference
+    # (asciiTheme="majorHAnsi" etc) on the same rFonts element. Word/
+    # LibreOffice prefer the theme reference when both are present and
+    # silently ignore the literal font -- font.name reads back correctly
+    # via python-docx's API regardless, since that only reads the (ignored)
+    # literal attribute, which is exactly how this shipped undetected:
+    # headings rendered in the theme's major font (Calibri, falling back to
+    # Arial where Calibri isn't installed) instead of Times New Roman.
+    _, doc = _build(tmp_path)
+    theme_attrs = (qn("w:asciiTheme"), qn("w:hAnsiTheme"), qn("w:cstheme"), qn("w:eastAsiaTheme"))
+    for name in ["Normal", "Title", "Subtitle", "Heading 1", "Heading 4", "Caption", "TOC 1", "Footer"]:
+        rfonts = doc.styles[name].element.find(f".//{W_NS}rFonts")
+        assert rfonts is not None, name
+        for attr in theme_attrs:
+            assert rfonts.get(attr) is None, f"{name} still has theme font reference {attr}"
+
+
 def test_heading_sizes_descend_with_level(tmp_path):
     _, doc = _build(tmp_path)
     sizes = [doc.styles[f"Heading {lvl}"].font.size.pt for lvl in (1, 2, 3, 4)]

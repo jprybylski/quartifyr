@@ -20,14 +20,34 @@ contributors:
 approvers:
   - name: "Alice Lee, MD"
     title: "Medical Director"
+synopsis:
+  objectives: "To characterize the pharmacokinetics of theophylline following oral administration."
+  methods: "Individual concentration-time profiles were summarized descriptively from the built-in Theoph dataset; no model-based estimation was performed for this demonstration report."
+  results: "Peak concentrations and inter-subject variability are summarized in Table 1 and Figure 1."
 format: docx
 filters:
   - quarto-plus
   - quartifyr
+# Numbers real body headings (Introduction -> "1.", Background -> "1.1",
+# ...) as static baked-in text -- a plain pandoc/Quarto option, no
+# quartifyr-specific code involved. It only touches genuine `#`/`##`
+# headings; our raw-OOXML title/signature/appendix headings are
+# untouched (confirmed) since they aren't real pandoc Header nodes at
+# all. Per-project toggle -- set to false to turn numbering off.
+number-sections: true
 toc-style-map:
   - style: "Title"
     level: 1
 ---
+
+Synopsis
+
+::: .synopsis
+:::
+
+{{< pagebreak >}}
+
+Table of Contents
 
 ::: .toc
 :::
@@ -48,6 +68,13 @@ List of Tables
 
 {{< pagebreak >}}
 
+Terms and abbreviations used in this report are listed below.
+
+::: .abbreviations
+:::
+
+{{< pagebreak >}}
+
 # Introduction
 
 This demonstration report summarizes a \gls{PK} analysis of theophylline
@@ -58,6 +85,8 @@ through quartifyr's two-pass shell/fill pipeline.
 
 # Results
 
+## Summary Statistics
+
 {{< tbl_caption "Table 1" "Per-subject PK summary statistics" >}}
 
 {rpfy}:pk-summary.csv
@@ -65,19 +94,14 @@ through quartifyr's two-pass shell/fill pipeline.
 Per-subject maximum, minimum, and average observed concentration across
 the sampling period.
 
+## Concentration-Time Profile
+
 {{< fig_caption "Figure 1" "Concentration-time profile" >}}
 
 {rpfy}:conc-time.png
 
 Individual concentration-time trajectories for all subjects in the study,
 plotted on the same axes.
-
-{{< pagebreak >}}
-
-Terms and abbreviations used in this report are listed below.
-
-::: .abbreviations
-:::
 
 {{< pagebreak >}}
 

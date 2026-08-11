@@ -8,11 +8,15 @@
 #' figures, and footnotes from `OUTPUTS/`, and (when `status = "final"`)
 #' `reportifyr::finalize_document()` on top of that.
 #'
-#' @param shell_qmd Path to the shell `.qmd`. Must live in a `report/shell/`
-#'   directory (e.g. `.../report/shell/report.qmd`) -- `reportifyr::make_doc_dirs()`
-#'   derives the draft/final output paths by substring-replacing "shell"
-#'   with "draft"/"final" in the containing directory, so this isn't just a
-#'   convention, it's load-bearing.
+#' @param shell_qmd Path to the shell `.qmd`, at the project's root
+#'   alongside `_extensions/` (standard Quarto project layout -- extensions
+#'   are discovered relative to the qmd being rendered). The project's
+#'   `_quarto.yml` must set `project: {output-dir: report/shell}` so the
+#'   rendered docx lands in `report/shell/`, matching what
+#'   `reportifyr::make_doc_dirs()` expects (it derives `report/draft/`/
+#'   `report/final/` output paths by substring-replacing "shell" with
+#'   "draft"/"final" in the containing directory of the rendered docx --
+#'   not the source qmd -- so this is load-bearing, not just a convention).
 #' @param status `"draft"` or `"final"`. Sets the title page's DRAFT/FINAL
 #'   stamp (via Quarto's `-M document-status:`) and, when `"final"`, also
 #'   runs `reportifyr::finalize_document()` to produce a `report/final/`
@@ -56,10 +60,10 @@ render_report <- function(
   status = c("draft", "final"),
   toolkit_root = here::here(),
   reference_doc = file.path(toolkit_root, "templates", "org-reference.docx"),
-  standard_footnotes_yaml = file.path(dirname(dirname(shell_qmd)), "standard_footnotes.yaml"),
-  config_yaml = file.path(dirname(dirname(shell_qmd)), "config.yaml"),
-  figures_path = file.path(dirname(dirname(dirname(shell_qmd))), "OUTPUTS", "figures"),
-  tables_path = file.path(dirname(dirname(dirname(shell_qmd))), "OUTPUTS", "tables"),
+  standard_footnotes_yaml = file.path(dirname(shell_qmd), "report", "standard_footnotes.yaml"),
+  config_yaml = file.path(dirname(shell_qmd), "report", "config.yaml"),
+  figures_path = file.path(dirname(shell_qmd), "OUTPUTS", "figures"),
+  tables_path = file.path(dirname(shell_qmd), "OUTPUTS", "tables"),
   venv_bin = file.path(toolkit_root, ".venv", "bin"),
   recalculate_fields = FALSE
 ) {
@@ -68,10 +72,12 @@ render_report <- function(
   if (!file.exists(shell_qmd)) {
     stop("shell_qmd not found: ", shell_qmd)
   }
-  if (!grepl("[/\\\\]report[/\\\\]shell([/\\\\]|$)", dirname(shell_qmd))) {
+  quarto_yml <- file.path(dirname(shell_qmd), "_quarto.yml")
+  if (!file.exists(quarto_yml) || !any(grepl("output-dir:\\s*report/shell", readLines(quarto_yml)))) {
     stop(
-      "shell_qmd must live under a report/shell/ directory (reportifyr::make_doc_dirs() ",
-      "derives draft/final paths from that convention): ", shell_qmd
+      "Expected ", quarto_yml, " to set `project: {output-dir: report/shell}` -- ",
+      "reportifyr::make_doc_dirs() derives draft/final paths from the rendered docx living in ",
+      "report/shell/, and without that _quarto.yml setting the render won't land there."
     )
   }
 
@@ -85,7 +91,7 @@ render_report <- function(
   # whatever directory happened to be current. So project_dir is derived
   # here and every reportifyr:: call below is scoped into it explicitly
   # with withr::with_dir(), regardless of the caller's ambient cwd.
-  project_dir <- dirname(dirname(dirname(normalizePath(shell_qmd, mustWork = TRUE))))
+  project_dir <- dirname(normalizePath(shell_qmd, mustWork = TRUE))
   init_marker <- list.files(project_dir, pattern = "^\\.[^.]*_init\\.json$", all.files = TRUE)
   if (length(init_marker) == 0) {
     stop(
@@ -129,23 +135,26 @@ render_report <- function(
   }
 
   # --- Pass 1: render the shell with Quarto -------------------------------
-  shell_docx <- sub("\\.qmd$", ".docx", basename(shell_qmd))
+  # _quarto.yml's `project: {output-dir: report/shell}` (validated above)
+  # is what actually redirects the rendered docx into report/shell/ --
+  # --output here only fixes the filename, not the directory.
+  shell_docx_name <- sub("\\.qmd$", ".docx", basename(shell_qmd))
   quarto_result <- processx::run(
     command = "quarto",
     args = c(
       "render", basename(shell_qmd),
       "--to", "docx",
       "--reference-doc", reference_doc,
-      "--output", shell_docx,
+      "--output", shell_docx_name,
       "-M", paste0("document-status:", toupper(status))
     ),
-    wd = dirname(shell_qmd),
+    wd = project_dir,
     error_on_status = FALSE
   )
   if (quarto_result$status != 0) {
     stop("quarto render failed:\n", quarto_result$stderr)
   }
-  shell_docx <- file.path(dirname(shell_qmd), shell_docx)
+  shell_docx <- file.path(project_dir, "report", "shell", shell_docx_name)
 
   # --- Pass 2: fill the shell with reportifyr -----------------------------
   # Scoped to project_dir so reportifyr's cwd-based project/venv detection

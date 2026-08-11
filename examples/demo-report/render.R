@@ -16,7 +16,7 @@ toolkit_root <- normalizePath(file.path(project_dir, "..", ".."))
 source(file.path(toolkit_root, "r", "R", "render_report.R"))
 
 result <- render_report(
-  shell_qmd = file.path(project_dir, "report", "shell", "report.qmd"),
+  shell_qmd = file.path(project_dir, "report.qmd"),
   status = status,
   toolkit_root = toolkit_root
 )

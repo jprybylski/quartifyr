@@ -56,6 +56,19 @@ def _set_font(style: BaseStyle, name: str, size_pt: float, *, color: str | None 
         rpr.append(rfonts)
     for attr in ("w:ascii", "w:hAnsi", "w:cs", "w:eastAsia"):
         rfonts.set(qn(attr), name)
+    # python-docx's bundled default template gives Title/Subtitle/Heading N
+    # theme-relative font references (asciiTheme="majorHAnsi" etc, resolving
+    # to the theme's major font -- Calibri in the default template's theme1.xml)
+    # ALONGSIDE literal ascii/hAnsi attributes. When both are present on the
+    # same rFonts element, Word/LibreOffice prefer the *theme* reference and
+    # silently ignore the literal font -- confirmed: headings rendered in
+    # Calibri (falling back to Arial where Calibri isn't installed) despite
+    # font.name reading back as "Times New Roman" via python-docx's own API,
+    # since that just reads the (ignored) literal attribute. Strip the theme
+    # attributes so the literal font actually wins.
+    for theme_attr in ("w:asciiTheme", "w:hAnsiTheme", "w:cstheme", "w:eastAsiaTheme"):
+        if rfonts.get(qn(theme_attr)) is not None:
+            del rfonts.attrib[qn(theme_attr)]
 
 
 def _set_paragraph_format(
