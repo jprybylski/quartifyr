@@ -21,9 +21,12 @@ approvers:
   - name: "Alice Lee, MD"
     title: "Medical Director"
 synopsis:
-  objectives: "To characterize the pharmacokinetics of theophylline following oral administration."
-  methods: "Individual concentration-time profiles were summarized descriptively from the built-in Theoph dataset; no model-based estimation was performed for this demonstration report."
-  results: "Peak concentrations and inter-subject variability are summarized in Table 1 and Figure 1."
+  - label: "Objectives"
+    value: "To characterize the pharmacokinetics of theophylline following oral administration."
+  - label: "Methods"
+    value: "Individual concentration-time profiles were summarized descriptively from the built-in Theoph dataset; no model-based estimation was performed for this demonstration report."
+  - label: "Results"
+    value: "Peak concentrations and inter-subject variability are summarized in Table 1 and Figure 1."
 format: docx
 filters:
   - quarto-plus

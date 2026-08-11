@@ -13,14 +13,30 @@
 --   approvers:
 --     - name: "Alice Lee, MD"
 --       title: "Medical Director"
+--   signature-mode: "line"   # default; or "note"
+--   signature-note: "Approved electronically in the XYZ system"  # used when signature-mode: "note"
 --
 -- Contributors (authors/reviewers) each get a 3-row signature block: a
--- blank signature line, printed name, and title stacked in the left
+-- blank signing space, printed name, and title stacked in the left
 -- column, with a vertically-merged Role label ("Author"/"Reviewer") beside
--- the block. Approvers get a 2-row block (signature line, name) since
+-- the block. Approvers get a 2-row block (signing space, name) since
 -- their role is already implied by the "Approvers" heading -- the slot
 -- that would otherwise say "Role" instead carries their actual job title,
 -- which is what a reader wants to know for an approval signature.
+--
+-- The signing-space row is deliberately just an empty, tall cell -- no
+-- internal rule/line -- the table's own bordered cell already reads as
+-- "sign here" and an extra line inside it doubled up visually. When
+-- physical/wet signatures aren't the workflow (e.g. a validated
+-- e-signature system), set `signature-mode: "note"` to replace that empty
+-- space with a short note (`signature-note:`) instead, applied uniformly
+-- to every contributor/approver block.
+--
+-- Table widths are percentage-based (w:type="pct"), not fixed twips, so
+-- they genuinely span the *current* usable text width regardless of the
+-- page margins configured in the docx reference-doc (see
+-- styling/styles/*.yaml's page.margins_in) -- a fixed-twips table sized
+-- for one org's margins would come up short or overflow under another's.
 --
 -- NOTE ON FILTER ORDER: like title_page.lua, this filter prepends its
 -- content at the very front of the document (position 1). Because both
@@ -37,6 +53,10 @@ local CONTRIBUTOR_GROUPS = {
   { key = "authors", label = "Author" },
   { key = "reviewers", label = "Reviewer" },
 }
+
+-- Percent-of-table widths (fiftieths of a percent; 5000 = 100%).
+local LABEL_PCT = 3750 -- 75%
+local ROLE_PCT = 1250 -- 25%
 
 local function stringify_or_nil(meta_val)
   if meta_val == nil then
@@ -68,6 +88,8 @@ end
 local contributor_groups = {}
 -- list of {name=, title=}
 local approvers = {}
+local signature_mode = "line" -- or "note"
+local signature_note = ""
 
 local function heading_paragraph(text)
   -- Prepend a real tab character to match quarto-plus's header.lua
@@ -95,21 +117,33 @@ local function heading_paragraph(text)
   )
 end
 
-local function signature_line_cell(width)
+-- The "space to sign" cell: either a tall empty cell (signature_mode ==
+-- "line") or the configured note text (signature_mode == "note").
+local function signing_space_cell(pct)
+  if signature_mode == "note" and signature_note ~= "" then
+    return string.format(
+      [[
+      <w:tc>
+        <w:tcPr><w:tcW w:w="%d" w:type="pct"/><w:vAlign w:val="center"/></w:tcPr>
+        <w:p><w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">%s</w:t></w:r></w:p>
+      </w:tc>
+  ]],
+      pct,
+      utils.escape_xml(signature_note)
+    )
+  end
   return string.format(
     [[
       <w:tc>
-        <w:tcPr><w:tcW w:w="%d" w:type="dxa"/></w:tcPr>
-        <w:p>
-          <w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="000000"/></w:pBdr><w:spacing w:before="360"/></w:pPr>
-        </w:p>
+        <w:tcPr><w:tcW w:w="%d" w:type="pct"/></w:tcPr>
+        <w:p/>
       </w:tc>
   ]],
-    width
+    pct
   )
 end
 
-local function text_cell(width, text, italic)
+local function text_cell(pct, text, italic)
   local run_props = ""
   if italic then
     run_props = "<w:rPr><w:i/></w:rPr>"
@@ -117,17 +151,17 @@ local function text_cell(width, text, italic)
   return string.format(
     [[
       <w:tc>
-        <w:tcPr><w:tcW w:w="%d" w:type="dxa"/></w:tcPr>
+        <w:tcPr><w:tcW w:w="%d" w:type="pct"/></w:tcPr>
         <w:p><w:r>%s<w:t xml:space="preserve">%s</w:t></w:r></w:p>
       </w:tc>
   ]],
-    width,
+    pct,
     run_props,
     utils.escape_xml(text)
   )
 end
 
-local function side_label_cell(width, text, vmerge_val)
+local function side_label_cell(pct, text, vmerge_val)
   local vmerge = string.format('<w:vMerge w:val="%s"/>', vmerge_val)
   if vmerge_val == "continue" then
     vmerge = "<w:vMerge/>"
@@ -136,11 +170,11 @@ local function side_label_cell(width, text, vmerge_val)
     return string.format(
       [[
       <w:tc>
-        <w:tcPr><w:tcW w:w="%d" w:type="dxa"/>%s</w:tcPr>
+        <w:tcPr><w:tcW w:w="%d" w:type="pct"/>%s</w:tcPr>
         <w:p/>
       </w:tc>
   ]],
-      width,
+      pct,
       vmerge
     )
   end
@@ -148,7 +182,7 @@ local function side_label_cell(width, text, vmerge_val)
     [[
       <w:tc>
         <w:tcPr>
-          <w:tcW w:w="%d" w:type="dxa"/>
+          <w:tcW w:w="%d" w:type="pct"/>
           %s
           <w:vAlign w:val="center"/>
         </w:tcPr>
@@ -158,7 +192,7 @@ local function side_label_cell(width, text, vmerge_val)
         </w:p>
       </w:tc>
   ]],
-    width,
+    pct,
     vmerge,
     utils.escape_xml(text)
   )
@@ -173,12 +207,12 @@ local TABLE_OPEN = [[
   <w:tbl>
     <w:tblPr>
       <w:tblStyle w:val="TableGrid"/>
-      <w:tblW w:w="0" w:type="auto"/>
+      <w:tblW w:w="5000" w:type="pct"/>
       <w:tblLook w:val="04A0" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>
     </w:tblPr>
     <w:tblGrid>
-      <w:gridCol w:w="6000"/>
-      <w:gridCol w:w="2000"/>
+      <w:gridCol/>
+      <w:gridCol/>
     </w:tblGrid>
 ]]
 local TABLE_CLOSE = [[
@@ -186,20 +220,30 @@ local TABLE_CLOSE = [[
   <w:p/>
 ]]
 
--- 3-row block: [signature | Role], [name | ], [title | ]  (Role spans all 3 rows)
+-- Enough room to actually pen a signature (or read a note comfortably),
+-- rather than a default-height row that reads as accidentally blank.
+local SIGNING_ROW = [[<w:trPr><w:trHeight w:val="720" w:hRule="atLeast"/></w:trPr>]]
+
+-- 3-row block: [signing space | Role], [name | ], [title | ]  (Role spans all 3 rows)
 local function contributor_block(name, title, role_label)
   local rows = {}
-  table.insert(rows, "<w:tr>" .. signature_line_cell(6000) .. side_label_cell(2000, role_label, "restart") .. "</w:tr>")
-  table.insert(rows, "<w:tr>" .. text_cell(6000, name, false) .. side_label_cell(2000, nil, "continue") .. "</w:tr>")
-  table.insert(rows, "<w:tr>" .. text_cell(6000, title, true) .. side_label_cell(2000, nil, "continue") .. "</w:tr>")
+  table.insert(
+    rows,
+    "<w:tr>" .. SIGNING_ROW .. signing_space_cell(LABEL_PCT) .. side_label_cell(ROLE_PCT, role_label, "restart") .. "</w:tr>"
+  )
+  table.insert(rows, "<w:tr>" .. text_cell(LABEL_PCT, name, false) .. side_label_cell(ROLE_PCT, nil, "continue") .. "</w:tr>")
+  table.insert(rows, "<w:tr>" .. text_cell(LABEL_PCT, title, true) .. side_label_cell(ROLE_PCT, nil, "continue") .. "</w:tr>")
   return TABLE_OPEN .. table.concat(rows, "\n") .. TABLE_CLOSE
 end
 
--- 2-row block: [signature | Title], [name | ]  (Title spans both rows)
+-- 2-row block: [signing space | Title], [name | ]  (Title spans both rows)
 local function approver_block(name, title)
   local rows = {}
-  table.insert(rows, "<w:tr>" .. signature_line_cell(6000) .. side_label_cell(2000, title, "restart") .. "</w:tr>")
-  table.insert(rows, "<w:tr>" .. text_cell(6000, name, false) .. side_label_cell(2000, nil, "continue") .. "</w:tr>")
+  table.insert(
+    rows,
+    "<w:tr>" .. SIGNING_ROW .. signing_space_cell(LABEL_PCT) .. side_label_cell(ROLE_PCT, title, "restart") .. "</w:tr>"
+  )
+  table.insert(rows, "<w:tr>" .. text_cell(LABEL_PCT, name, false) .. side_label_cell(ROLE_PCT, nil, "continue") .. "</w:tr>")
   return TABLE_OPEN .. table.concat(rows, "\n") .. TABLE_CLOSE
 end
 
@@ -217,6 +261,12 @@ return {
       end
 
       approvers = parse_people(meta["approvers"])
+
+      local mode = stringify_or_nil(meta["signature-mode"])
+      if mode == "note" then
+        signature_mode = "note"
+      end
+      signature_note = stringify_or_nil(meta["signature-note"]) or ""
 
       return meta
     end,

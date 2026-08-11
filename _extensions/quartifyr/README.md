@@ -45,10 +45,15 @@ contributors:
 approvers:
   - name: "Alice Lee, MD"
     title: "Medical Director"
+# signature-mode: "note"                      # default "line" -- see below
+# signature-note: "Approved electronically in the XYZ system"
 synopsis:
-  objectives: "..."
-  methods: "..."
-  results: "..."
+  - label: "Objectives"
+    value: "..."
+  - label: "Methods"
+    value: "..."
+  - label: "Results"
+    value: "..."
 format: docx
 filters:
   - quarto-plus
@@ -65,8 +70,32 @@ toc-style-map:
 
 All fields except `title` are optional — the title page only renders the
 rows that are actually set, so the same shell template works whether a
-project has a `lead-scientist` or not. Add arbitrary extra rows per-project
-with `title-page-extra` without touching any Lua.
+project has a `lead-scientist` or not. The info block (Date/Lead
+Scientist/Version/Confidentiality/...) renders as a full-width, bordered
+table, not centered text lines.
+
+**Fully flexible, not a fixed field list**: `date`/`lead-scientist`/
+`version`/`confidentiality` are named convenience fields (simpler to
+write than a list for the common case) rendered first, in that order,
+when present -- but `title-page-extra` then appends *any number* of
+additional label/value rows after them, in whatever order you write
+them, with any label you want:
+
+```yaml
+title-page-extra:
+  - label: "Sponsor"
+    value: "Acme Pharma"
+  - label: "Protocol Number"
+    value: "ACM-1001"
+```
+
+This is a YAML *list*, not a plain map (`sponsor: "Acme Pharma"`)
+deliberately: pandoc's Lua metadata tables don't preserve map key order
+(confirmed by testing -- iterating a YAML map's keys came back in
+neither declaration nor alphabetical order), which would make dynamic
+fields print in an unreliable order on every render. A list's order is
+reliable, so arbitrary rows go through `title-page-extra` rather than
+bare top-level `foo: bar` keys.
 
 The filter prepends the title page as the document's first page and
 suppresses pandoc's own automatic title-block (which would otherwise
@@ -91,13 +120,28 @@ with `document-status: DRAFT` for anything headed to `report/draft/`, and
 Right after the title page, `contributors:` (with `authors:`/`reviewers:`
 lists) renders a "Contributors" section, and a separate top-level
 `approvers:` list renders an "Approvers" section. Each person gets their
-own signature block: a blank signature line, printed name, and (for
-contributors) title stacked in one column, with a role label
-("Author"/"Reviewer") spanning beside it. Approvers use the same layout,
-but since "Approvers" is already the section heading, the label slot next
-to their signature line shows their actual job title instead of a
-redundant "Approver" tag. Either key (`contributors:`, `approvers:`) can be
-omitted if not needed.
+own full-width, bordered signature block: a blank signing space, printed
+name, and (for contributors) title stacked in one column, with a role
+label ("Author"/"Reviewer") spanning beside it. Approvers use the same
+layout, but since "Approvers" is already the section heading, the label
+slot next to their signing space shows their actual job title instead of
+a redundant "Approver" tag. Either key (`contributors:`, `approvers:`) can
+be omitted if not needed.
+
+The signing-space row is a tall, empty cell -- deliberately no line or
+box drawn inside it, since the table's own bordered cell already reads
+as "sign here" and an internal rule doubled up visually. When physical/
+wet signatures aren't the actual workflow (e.g. a validated e-signature
+system), set:
+
+```yaml
+signature-mode: "note"
+signature-note: "Approved electronically in the XYZ system"
+```
+
+to replace that empty space with the note text instead, applied
+uniformly across every contributor/approver block. Default is
+`signature-mode: "line"` (the empty box).
 
 There's no forced page break between the two sections — with only a
 handful of contributors they'll naturally share a page; Word just flows
@@ -114,22 +158,34 @@ Synopsis
 :::
 ```
 
-Renders a bordered, two-column summary table (Title/Objectives/Methods/
-Results — a standard CSR front-matter convention) from a `synopsis:`
-frontmatter block:
+Renders a bordered, full-width summary table (a standard CSR
+front-matter convention) from a `synopsis:` frontmatter block:
 
 ```yaml
 synopsis:
-  objectives: "..."
-  methods: "..."
-  results: "..."
+  - label: "Objectives"
+    value: "..."
+  - label: "Methods"
+    value: "..."
+  - label: "Results"
+    value: "..."
 ```
 
-The "Title" row comes from the top-level `title:` field automatically.
-Row *labels* are fixed; *values* are dynamic per-project. **To turn it
-off, omit `synopsis:` from frontmatter entirely** — the `::: .synopsis
-:::` div then renders nothing, so a shared shell template can leave the
-div marker in unconditionally and let each project's frontmatter decide.
+**Fully flexible, not a fixed field list**: any number of rows, any
+labels, in whatever order you write them — this isn't limited to
+Objectives/Methods/Results, add or remove rows freely. It's a YAML
+*list*, not a plain map (`objectives: "..."`), deliberately: pandoc's Lua
+metadata tables don't preserve map key order (confirmed by testing --
+iterating a YAML map's keys came back in neither declaration nor
+alphabetical order), which would make rows print in an unreliable order
+on every render. A list's order is reliable.
+
+A "Title" row (from the top-level `title:` field) is prepended
+automatically whenever there's at least one synopsis row. **To turn the
+whole section off, omit `synopsis:` from frontmatter entirely** — the
+`::: .synopsis :::` div then renders nothing, so a shared shell template
+can leave the div marker in unconditionally and let each project's
+frontmatter decide.
 
 Author placement of the `::: .synopsis :::` div controls where it lands —
 unlike the title page and signature pages (always first/second by
@@ -201,3 +257,10 @@ ID form.
 Pair with a docx `reference-doc:` generated by `styling/` (see
 `../../styling/README.md`) so the `Title`/`Subtitle`/`Heading N` styles this
 filter emits actually carry your org's fonts/colors.
+
+Every table this extension generates (title page info block, synopsis,
+signature blocks) is sized with percentage widths (`w:type="pct"`), not
+fixed twips — they genuinely span the *current* usable text width, so
+changing `page.margins_in` in your style YAML (see
+`styling/styles/default.yaml`) doesn't leave a fixed-width table
+overflowing the page or falling short of it.
