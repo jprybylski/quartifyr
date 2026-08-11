@@ -1,0 +1,12 @@
+title: Quarto-Plus
+author: Jacob Dumbleton
+version: 0.2.0
+quarto-required: ">=1.6.36"
+contributes:
+  shortcodes:
+    - style.lua
+    - crossref.lua
+  filters:
+    - header.lua
+    - table_of_contents.lua
+    - terms_and_abbreviations.lua

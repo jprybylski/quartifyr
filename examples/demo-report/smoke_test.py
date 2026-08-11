@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+"""End-to-end smoke test for the quartifyr demo report.
+
+Runs the real two-pass pipeline (Rscript render.R --final, which drives
+Quarto + reportifyr exactly as a report author would) and asserts on the
+resulting docx: no leftover reportifyr magic strings, the expected tables/
+images/abbreviations are present, and appendix numbering resolved.
+
+Requires the full toolchain: R (with this repo's rv-managed packages),
+Quarto, and the styling/ venv. Run from anywhere:
+
+    python3 examples/demo-report/smoke_test.py
+"""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+import sys
+import zipfile
+from pathlib import Path
+
+import docx
+from docx.oxml.ns import qn
+
+PROJECT_DIR = Path(__file__).resolve().parent
+
+
+def _iter_paragraph_text(document: docx.Document):
+    for p in document.element.body.iter(qn("w:p")):
+        texts = p.findall(".//" + qn("w:t"))
+        text = "".join(t.text or "" for t in texts)
+        if text.strip():
+            yield text
+
+
+def main() -> int:
+    if shutil.which("Rscript") is None:
+        print("SKIP: Rscript not found on PATH", file=sys.stderr)
+        return 0
+    if shutil.which("quarto") is None:
+        print("SKIP: quarto not found on PATH", file=sys.stderr)
+        return 0
+
+    print("Running Rscript render.R --final ...")
+    result = subprocess.run(
+        ["Rscript", "render.R", "--final"],
+        cwd=PROJECT_DIR,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    if result.returncode != 0:
+        print("FAIL: render.R exited non-zero", file=sys.stderr)
+        print(result.stdout, file=sys.stderr)
+        print(result.stderr, file=sys.stderr)
+        return 1
+
+    final_docx = PROJECT_DIR / "report" / "final" / "report-final.docx"
+    if not final_docx.exists():
+        print(f"FAIL: expected output not found: {final_docx}", file=sys.stderr)
+        return 1
+
+    document = docx.Document(str(final_docx))
+    all_text = list(_iter_paragraph_text(document))
+    joined = " | ".join(all_text)
+
+    checks: list[tuple[str, bool]] = []
+
+    checks.append(("no leftover {rpfy}: magic strings", "{rpfy}:" not in joined))
+    checks.append(("at least 5 tables present (signatures + PK summary + abbreviations)", len(document.tables) >= 5))
+
+    with zipfile.ZipFile(final_docx) as z:
+        images = [n for n in z.namelist() if n.startswith("word/media/")]
+    checks.append(("figure embedded as a real image", len(images) >= 1))
+
+    checks.append(("title page title rendered", "Population Pharmacokinetics of Theophylline" in joined))
+    checks.append(("document-status stamp rendered", "DRAFT" in joined or "FINAL" in joined))
+    checks.append(("\\gls{PK} resolved to a real definition", "pharmacokinetic (pk)" in joined.lower()))
+
+    def _table_row_texts(table) -> list[list[str]]:
+        return [[cell.text for cell in row.cells] for row in table.rows]
+
+    all_rows = [row for table in document.tables for row in _table_row_texts(table)]
+    checks.append(
+        ("abbreviations table has a PK row", any("PK" in row and "Pharmacokinetic" in row for row in all_rows))
+    )
+    checks.append(("appendix auto-lettered", "Appendix A: Statistical Methods" in joined))
+    checks.append(
+        ("PK summary table header present", any({"Cmax", "Cmin"}.issubset(set(row)) for row in all_rows))
+    )
+
+    failed = [name for name, ok in checks if not ok]
+    for name, ok in checks:
+        print(f"{'PASS' if ok else 'FAIL'}: {name}")
+
+    if failed:
+        print(f"\n{len(failed)}/{len(checks)} checks failed", file=sys.stderr)
+        return 1
+
+    print(f"\nAll {len(checks)} checks passed.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

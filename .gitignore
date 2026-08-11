@@ -20,10 +20,19 @@ templates/*.docx
 
 # reportifyr working documents (project-specific, not toolkit source)
 examples/*/report/shell/*.docx
+examples/*/report/shell/abbreviations.tex
 examples/*/report/draft/*
 examples/*/report/final/*
 !examples/*/report/draft/readme.txt
 !examples/*/report/final/readme.txt
+
+# reportifyr project-init marker (personal: embeds username/timestamp) and
+# runtime logs - regenerate via reportifyr::initialize_report_project()
+examples/*/.report_init.json
+examples/*/.rpfy-logs/
+# Note: examples/*/OUTPUTS/ artifacts (csv/png/metadata.json) ARE committed,
+# like reportifyr-examples does -- the demo project works immediately after
+# a clone without requiring scripts/01_analysis.R to run first.
 
 # OS
 .DS_Store

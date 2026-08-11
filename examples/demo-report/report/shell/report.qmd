@@ -1,0 +1,89 @@
+---
+title: "Population Pharmacokinetics of Theophylline"
+subtitle: "Demonstration Report"
+report-type: "Clinical Study Report"
+document-status: "draft"
+date: "2026-08-11"
+lead-scientist: "Jane Doe, PharmD"
+version: "1.0"
+confidentiality: "Confidential — Do Not Distribute"
+title-page-extra:
+  - label: "Sponsor"
+    value: "quartifyr Demo Sponsor"
+contributors:
+  authors:
+    - name: "Jane Doe, PharmD"
+      title: "Lead Scientist"
+  reviewers:
+    - name: "John Smith, PhD"
+      title: "Senior Biostatistician"
+approvers:
+  - name: "Alice Lee, MD"
+    title: "Medical Director"
+format: docx
+filters:
+  - quarto-plus
+  - quartifyr
+toc-style-map:
+  - style: "Title"
+    level: 1
+---
+
+::: .toc
+:::
+
+{{< pagebreak >}}
+
+List of Figures
+
+::: .list_of_figures
+:::
+
+{{< pagebreak >}}
+
+List of Tables
+
+::: .list_of_tables
+:::
+
+{{< pagebreak >}}
+
+# Introduction
+
+This demonstration report summarizes a \gls{PK} analysis of theophylline
+concentrations from the built-in `Theoph` dataset, rendered end to end
+through quartifyr's two-pass shell/fill pipeline.
+
+{{< pagebreak >}}
+
+# Results
+
+{{< tbl_caption "Table 1" "Per-subject PK summary statistics" >}}
+
+{rpfy}:pk-summary.csv
+
+Per-subject maximum, minimum, and average observed concentration across
+the sampling period.
+
+{{< fig_caption "Figure 1" "Concentration-time profile" >}}
+
+{rpfy}:conc-time.png
+
+Individual concentration-time trajectories for all subjects in the study,
+plotted on the same axes.
+
+{{< pagebreak >}}
+
+Terms and abbreviations used in this report are listed below.
+
+::: .abbreviations
+:::
+
+{{< pagebreak >}}
+
+{{< appendix "StatisticalMethods" "Statistical Methods" >}}
+
+Per-subject summary statistics were computed directly from the observed
+concentration-time data; no model-based estimation was performed for this
+demonstration report. See {{< appendix_crossref "StatisticalMethods" >}}
+for the complete methodology.
