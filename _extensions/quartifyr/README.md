@@ -6,9 +6,10 @@ generating standardized scientific/regulated documents with Quarto +
 the full picture). It's not scoped to "reports" specifically or to a title
 page specifically — the same shell-generation approach is meant to extend
 to presentations, analysis plans, memos, and other standardized document
-kinds over time; this extension currently covers the two pieces every one
-of those document kinds tends to need: a dynamic title page and
-contributor/approval signature pages.
+kinds over time; this extension currently covers the front-matter pieces
+most of those document kinds tend to need: a dynamic title page (with a
+draft/final status stamp), contributor/approval signature pages, and
+numbered appendices.
 
 This extension adds those on top of
 [`quarto-plus`](https://github.com/A2-ai/quarto-plus)'s ToC/List of
@@ -113,8 +114,8 @@ and once more after the last section (before the rest of the document).
 Each `{{< appendix "BookmarkId" "Title" >}}` renders an "Appendix A: ...",
 "Appendix B: ...", ... heading using a native Word `SEQ Appendix \*
 ALPHABETIC` field — reordering, adding, or removing appendices never
-requires manual relettering, just a field recalculation (see the
-repo-root README's field-recalculation step). It uses the `Heading 1`
+requires manual relettering, just a field recalculation (a planned
+`r/` orchestration step, not yet built). It uses the `Heading 1`
 style so appendices show up in the ToC the same as any other top-level
 heading, no `toc-style-map` entry needed.
 

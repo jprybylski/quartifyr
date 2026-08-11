@@ -18,4 +18,6 @@ dependencies = [
     "here",
     "yaml",
     "jsonlite",
+    "withr",
+    "processx",
 ]

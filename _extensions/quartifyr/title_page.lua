@@ -102,7 +102,7 @@ return {
       -- Always shown (unlike the other optional fields below): the
       -- draft/final state is meant to be impossible to miss, and lines up
       -- with reportifyr's own report/draft vs report/final convention
-      -- (see the repo-root README's orchestration section).
+      -- (see r/README.md's orchestration driver docs).
       document_status = stringify_or_nil(meta["document-status"]) or "DRAFT"
       report_date = stringify_or_nil(meta.date)
       lead_scientist = stringify_or_nil(meta["lead-scientist"])
