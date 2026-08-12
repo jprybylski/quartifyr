@@ -66,17 +66,36 @@ jobs:
       # defaulting to linux-gnu target" branch and fetches the wrong
       # binary). Windows gets its own step: download the released
       # x86_64-pc-windows-msvc.zip directly and put it on PATH.
+      # install.sh's own GitHub API call is unauthenticated and has hit
+      # GitHub's unauthenticated rate limit in real CI runs (shared
+      # runner IP pools); a few retries is a pragmatic mitigation since
+      # the script itself can't be handed a token.
       - name: Install rv (macOS/Linux)
         if: runner.os != 'Windows'
         run: |
-          curl -sSL https://raw.githubusercontent.com/A2-ai/rv/refs/heads/main/scripts/install.sh | bash
+          for i in 1 2 3; do
+            curl -sSL https://raw.githubusercontent.com/A2-ai/rv/refs/heads/main/scripts/install.sh | bash && break
+            echo "rv install attempt $i failed, retrying in 10s..." >&2
+            sleep 10
+          done
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      # Windows isn't covered by install.sh (confirmed by reading it --
+      # it falls through to an "unknown OS, defaulting to linux-gnu
+      # target" branch there and fetches the wrong binary), so this
+      # queries the release API directly. Authenticated with the
+      # workflow's own GITHUB_TOKEN (5000 req/hour) rather than
+      # unauthenticated (60/hour, shared across the whole runner IP
+      # pool) -- the same rate limit that made the macOS/Linux install
+      # flaky enough to need retries above.
       - name: Install rv (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/A2-ai/rv/releases/latest"
+          $headers = @{ Authorization = "Bearer $env:GITHUB_TOKEN" }
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/A2-ai/rv/releases/latest" -Headers $headers
           $asset = $release.assets | Where-Object { $_.name -like "*x86_64-pc-windows-msvc.zip" }
           $dest = "$env:USERPROFILE\.local\bin"
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
@@ -106,12 +125,19 @@ jobs:
           uv pip install -e "./styling[dev]"
           quartifyr-styling build --style styling/styles/default.yaml --out templates/org-reference.docx
 
+      # shell: bash even on Windows -- PowerShell ships a built-in `rv`
+      # alias for Remove-Variable that shadows our downloaded rv.exe on
+      # PATH, confirmed by a real CI failure ("Cannot find a variable
+      # with the name 'sync'"). Bash (Git Bash, already on windows-latest
+      # runners) has no such alias and resolves `rv` via PATH normally.
       - name: rv sync (r/)
         working-directory: r
+        shell: bash
         run: rv sync
 
       - name: rv sync (examples/demo-report)
         working-directory: examples/demo-report
+        shell: bash
         run: rv sync
 
       - name: Initialize reportifyr project (fresh clone -- .report_init.json is gitignored)
