@@ -32,7 +32,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Windows isn't included here: rv doesn't yet reliably support R
+        # 4.6 there -- it refuses to activate its managed library
+        # ("R version specified in config (4.5) does not match session
+        # version (4.6.1)... entering safe mode"), which then cascades
+        # into missing-package errors for everything rv would otherwise
+        # provide. Confirmed as a live, currently-unresolved upstream
+        # issue (not a quartifyr/CI-script bug): A2-ai/rv#493, where a
+        # maintainer notes Windows currently only works reliably with a
+        # PPM repository, not plain CRAN. Windows/rv/R-4.6 compatibility
+        # is tracked there, not something to work around here by
+        # changing real dependency-resolution behavior for a CI job.
+        # Windows is still covered by styling-tests above (pure Python,
+        # no rv involved).
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -61,47 +74,34 @@ jobs:
             libfontconfig1-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev \
             libharfbuzz-dev libfribidi-dev libcairo2-dev
 
-      # `rv`'s own install script only targets macOS/Linux (confirmed by
-      # reading it -- on Windows it falls through to an "unknown OS,
-      # defaulting to linux-gnu target" branch and fetches the wrong
-      # binary). Windows gets its own step: download the released
-      # x86_64-pc-windows-msvc.zip directly and put it on PATH.
-      # install.sh's own GitHub API call is unauthenticated and has hit
-      # GitHub's unauthenticated rate limit in real CI runs (shared
-      # runner IP pools); a few retries is a pragmatic mitigation since
-      # the script itself can't be handed a token.
-      - name: Install rv (macOS/Linux)
-        if: runner.os != 'Windows'
-        run: |
-          for i in 1 2 3; do
-            curl -sSL https://raw.githubusercontent.com/A2-ai/rv/refs/heads/main/scripts/install.sh | bash && break
-            echo "rv install attempt $i failed, retrying in 10s..." >&2
-            sleep 10
-          done
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      # Windows isn't covered by install.sh (confirmed by reading it --
-      # it falls through to an "unknown OS, defaulting to linux-gnu
-      # target" branch there and fetches the wrong binary), so this
-      # queries the release API directly. Authenticated with the
-      # workflow's own GITHUB_TOKEN (5000 req/hour) rather than
-      # unauthenticated (60/hour, shared across the whole runner IP
-      # pool) -- the same rate limit that made the macOS/Linux install
-      # flaky enough to need retries above.
-      - name: Install rv (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
+      # Not using rv's own install.sh: its GitHub API call is
+      # unauthenticated, which hit GitHub's 60/req-hour unauthenticated
+      # limit (shared across the whole runner IP pool) in a real CI run
+      # -- confirmed by a run where all 3 retry attempts failed
+      # identically within seconds of each other. Querying the release
+      # API ourselves with the workflow's own GITHUB_TOKEN (5000
+      # req/hour, not shared) sidesteps that.
+      - name: Install rv
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          $headers = @{ Authorization = "Bearer $env:GITHUB_TOKEN" }
-          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/A2-ai/rv/releases/latest" -Headers $headers
-          $asset = $release.assets | Where-Object { $_.name -like "*x86_64-pc-windows-msvc.zip" }
-          $dest = "$env:USERPROFILE\.local\bin"
-          New-Item -ItemType Directory -Force -Path $dest | Out-Null
-          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "$env:TEMP\rv.zip"
-          Expand-Archive -Path "$env:TEMP\rv.zip" -DestinationPath $dest -Force
-          echo "$dest" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+          arch="$(uname -m)"
+          if [ "$arch" = "arm64" ]; then arch="aarch64"; fi
+          if [ "$os" = "darwin" ]; then os_pattern="apple-darwin"; else os_pattern="unknown-linux-gnu"; fi
+          target="${arch}-${os_pattern}"
+          asset_url=$(curl -sSL -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            https://api.github.com/repos/A2-ai/rv/releases/latest \
+            | grep -o "https://github.com/A2-ai/rv/releases/download/[^\"]*${target}\.tar\.gz" | head -1)
+          if [ -z "$asset_url" ]; then
+            echo "Could not find an rv release asset for target $target" >&2
+            exit 1
+          fi
+          mkdir -p "$HOME/.local/bin"
+          curl -sSL -o /tmp/rv.tar.gz "$asset_url"
+          tar -xzf /tmp/rv.tar.gz -C "$HOME/.local/bin"
+          chmod +x "$HOME/.local/bin/rv"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       # reportifyr's context resolution (embedded in report/figure/table
       # metadata) shells out to `git config` and errors if no identity is
@@ -113,31 +113,20 @@ jobs:
 
       # This is the repo-root Quick Start, run exactly as documented, so
       # this job also stands in as a check that the README instructions
-      # themselves are correct and current. `shell: bash` throughout
-      # (including on Windows, via the Git Bash that windows-latest
-      # runners already ship) so the venv-activate path is the only
-      # OS-specific bit, rather than duplicating every step in pwsh too.
+      # themselves are correct and current.
       - name: Set up styling/ venv
-        shell: bash
         run: |
           uv venv .venv --python 3.12
-          if [ "$RUNNER_OS" = "Windows" ]; then source .venv/Scripts/activate; else source .venv/bin/activate; fi
+          source .venv/bin/activate
           uv pip install -e "./styling[dev]"
           quartifyr-styling build --style styling/styles/default.yaml --out templates/org-reference.docx
 
-      # shell: bash even on Windows -- PowerShell ships a built-in `rv`
-      # alias for Remove-Variable that shadows our downloaded rv.exe on
-      # PATH, confirmed by a real CI failure ("Cannot find a variable
-      # with the name 'sync'"). Bash (Git Bash, already on windows-latest
-      # runners) has no such alias and resolves `rv` via PATH normally.
       - name: rv sync (r/)
         working-directory: r
-        shell: bash
         run: rv sync
 
       - name: rv sync (examples/demo-report)
         working-directory: examples/demo-report
-        shell: bash
         run: rv sync
 
       - name: Initialize reportifyr project (fresh clone -- .report_init.json is gitignored)
@@ -146,16 +135,14 @@ jobs:
 
       # The render_report()/r/ convenience-wrapper path.
       - name: Run demo smoke test
-        shell: bash
         run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then source .venv/Scripts/activate; else source .venv/bin/activate; fi
+          source .venv/bin/activate
           python3 examples/demo-report/smoke_test.py
 
       # The decomposed "Using the pieces directly" path from the
       # repo-root README -- proves that documentation is actually true,
       # not just written down.
       - name: Run bare-bones pieces-only integration test
-        shell: bash
         run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then source .venv/Scripts/activate; else source .venv/bin/activate; fi
+          source .venv/bin/activate
           python3 scripts/bare_bones_integration_test.py

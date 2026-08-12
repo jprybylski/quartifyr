@@ -23,6 +23,19 @@ instructions at that link), then:
 cd r && rv sync
 ```
 
+**Windows**: `rv sync` with R 4.6 (this project's `rproject.toml`
+`r_version`) currently isn't reliable on Windows -- `rv` refuses to
+activate its managed library ("R version specified in config (4.5) does
+not match session version (4.6.1)... entering safe mode"), which then
+cascades into missing-package errors for everything `rv` would otherwise
+provide. This is a live, currently-unresolved upstream issue
+([A2-ai/rv#493](https://github.com/A2-ai/rv/issues/493)), not something
+specific to this project -- a maintainer there notes Windows currently
+only works reliably with a PPM repository rather than plain CRAN.
+Because of this, CI doesn't verify the full Quarto+R+reportifyr pipeline
+on Windows (see `.github/workflows/ci.yml`); `styling/`'s pytest suite,
+which doesn't touch `rv`, is verified on Windows.
+
 ## Usage
 
 As an R function (e.g. from an R console, or a project's own analysis
