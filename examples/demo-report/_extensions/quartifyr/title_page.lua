@@ -6,10 +6,41 @@
 -- our own layout, then null it out so pandoc's built-in title block never
 -- renders alongside ours.
 --
--- To satisfy "the ToC should include the title page": the title line below
--- uses Word's built-in "Title" style, which quarto-plus's table_of_contents
--- filter can pick up via its documented `toc-style-map` frontmatter option
--- (map "Title" to level 1) -- no changes to quarto-plus needed.
+-- To satisfy "the ToC should include the title page" *without* the entry
+-- just duplicating the document's own title text: a genuinely
+-- `Heading1`-styled paragraph, carrying the literal text "Title Page",
+-- independent of the real, visible title paragraph (which keeps its own
+-- actual title text, unchanged, purely for its on-page look). Word's ToC
+-- field scans outline levels 1-3 by default (present unconditionally,
+-- not something quartifyr adds), so a genuine Heading-1 paragraph is
+-- picked up automatically -- no `apply-layout` step needed for this, and
+-- it shows up in Word's Navigation Pane for free too, same as any other
+-- heading. What makes it invisible on the page itself is *ordinary*
+-- run formatting -- 1pt size, white text color -- not any kind of
+-- "hidden" flag.
+--
+-- Two earlier attempts relied on Word's various "hidden content"
+-- mechanisms instead, and both failed in real Word (not just this repo's
+-- own testing -- confirmed directly against the user's own Word install):
+-- a `<w:vanish/>`-hidden paragraph showed up, visibly, on the title page
+-- regardless of which style drove the ToC entry (`<w:vanish/>` does not
+-- reliably suppress on-screen display the way its name suggests); a `TC`
+-- (table-of-contents-entry) field correctly fed the ToC (confirmed: after
+-- a manual field recalculation, the ToC entry was correct) but Word
+-- persistently rendered the field's own raw code, not nothing, right on
+-- the title page -- a field with no visible result content apparently
+-- can't be given a *reliably* invisible on-screen appearance through
+-- field mechanics alone (adding a `separate` fldChar marker and
+-- `w:dirty="true"` -- both otherwise-legitimate fixes -- didn't change
+-- this). Tiny, white, ordinary text sidesteps both problems: there's no
+-- special "hidden" semantics for Word to second-guess or show an
+-- editing aid for -- it's just text that happens to be too small and
+-- the same color as the page to see. A third round confirmed
+-- `<w:vanish/>` is worth avoiding entirely here, not just redundant:
+-- stacked on top of the tiny/white run (belt-and-suspenders, reasoned to
+-- be harmless), it made Word's outline scan skip the paragraph
+-- altogether -- an all-vanish paragraph is apparently treated as having
+-- no heading content at all, so the ToC entry vanished along with it.
 --
 -- The info block (Date/Lead Scientist/Version/Confidentiality/...) is a
 -- full-width, percentage-sized (w:type="pct") bordered table -- not fixed
@@ -100,6 +131,37 @@ end
 
 local function spacer_paragraph()
   return [[<w:p/>]]
+end
+
+-- See the file-header comment on why this exists: a genuinely
+-- `Heading1`-styled paragraph (real outline level, picked up by Word's
+-- native ToC field automatically) whose text is invisible on the page
+-- itself purely through ordinary formatting -- 1pt size (the smallest
+-- OOXML unit that stays valid), white color -- not a "hidden" flag of
+-- any kind. `<w:vanish/>` was tried too, belt-and-suspenders, but
+-- confirmed in real Word to be actively harmful here, not just
+-- redundant: an all-vanish paragraph is excluded from the ToC's outline
+-- scan entirely (Word apparently treats "no visible content" as "no
+-- heading here"), which defeats the entire point. Tiny/white alone
+-- (no vanish) is both invisible on the page *and* still a real,
+-- present paragraph as far as outline scanning is concerned.
+local function tiny_heading_paragraph(style, text)
+  return string.format(
+    [[
+  <w:p>
+    <w:pPr>
+      <w:pStyle w:val="%s"/>
+      <w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/>
+    </w:pPr>
+    <w:r>
+      <w:rPr><w:sz w:val="2"/><w:szCs w:val="2"/><w:color w:val="FFFFFF"/></w:rPr>
+      <w:t xml:space="preserve">%s</w:t>
+    </w:r>
+  </w:p>
+  ]],
+    utils.escape_xml(style),
+    utils.escape_xml(text)
+  )
 end
 
 -- A bordered box rather than a colored watermark, so DRAFT/FINAL stays
@@ -332,6 +394,7 @@ return {
       end
 
       table.insert(ooxml_parts, styled_paragraph("Title", doc_title))
+      table.insert(ooxml_parts, tiny_heading_paragraph("Heading1", "Title Page"))
 
       if doc_subtitle then
         table.insert(ooxml_parts, styled_paragraph("Subtitle", doc_subtitle))

@@ -14,6 +14,7 @@ Quarto, and the styling/ venv. Run from anywhere:
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
@@ -98,6 +99,47 @@ def main() -> int:
     checks.append(("title page title rendered", "Population Pharmacokinetics of Theophylline" in joined))
     checks.append(("document-status stamp rendered", "DRAFT" in joined or "FINAL" in joined))
     checks.append(("\\gls{PK} resolved to a real definition", "pharmacokinetic (pk)" in joined.lower()))
+
+    # title_page.lua's "Title Page" ToC-entry marker -- a genuinely
+    # Heading1-styled paragraph (real outline level, picked up by Word's
+    # native ToC field automatically, no apply-layout step needed), made
+    # invisible on the page itself via ordinary formatting (1pt size,
+    # white color) rather than any "hidden" flag -- confirmed via direct
+    # testing in real Word that both `<w:vanish/>` paragraphs and `TC`
+    # fields (two earlier attempts) reliably showed *something* on the
+    # title page regardless. See title_page.lua's file-header comment.
+    checks.append(("'Title Page' ToC-entry marker present", "Title Page" in joined))
+    with zipfile.ZipFile(final_docx) as z:
+        document_xml_for_toc = z.read("word/document.xml").decode("utf-8")
+    checks.append(
+        (
+            "'Title Page' marker is genuinely Heading1-styled, tiny, and white",
+            re.search(
+                r'<w:pStyle w:val="Heading1"/>.*?<w:sz w:val="2"/><w:szCs w:val="2"/><w:color w:val="FFFFFF"/></w:rPr><w:t[^>]*>Title Page',
+                document_xml_for_toc,
+                re.DOTALL,
+            )
+            is not None,
+        )
+    )
+    # <w:vanish/> would exclude the paragraph from Word's ToC outline scan
+    # entirely (confirmed directly in real Word) -- a regression here would
+    # silently make the "Title Page" entry disappear from the ToC again.
+    title_page_marker_match = re.search(
+        r'<w:pStyle w:val="Heading1"/>.*?<w:t[^>]*>Title Page', document_xml_for_toc, re.DOTALL
+    )
+    checks.append(
+        (
+            "'Title Page' marker does not use <w:vanish/> (would break ToC inclusion)",
+            title_page_marker_match is not None and "<w:vanish/>" not in title_page_marker_match.group(0),
+        )
+    )
+
+    # Contributors and Approvers now share one "Signatures" page/ToC entry
+    # (see signature_page.lua) rather than two separate Heading-1 sections.
+    checks.append(("signature page uses a single 'Signatures' heading", "Signatures" in joined))
+    checks.append(("Contributors sub-label rendered within Signatures", "Contributors" in joined))
+    checks.append(("Approvers sub-label rendered within Signatures", "Approvers" in joined))
 
     def _table_row_texts(table) -> list[list[str]]:
         return [[cell.text for cell in row.cells] for row in table.rows]
@@ -219,18 +261,27 @@ def main() -> int:
     checks.append(("header has exactly one active (non-cleared) tab stop", sum(1 for t in header_tabs if t.alignment != WD_TAB_ALIGNMENT.CLEAR) == 1))
 
     confidential_expected = "Confidential — Do Not Distribute"
-    checks.append(("title page footer has confidentiality label but no page number", title_section.footer.paragraphs[0].text == confidential_expected))
+    checks.append(("title page footer has confidentiality label + roman page number", title_section.footer.paragraphs[0].text == f"{confidential_expected}\t1" and any("PAGE" in p._p.xml for p in title_section.footer.paragraphs)))
     checks.append(("front-matter footer has confidentiality label + roman page number", front_matter_section.footer.paragraphs[0].text == f"{confidential_expected}\t1" and any("PAGE" in p._p.xml for p in front_matter_section.footer.paragraphs)))
     checks.append(("body footer has confidentiality label + arabic page number", body_section.footer.paragraphs[0].text == f"{confidential_expected}\t1" and any("PAGE" in p._p.xml for p in body_section.footer.paragraphs)))
     footer_tabs = body_section.footer.paragraphs[0].paragraph_format.tab_stops
     checks.append(("footer has exactly one active (non-cleared) tab stop", sum(1 for t in footer_tabs if t.alignment != WD_TAB_ALIGNMENT.CLEAR) == 1))
 
+    title_pg_num_type = title_section._sectPr.find(qn("w:pgNumType"))
+    checks.append(
+        (
+            "title page numbers in lowercase roman starting at i",
+            title_pg_num_type is not None
+            and title_pg_num_type.get(qn("w:start")) == "1"
+            and title_pg_num_type.get(qn("w:fmt")) == "lowerRoman",
+        )
+    )
     front_matter_pg_num_type = front_matter_section._sectPr.find(qn("w:pgNumType"))
     checks.append(
         (
-            "front-matter section numbers in lowercase roman starting at i",
+            "rest of front matter continues the roman sequence starting at ii",
             front_matter_pg_num_type is not None
-            and front_matter_pg_num_type.get(qn("w:start")) == "1"
+            and front_matter_pg_num_type.get(qn("w:start")) == "2"
             and front_matter_pg_num_type.get(qn("w:fmt")) == "lowerRoman",
         )
     )

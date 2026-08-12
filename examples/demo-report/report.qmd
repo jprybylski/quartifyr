@@ -53,9 +53,6 @@ filters:
 # untouched (confirmed) since they aren't real pandoc Header nodes at
 # all. Per-project toggle -- set to false to turn numbering off.
 number-sections: true
-toc-style-map:
-  - style: "Title"
-    level: 1
 ---
 
 ::: {custom-style="Heading 1"}

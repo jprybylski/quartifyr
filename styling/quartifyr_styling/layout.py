@@ -18,9 +18,12 @@ page, including the title page.
 
 Footer: two zones -- an optional confidentiality label on the left
 (reusing the ``confidentiality:`` field ``title_page.lua`` already renders
-on the title page), and a page number on the right. The title page shows
-no page number at all. The rest of the front matter numbers in lowercase
-roman starting at "i". The body section restarts at arabic "1".
+on the title page), and a page number on the right. The whole front
+matter numbers in lowercase roman, starting at "i" on the title page
+itself (the title page keeps its own OOXML section -- see below -- but
+that's no longer about hiding its page number; it's now section 1 of the
+same roman sequence the rest of the front matter continues as section 2,
+starting at "ii"). The body section restarts at arabic "1".
 
 Why three real OOXML sections rather than one front-matter section with
 OOXML's "different first page" mechanism (``w:titlePg``): that was the
@@ -350,11 +353,16 @@ def apply_layout(
                 _write_header_paragraph(section.header.paragraphs[0], section, header_left_text, status.upper())
 
         if title_section is not None:
-            # Title page: no page number at all.
+            # Title page: lowercase roman, starting at "i".
             _write_footer_paragraph(
-                title_section.footer.paragraphs[0], title_section, confidential_label, add_page_field=False
+                title_section.footer.paragraphs[0],
+                title_section,
+                confidential_label,
+                add_page_field=show_page_numbers,
             )
-            # Rest of front matter: lowercase roman, starting at "i".
+            if show_page_numbers:
+                _set_pg_num_type(title_section, start=1, fmt="lowerRoman")
+            # Rest of front matter: same roman sequence, continuing at "ii".
             _write_footer_paragraph(
                 front_matter_section.footer.paragraphs[0],
                 front_matter_section,
@@ -362,7 +370,7 @@ def apply_layout(
                 add_page_field=show_page_numbers,
             )
             if show_page_numbers:
-                _set_pg_num_type(front_matter_section, start=1, fmt="lowerRoman")
+                _set_pg_num_type(front_matter_section, start=2, fmt="lowerRoman")
         else:
             # No title-page bookmark (title_page.lua didn't run): front
             # matter as a whole gets no page number, matching the

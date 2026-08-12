@@ -152,13 +152,13 @@ nothing to configure in `render_report()` itself:
   `{{< body-start >}}`, placed right before the first real body heading
   (e.g. right before `# Introduction`), marks where the numbered body
   begins. Together, these split the document into three page-numbering
-  regions: the title page (no page number at all), the rest of the
-  front matter (ToC, list of figures/tables, abbreviations, synopsis,
-  signature pages, ... -- lowercase roman, starting at "i"), and the
-  body (arabic, restarting at "1"). If a `.qmd` never uses `{{<
-  body-start >}}`, the document is left as a single section -- the
-  header (if set) still applies throughout, but there's no page-number
-  split.
+  regions: the title page (lowercase roman, starting at "i"), the rest
+  of the front matter (ToC, list of figures/tables, abbreviations,
+  synopsis, signature pages, ... -- same roman sequence, continuing at
+  "ii"), and the body (arabic, restarting at "1"). If a `.qmd` never
+  uses `{{< body-start >}}`, the document is left as a single section --
+  the header (if set) still applies throughout, but there's no
+  page-number split.
 - Every footer also shows a confidentiality label on the left, reusing
   whatever `confidentiality:` is already set to for the title page (see
   `../_extensions/quartifyr/README.md`) -- blank if `confidentiality:`
@@ -175,7 +175,7 @@ shows "Right-click to update field" instead of the actual ToC.
 `../styling/quartifyr_styling/recalculate_fields.py` drives headless
 LibreOffice to do that recalculation automatically, and it *works* --
 verified end-to-end: a real render's ToC went from "Right-click to update
-field" to real, correctly-paginated entries (" Contributors2", " Results5",
+field" to real, correctly-paginated entries (" Signatures2", " Results5",
 etc.) after running it.
 
 It's off by default in `render_report()` (`recalculate_fields = FALSE`)

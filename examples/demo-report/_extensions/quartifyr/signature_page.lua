@@ -1,5 +1,6 @@
--- Builds "Contributors" and "Approvers" signature pages from YAML
--- frontmatter and inserts them right after the title page.
+-- Builds a single "Signatures" page (covering both contributors and
+-- approvers) from YAML frontmatter and inserts it right after the title
+-- page.
 --
 -- Frontmatter contract:
 --
@@ -16,13 +17,16 @@
 --   signature-mode: "line"   # default; or "note"
 --   signature-note: "Approved electronically in the XYZ system"  # used when signature-mode: "note"
 --
--- Contributors (authors/reviewers) each get a 3-row signature block: a
--- blank signing space, printed name, and title stacked in the left
--- column, with a vertically-merged Role label ("Author"/"Reviewer") beside
--- the block. Approvers get a 2-row block (signing space, name) since
--- their role is already implied by the "Approvers" heading -- the slot
--- that would otherwise say "Role" instead carries their actual job title,
--- which is what a reader wants to know for an approval signature.
+-- "Contributors" and "Approvers" are one page/one ToC entry ("Signatures"),
+-- not two -- each group's own name renders as a smaller bold sub-label
+-- (not a real heading, so it doesn't add its own ToC entry) directly above
+-- its blocks. Contributors (authors/reviewers) each get a 3-row signature
+-- block: a blank signing space, printed name, and title stacked in the
+-- left column, with a vertically-merged Role label ("Author"/"Reviewer")
+-- beside the block. Approvers get a 2-row block (signing space, name)
+-- since their role is already implied by the "Approvers" sub-label -- the
+-- slot that would otherwise say "Role" instead carries their actual job
+-- title, which is what a reader wants to know for an approval signature.
 --
 -- The signing-space row is deliberately just an empty, tall cell -- no
 -- internal rule/line -- the table's own bordered cell already reads as
@@ -92,13 +96,17 @@ local signature_mode = "line" -- or "note"
 local signature_note = ""
 
 local function heading_paragraph(text)
-  -- Prepend a real tab character to match quarto-plus's header.lua
-  -- indentation of authored Markdown headings (it can't see this
-  -- raw-openxml heading to indent it itself, since it only walks typed
-  -- Header AST nodes). NOTE: `\t` has no special meaning inside a Lua
-  -- `[[ ]]` long-bracket string -- it would be the literal two characters
-  -- `\` and `t` -- so the tab has to come from a normal quoted string.
-  local tab_char = "\t"
+  -- No leading tab -- flush left, matching every other front-matter
+  -- section label in this extension (Synopsis/Table of Contents/List of
+  -- Figures/List of Tables/Abbreviations in report.qmd's custom-style
+  -- Divs, and appendix.lua's "Appendix N" headings). An earlier version
+  -- of this function prepended one to visually match quarto-plus's
+  -- indentation of *numbered body* headings ("1.\tIntroduction") -- but
+  -- "Signatures" is a front-matter label, not a numbered body heading, so
+  -- that comparison was the wrong one; it just made this specific heading
+  -- visibly indented relative to its actual peers (confirmed via a real
+  -- side-by-side render).
+  --
   -- pStyle must reference the style ID ("Heading1", no space), not the
   -- display name ("Heading 1", with a space) -- the display name renders
   -- visually fine but Word's ToC field silently fails to recognize the
@@ -109,10 +117,27 @@ local function heading_paragraph(text)
     [[
   <w:p>
     <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
-    <w:r><w:t xml:space="preserve">%s%s</w:t></w:r>
+    <w:r><w:t xml:space="preserve">%s</w:t></w:r>
   </w:p>
   ]],
-    tab_char,
+    utils.escape_xml(text)
+  )
+end
+
+-- "Contributors"/"Approvers" sub-labels within the single "Signatures"
+-- page: bold and a bit larger than body text for visual separation, but
+-- deliberately *not* a real Heading style -- Word's ToC field follows
+-- heading outline levels automatically, and a real heading here would add
+-- its own ToC entry, which is exactly what merging into one "Signatures"
+-- page is meant to avoid.
+local function sub_label_paragraph(text)
+  return string.format(
+    [[
+  <w:p>
+    <w:pPr><w:spacing w:before="240" w:after="120"/></w:pPr>
+    <w:r><w:rPr><w:b/><w:sz w:val="26"/></w:rPr><w:t xml:space="preserve">%s</w:t></w:r>
+  </w:p>
+  ]],
     utils.escape_xml(text)
   )
 end
@@ -283,8 +308,14 @@ return {
         end
       end
 
+      local has_approvers = #approvers > 0
+
+      if has_contributors or has_approvers then
+        table.insert(parts, heading_paragraph("Signatures"))
+      end
+
       if has_contributors then
-        table.insert(parts, heading_paragraph("Contributors"))
+        table.insert(parts, sub_label_paragraph("Contributors"))
         for _, group in ipairs(CONTRIBUTOR_GROUPS) do
           local g = contributor_groups[group.key]
           if g then
@@ -295,8 +326,8 @@ return {
         end
       end
 
-      if #approvers > 0 then
-        table.insert(parts, heading_paragraph("Approvers"))
+      if has_approvers then
+        table.insert(parts, sub_label_paragraph("Approvers"))
         for _, person in ipairs(approvers) do
           table.insert(parts, approver_block(person.name, person.title))
         end

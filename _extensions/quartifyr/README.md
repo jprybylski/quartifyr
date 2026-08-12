@@ -66,11 +66,6 @@ format: docx
 filters:
   - quarto-plus
   - quartifyr
-# Required so the title page (styled "Title") shows up in quarto-plus's
-# native Word ToC field, which otherwise only follows heading outline levels:
-toc-style-map:
-  - style: "Title"
-    level: 1
 ---
 ```
 
@@ -124,6 +119,20 @@ suppresses pandoc's own automatic title-block (which would otherwise
 duplicate `title`/`subtitle`/`date`), so no other title-related frontmatter
 handling is needed.
 
+The ToC's entry for the title page reads "Title Page", not the document's
+actual title text -- a genuinely `Heading 1`-styled paragraph, independent
+of the real, visible `Title`-styled paragraph that still shows the
+report's own title. Word's ToC field scans outline levels 1-3 by default,
+so this needs no per-project configuration and no `apply-layout` step --
+it's automatic whenever a title page renders, exactly like every other
+real heading, and shows up in Word's Navigation Pane for free too. What
+makes it invisible on the page itself is ordinary formatting (1pt size,
+white text) rather than any "hidden" flag -- confirmed in real Word (not
+just this repo's own testing) that both a `<w:vanish/>`-hidden paragraph
+and a `TC` (table-of-contents-entry) field -- two earlier attempts --
+reliably showed *something* on the title page regardless of which
+mechanism drove it.
+
 `document-status` renders as a bordered, bold, uppercase box right under
 the title (a "stamp" rather than a colored watermark, to stay inside the
 black/Times-New-Roman default look) -- unlike the other fields, it's
@@ -137,18 +146,22 @@ orchestration driver is responsible for keeping the two in sync: render
 with `document-status: DRAFT` for anything headed to `report/draft/`, and
 `FINAL` when producing what will become `report/final/`.
 
-### Contributor / approval signature pages
+### Signature page
 
 Right after the title page, `contributors:` (with `authors:`/`reviewers:`
-lists) renders a "Contributors" section, and a separate top-level
-`approvers:` list renders an "Approvers" section. Each person gets their
-own full-width, bordered signature block: a blank signing space, printed
+lists) and a separate top-level `approvers:` list render a single
+"Signatures" section — one heading, one ToC entry, covering both groups.
+"Contributors" and "Approvers" appear within that page as smaller bold
+sub-labels (not headings of their own, so they don't add extra ToC
+entries) directly above their respective blocks; either sub-label is
+omitted entirely if its key isn't set. Each person gets their own
+full-width, bordered signature block: a blank signing space, printed
 name, and (for contributors) title stacked in one column, with a role
 label ("Author"/"Reviewer") spanning beside it. Approvers use the same
-layout, but since "Approvers" is already the section heading, the label
-slot next to their signing space shows their actual job title instead of
-a redundant "Approver" tag. Either key (`contributors:`, `approvers:`) can
-be omitted if not needed.
+layout, but since "Approvers" is already the sub-label, the slot next to
+their signing space shows their actual job title instead of a redundant
+"Approver" tag. Either key (`contributors:`, `approvers:`) can be omitted
+if not needed — if both are omitted, no Signatures page renders at all.
 
 The signing-space row is a tall, empty cell -- deliberately no line or
 box drawn inside it, since the table's own bordered cell already reads
@@ -165,11 +178,12 @@ to replace that empty space with the note text instead, applied
 uniformly across every contributor/approver block. Default is
 `signature-mode: "line"` (the empty box).
 
-There's no forced page break between the two sections — with only a
-handful of contributors they'll naturally share a page; Word just flows
-onto a new page once the content no longer fits. The only explicit break
-this filter inserts is right after the title page (before "Contributors")
-and once more after the last section (before the rest of the document).
+There's no forced page break between the Contributors and Approvers
+sub-sections — with only a handful of people they'll naturally share a
+page; Word just flows onto a new page once the content no longer fits.
+The only explicit break this filter inserts is right after the title page
+(before "Signatures") and once more after the whole Signatures page
+(before the rest of the document).
 
 ### Synopsis
 
@@ -355,12 +369,11 @@ precedent as the title page's own status stamp), a confidentiality label
 in the footer's left zone (reusing whatever `confidentiality:` is set to
 on the title page -- see Title page above -- blank if unset), and, if
 `{{< body-start >}}` is present (placed right before your first real body
-heading, e.g. `# Introduction`), a three-way page-numbering split: the
-title page gets no page number at all, the rest of the front matter (ToC,
-list of figures/tables, abbreviations, synopsis, signature pages, ...)
-numbers in lowercase roman starting at "i", and the body restarts at
-arabic "1". Without `{{< body-start >}}`, `apply-layout` still adds the
-header, just with no page-number split (single section throughout).
+heading, e.g. `# Introduction`), a page-numbering split: the whole front
+matter (title page through abbreviations) numbers in lowercase roman
+starting at "i" on the title page itself, and the body restarts at arabic
+"1". Without `{{< body-start >}}`, `apply-layout` still adds the header,
+just with no page-number split (single section throughout).
 
 ### A pStyle gotcha (if you're extending this extension)
 

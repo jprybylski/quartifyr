@@ -58,9 +58,9 @@ quartifyr-styling recalculate-fields --docx path/to/report-final.docx
 
 Apply a dynamic page header and footer, and (if the `.qmd` uses `{{<
 body-start >}}`) split the rendered docx into title-page/front-matter/body
-OOXML sections so the title page has no page number, the rest of the
-front matter numbers in lowercase roman, and the body restarts at arabic
-"1" -- run this on the shell docx right after the Quarto render, before
+OOXML sections so the whole front matter numbers in lowercase roman
+(starting at "i" on the title page itself) and the body restarts at
+arabic "1" -- run this on the shell docx right after the Quarto render, before
 `reportifyr`'s pass-2 fill (this is what `render_report()` does
 automatically -- see `../r/README.md`'s "Page header/footer and page
 numbering" section):

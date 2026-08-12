@@ -135,17 +135,20 @@ def test_apply_layout_three_sections_with_title_page_bookmark(tmp_path):
     for section in (title, front_matter, body):
         assert section.header.paragraphs[0].text == "ACME-001 - RPT-1001\tDRAFT"
 
-    # Title page: confidential label only, no page number.
-    assert title.footer.paragraphs[0].text == "Confidential"
-    assert "PAGE" not in title.footer.paragraphs[0]._p.xml
-    assert title._sectPr.find(qn("w:pgNumType")) is None
+    # Title page: confidential label + roman numeral, starting at "i".
+    assert title.footer.paragraphs[0].text == "Confidential\t1"
+    assert "PAGE" in title.footer.paragraphs[0]._p.xml
+    title_pg_num_type = title._sectPr.find(qn("w:pgNumType"))
+    assert title_pg_num_type is not None
+    assert title_pg_num_type.get(qn("w:start")) == "1"
+    assert title_pg_num_type.get(qn("w:fmt")) == "lowerRoman"
 
-    # Rest of front matter: confidential label + roman numeral, starting at "i".
+    # Rest of front matter: same roman sequence, continuing at "ii".
     assert front_matter.footer.paragraphs[0].text == "Confidential\t1"
     assert "PAGE" in front_matter.footer.paragraphs[0]._p.xml
     front_matter_pg_num_type = front_matter._sectPr.find(qn("w:pgNumType"))
     assert front_matter_pg_num_type is not None
-    assert front_matter_pg_num_type.get(qn("w:start")) == "1"
+    assert front_matter_pg_num_type.get(qn("w:start")) == "2"
     assert front_matter_pg_num_type.get(qn("w:fmt")) == "lowerRoman"
 
     # Body: confidential label + arabic, restarting at 1.

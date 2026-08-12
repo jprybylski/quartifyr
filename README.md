@@ -285,8 +285,7 @@ A project set up the `render_report()` way needs:
    find it. Skip this if you're calling `quarto render` yourself with an
    explicit `--output` path.
 3. **A shell `.qmd`** at the project root with `filters: [quarto-plus,
-   quartifyr]` and `toc-style-map: [{style: Title, level: 1}]`, plus
-   frontmatter for whichever front-matter pieces you want (`title`,
+   quartifyr]`, plus frontmatter for whichever front-matter pieces you want (`title`,
    `contributors`/`approvers`, `synopsis`, `header-format`, ...) — see
    [`_extensions/quartifyr/README.md`](_extensions/quartifyr/README.md)
    for the full list, and use `{{< body-start >}}`/`{rpfy}:` placeholders/
