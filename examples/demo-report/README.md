@@ -5,7 +5,8 @@ spirit of `reportifyr-examples`: a small PK-style report built from base
 R's built-in `Theoph` dataset, exercising every piece of the toolkit --
 dynamic title page, draft/final status stamp, contributor/approver
 signature pages, table of contents (including the title page), list of
-figures, list of tables, only-used abbreviations, a numbered appendix, and
+figures, list of tables, only-used abbreviations, a citeproc-driven
+bibliography (populated before the appendices), a numbered appendix, and
 a real `reportifyr` fill pass.
 
 ## Layout
@@ -15,6 +16,12 @@ a real `reportifyr` fill pass.
   title page/signature pages, body uses `{rpfy}:` magic strings plus
   `quarto-plus`/`quartifyr` shortcodes for captions, abbreviations, and the
   appendix.
+- `references.bib` -- sample bibliography cited from the body via
+  `[@key]`, rendered in the extension's default NLM/Vancouver bracketed
+  numbered style (`[1]`, `[2]`, ..., each hyperlinked to its entry); see
+  `_extensions/quartifyr/README.md`'s "Bibliography / references" section
+  for how the References heading + `{#refs}` Div in `report.qmd` control
+  where the reference list ends up.
 - `_quarto.yml` -- sets `project: {output-dir: report/shell}`, which is
   what actually redirects the render into `report/shell/`
   (`reportifyr::make_doc_dirs()` needs the docx there, not the qmd).
@@ -69,8 +76,10 @@ copy (see Layout above), then runs `Rscript render.R --final` for real and
 asserts on the resulting docx: no leftover `{rpfy}:` magic strings, the PK
 summary table and concentration-time figure are actually filled in (not
 placeholders), the title page/status stamp/appendix lettering all
-rendered, and `\gls{PK}` resolved through the abbreviations bridge. Skips
-(exit 0) if `Rscript` or `quarto` aren't on `PATH`.
+rendered, `\gls{PK}` resolved through the abbreviations bridge, and the
+bibliography renders (in-text citations resolved, entries present, and
+populated before the appendices rather than after). Skips (exit 0) if
+`Rscript` or `quarto` aren't on `PATH`.
 
 ## Why this project has its own `.here` file
 

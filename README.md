@@ -345,10 +345,11 @@ speculatively.
 ## Status and known limitations
 
 The core pipeline — styling, title/signature pages, ToC/LOF/LOT,
-abbreviations, appendices, and the `reportifyr` fill pass — is built and
-verified end to end (see `examples/demo-report/smoke_test.py`, which runs
-the real pipeline and checks the actual output on every run). Two things
-are deliberately incomplete rather than papered over:
+abbreviations, appendices, bibliography/citations, and the `reportifyr`
+fill pass — is built and verified end to end (see
+`examples/demo-report/smoke_test.py`, which runs the real pipeline and
+checks the actual output on every run). Two things are deliberately
+incomplete rather than papered over:
 
 - **Word field recalculation** (`quartifyr-styling recalculate-fields`,
   headless LibreOffice) is experimental — it works, but has shown
@@ -360,6 +361,13 @@ are deliberately incomplete rather than papered over:
   "Figure 12" inside an appendix, not "Figure B-1") — a deliberate v1
   scope call, not a bug. See
   [`_extensions/quartifyr/README.md`](_extensions/quartifyr/README.md#appendices).
+- **A citation's `link-citations: true` hyperlink can fail to navigate in
+  Word** on documents where `reportifyr`'s own footnote-bookmark id
+  happens to numerically collide with a citeproc bookmark id — confirmed
+  as a bug in `reportifyr`'s `remove_bookmarks()`, not something
+  quartifyr's shell can prevent. See
+  [`_extensions/quartifyr/README.md`](_extensions/quartifyr/README.md#bibliography--references)'s
+  "Known limitation" note.
 
 ## vs. pharmtex
 

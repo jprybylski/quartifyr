@@ -41,6 +41,12 @@ contributes:
     #    ever renders anything for a given project -- see their own
     #    guards -- so this reversal only matters for which one wins the
     #    front position in the misconfigured both-set case.)
+    # bibliography.lua only sets a `csl:` default in Meta if the project
+    # hasn't set its own -- independent of the ordering constraints above,
+    # since none of synopsis/signature_page/memo_cover/title_page read or
+    # write meta.csl. Listed first only for visibility, not because it has
+    # to run before the others.
+    - bibliography.lua
     - synopsis.lua
     - signature_page.lua
     - memo_cover.lua

@@ -176,6 +176,46 @@ def _style_table_grid(doc: DocumentObject, config: StyleConfig) -> None:
         style.element.append(style_pr)
 
 
+def _style_bibliography(doc: DocumentObject, config: StyleConfig) -> None:
+    """Create/configure the 'Bibliography' style pandoc's docx writer applies to
+    each entry in a citeproc-generated reference list (a Div with id "refs").
+
+    Unlike Caption/Heading N/Table Grid, "Bibliography" isn't one of
+    python-docx's bundled built-in styles, so it has to be added rather than
+    just mutated in place -- see _get_or_add_style.
+    """
+    style = _get_or_add_style(doc, "Bibliography", WD_STYLE_TYPE.PARAGRAPH, base="Normal")
+    _set_font(style, config.fonts.body, config.fonts.sizes.body, color=config.colors.text)
+    # Standard hanging-indent bibliography look: first line flush left,
+    # continuation lines indented, so multi-line entries stay visually
+    # distinct from each other without a blank line between them.
+    style.paragraph_format.left_indent = Inches(0.5)
+    style.paragraph_format.first_line_indent = Inches(-0.5)
+    _set_paragraph_format(style, space_after_pt=config.paragraph.space_after_pt)
+
+
+def _style_hyperlink(doc: DocumentObject, config: StyleConfig) -> None:
+    """Create/configure the 'Hyperlink' character style pandoc's citeproc
+    output applies (via rStyle) to each in-text citation when
+    `link-citations: true` is set (bibliography.lua's own default -- see
+    that filter).
+
+    Deliberately made to look like plain body text (no blue, no underline)
+    rather than a conventional web-link appearance -- matching this
+    extension's own REF-field crossrefs/appendix_crossrefs, which are
+    genuinely clickable (`\\h` switch) but carry no distinguishing rStyle at
+    all, so they just inherit whatever formatting surrounds them. Word
+    treats "Hyperlink" as one of its reserved built-in style IDs and will
+    render *something* link-like (typically blue + underlined) even without
+    an explicit definition, so this still has to be defined explicitly --
+    just matched to Normal instead of Word's own default -- to avoid an
+    unverified, visually inconsistent fallback.
+    """
+    style = _get_or_add_style(doc, "Hyperlink", WD_STYLE_TYPE.CHARACTER, base="Default Paragraph Font")
+    _set_font(style, config.fonts.body, config.fonts.sizes.body, color=config.colors.text)
+    style.font.underline = False
+
+
 def _style_header(doc: DocumentObject, config: StyleConfig) -> None:
     """Styles the "Header" paragraph style so dynamic header text (added by
     quartifyr_styling.layout's post-render step, since the actual per-project
@@ -356,6 +396,8 @@ def build_reference_docx(config: StyleConfig, output_path: str | Path) -> Path:
         _configure_toc_style(doc, level, config, page_width_in, config.page.margins_in.left)
 
     _style_table_grid(doc, config)
+    _style_bibliography(doc, config)
+    _style_hyperlink(doc, config)
     _style_header(doc, config)
     _add_page_number_footer(doc, config)
     _enable_update_fields_on_open(doc)

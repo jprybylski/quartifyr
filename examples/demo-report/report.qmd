@@ -42,6 +42,7 @@ synopsis:
       - "The synopsis figure below is a duplicate rendering of that same concentration-time profile -- demonstrating multi-line values with an embedded figure, not a numbered figure of its own (it's excluded from the List of Figures, unlike Figure 1 in the body). It's a separate saved copy (conc-time-synopsis.png) rather than a second reference to conc-time.png, since reportifyr dedupes figure metadata footnotes by filename document-wide and Figure 1's own footnote should win that dedup, not the synopsis preview's."
       - image: "conc-time-synopsis.png"
         width: "4in"
+bibliography: references.bib
 format: docx
 filters:
   - quarto-plus
@@ -120,8 +121,8 @@ Terms and abbreviations used in this report are listed below.
 # Introduction
 
 This demonstration report summarizes a \gls{PK} analysis of theophylline
-concentrations from the built-in `Theoph` dataset, rendered end to end
-through quartifyr's two-pass shell/fill pipeline.
+concentrations from the built-in `Theoph` dataset [@boeckmann1994],
+rendered end to end through quartifyr's two-pass shell/fill pipeline.
 
 {{< pagebreak >}}
 
@@ -154,9 +155,34 @@ plotted on the same axes, summarized numerically in
 
 {{< pagebreak >}}
 
+<!-- Same `custom-style="Heading 1"` idiom as Synopsis/Abbreviations above
+     -- gets the real Heading 1 look and shows up in the native ToC (both
+     key off the paragraph style itself, not whether the heading is a
+     genuine numbered pandoc Header), without becoming a numbered section
+     the way Introduction/Results are. A genuine `# References` heading
+     would also work, but picks up quarto-plus's header.lua tab-insertion
+     (meant to precede a section number) even when marked `.unnumbered`,
+     leaving a stray leading tab with no number before it. -->
+::: {custom-style="Heading 1"}
+References
+:::
+
+<!-- citeproc (pandoc's bibliography processor, enabled automatically by
+     the `bibliography:` field above) appends the generated reference list
+     to the very end of the document unless an explicit `{#refs}` Div
+     already exists somewhere in the body -- in which case it fills that
+     Div in place instead. This one is deliberately positioned here, right
+     after the body and before the appendices, so citations don't end up
+     trailing behind appendix content. -->
+::: {#refs}
+:::
+
+{{< pagebreak >}}
+
 {{< appendix "StatisticalMethods" "Statistical Methods" >}}
 
 Per-participant summary statistics were computed directly from the observed
-concentration-time data; no model-based estimation was performed for this
+concentration-time data; no model-based estimation (e.g. the nonlinear
+mixed-effects approach in [@pinheiro1995]) was performed for this
 demonstration report. See {{< appendix_crossref "StatisticalMethods" >}}
 for the complete methodology.

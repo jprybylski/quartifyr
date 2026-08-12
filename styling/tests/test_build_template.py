@@ -101,6 +101,34 @@ def test_table_grid_has_borders_and_header_shading(tmp_path):
     assert shading.get(qn("w:fill")) == "D9D9D9"
 
 
+def test_bibliography_style_has_body_font_and_hanging_indent(tmp_path):
+    # pandoc's docx writer applies pStyle "Bibliography" to each entry in a
+    # citeproc-generated reference list; it isn't one of python-docx's
+    # bundled built-in styles, so build_template.py has to add it.
+    _, doc = _build(tmp_path)
+    style = doc.styles["Bibliography"]
+    assert style.font.name == "Times New Roman"
+    assert str(style.font.color.rgb) == "000000"
+    assert style.paragraph_format.left_indent.inches == 0.5
+    assert style.paragraph_format.first_line_indent.inches == -0.5
+
+
+def test_hyperlink_style_blends_in_with_body_text(tmp_path):
+    # pandoc's citeproc output (link-citations: true) applies pStyle/rStyle
+    # "Hyperlink" to each in-text citation. Deliberately styled to match
+    # Normal body text (no blue, no underline) rather than a conventional
+    # web-link look, matching how this extension's own REF-field crossrefs/
+    # appendix_crossrefs render -- clickable but carrying no distinguishing
+    # rStyle at all. Word treats "Hyperlink" as a reserved built-in ID and
+    # renders *something* even if undefined, so it still has to be defined
+    # explicitly here rather than left to an unverified fallback.
+    _, doc = _build(tmp_path)
+    style = doc.styles["Hyperlink"]
+    assert style.font.underline is False
+    assert str(style.font.color.rgb) == "000000"
+    assert style.font.name == "Times New Roman"
+
+
 def test_footer_has_page_number_field(tmp_path):
     _, doc = _build(tmp_path)
     footer_para = doc.sections[0].footer.paragraphs[0]

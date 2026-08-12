@@ -89,6 +89,36 @@ def main() -> int:
 
     checks: list[tuple[str, bool]] = []
 
+    # quartifyr's own pass-1 output (Quarto render + apply-layout, before
+    # reportifyr's pass-2 fill touches anything) must never leave an
+    # unpaired w:bookmarkStart/w:bookmarkEnd -- confirmed, via a real bug
+    # reported against this exact demo, that reportifyr's own
+    # `remove_bookmarks()` step (python, docx_utils.py) matches
+    # bookmarkEnd elements to remove *purely by numeric w:id*, without also
+    # checking that the matching bookmarkStart's name carries reportifyr's
+    # own "fp_" footnote-bookmark prefix. reportifyr assigns its own
+    # footnote-bookmark ids from the footnoted paragraph's index in
+    # doc.paragraphs -- a small integer with no relationship to pandoc's
+    # own citeproc/heading bookmark ids -- so on some documents (this one
+    # included) it coincidentally collides with an unrelated bookmark
+    # (here, a citeproc `ref-<key>` bookmark), and remove_bookmarks() then
+    # deletes *both* same-numbered bookmarkEnd elements, silently
+    # corrupting whichever unrelated bookmark lost its close tag -- e.g. a
+    # citation's `link-citations: true` hyperlink pointing at a bookmark
+    # that's missing its end. This is a reportifyr bug, not quartifyr's;
+    # this check only proves quartifyr's own shell is never the source.
+    shell_docx = PROJECT_DIR / "report" / "shell" / "report.docx"
+    with zipfile.ZipFile(shell_docx) as z:
+        shell_xml = z.read("word/document.xml").decode("utf-8")
+    shell_start_ids = set(re.findall(r'<w:bookmarkStart w:id="(\d+)"', shell_xml))
+    shell_end_ids = set(re.findall(r'<w:bookmarkEnd w:id="(\d+)"', shell_xml))
+    checks.append(
+        (
+            "quartifyr's own shell (pre-reportifyr) has no unpaired bookmarks",
+            shell_start_ids == shell_end_ids,
+        )
+    )
+
     checks.append(("no leftover {rpfy}: magic strings", "{rpfy}:" not in joined))
     checks.append(("at least 6 tables present (title info + signatures + PK summary + abbreviations; synopsis is plain paragraphs, not a table)", len(document.tables) >= 6))
 
@@ -164,6 +194,51 @@ def main() -> int:
         ("abbreviations table has a PK row", any("PK" in row and "Pharmacokinetic" in row for row in all_rows))
     )
     checks.append(("appendix auto-lettered", "Appendix A: Statistical Methods" in joined))
+
+    # bibliography: a `bibliography: references.bib` shell .qmd is plain
+    # Quarto/pandoc citeproc support -- no quartifyr-specific code involved
+    # in generating the citations/reference list themselves. What this
+    # extension DOES add: a "Bibliography" paragraph style and a
+    # "Hyperlink" character style on the reference-doc (pandoc's docx
+    # writer applies these by pStyle/rStyle, but neither is one of
+    # python-docx's bundled built-in styles, so build_template.py has to
+    # define them -- see _style_bibliography()/_style_hyperlink()), and
+    # bibliography.lua's `csl:`/`link-citations:` defaults (this
+    # extension's bundled NLM/Vancouver citation-sequence-brackets style,
+    # with in-text citations hyperlinked to their bibliography entry, used
+    # whenever a project doesn't set its own -- see that filter's
+    # file-header comment).
+    checks.append(
+        (
+            "in-text citation resolved in NLM/Vancouver bracketed numeric style (default csl, not pandoc's author-date default)",
+            "built-in Theoph dataset [1]," in joined and "(Boeckmann et al. 1994)" not in joined,
+        )
+    )
+    # Plain "References", not numbered like Introduction/Results ("1. ",
+    # "2. ", literal tabs baked in by number-sections) -- it uses the same
+    # `custom-style="Heading 1"` Div idiom as Synopsis/Abbreviations above
+    # it in this file, deliberately NOT a genuine pandoc Header, so
+    # number-sections never numbers it (see report.qmd's comment for why a
+    # genuine `# References {.unnumbered}` heading doesn't work cleanly:
+    # quarto-plus's header.lua still inserts its tab, leaving one with no
+    # number before it).
+    checks.append(("References heading rendered, not numbered", any(t.strip() == "References" for t in all_text)))
+    checks.append(
+        (
+            "bibliography entries rendered in NLM author-initials format",
+            any(t.startswith("1. \tBoeckmann AJ, Sheiner LB, Beal SL.") for t in all_text)
+            and any(t.startswith("2. \tPinheiro JC, Bates DM.") for t in all_text),
+        )
+    )
+
+    # The shell .qmd places an explicit `::: {#refs}` Div right after the
+    # body and before the appendices -- citeproc fills that Div in place
+    # rather than appending the bibliography to the very end of the
+    # document (its default behavior absent an explicit #refs Div), which
+    # would otherwise land it after all appendix content instead.
+    references_idx = next(i for i, t in enumerate(all_text) if t.strip() == "References")
+    appendix_idx = next(i for i, t in enumerate(all_text) if "Appendix A: Statistical Methods" in t)
+    checks.append(("References section populates before the appendices, not after", references_idx < appendix_idx))
     checks.append(
         ("PK summary table header present", any({"Cmax", "Cmin"}.issubset(set(row)) for row in all_rows))
     )
@@ -254,6 +329,49 @@ def main() -> int:
             seq_figure_count == 1,
         )
     )
+
+    checks.append(
+        (
+            "bibliography entries use the reference-doc's own 'Bibliography' paragraph style",
+            '<w:pStyle w:val="Bibliography"' in document_xml,
+        )
+    )
+
+    # link-citations: true (bibliography.lua's default) makes each in-text
+    # citation a real internal hyperlink to its bibliography entry -- one
+    # <w:hyperlink> anchored on the entry's citeproc-generated bookmark
+    # (ref-<key>) per citation, styled via the reference-doc's own
+    # "Hyperlink" character style rather than an unverified Word fallback.
+    # This only checks the *source* side (quartifyr's own responsibility --
+    # requesting the hyperlink and styling it). Whether each hyperlink's
+    # *target* bookmark actually survives reportifyr's pass-2 fill intact
+    # is checked separately below, and known-flaky -- see that check's
+    # comment for why this doesn't also assert it here.
+    checks.append(
+        (
+            "both in-text citations are real hyperlinks to their bibliography entry",
+            document_xml.count('<w:hyperlink w:anchor="ref-') == 2
+            and document_xml.count('<w:rStyle w:val="Hyperlink"') == 2,
+        )
+    )
+
+    # Whether the hyperlink *targets* above actually still resolve depends
+    # on reportifyr's pass-2 fill, which is known (see the shell bookmark
+    # check earlier in this file) to sometimes corrupt an unrelated
+    # bookmark's close tag when its own footnote-bookmark id coincidentally
+    # collides with a citeproc bookmark's id. Reported as a warning, not a
+    # hard failure -- a reportifyr bug outside quartifyr's own pass-1
+    # responsibility shouldn't fail this repo's own test suite.
+    final_start_ids = set(re.findall(r'<w:bookmarkStart w:id="(\d+)"', document_xml))
+    final_end_ids = set(re.findall(r'<w:bookmarkEnd w:id="(\d+)"', document_xml))
+    unpaired_in_final = final_start_ids - final_end_ids
+    if unpaired_in_final:
+        print(
+            f"WARN: final delivered docx has unpaired bookmark id(s) {sorted(unpaired_in_final)} "
+            "-- likely reportifyr's remove_bookmarks() id-collision bug (see smoke_test.py comment); "
+            "the affected citation's hyperlink may not navigate in Word",
+            file=sys.stderr,
+        )
 
     # crossref-hyperlinks: left at its default (true) in this demo -- both
     # quarto-plus's {{< crossref "TblPkSummary" >}} and this extension's
