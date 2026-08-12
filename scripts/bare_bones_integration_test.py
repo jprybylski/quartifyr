@@ -165,7 +165,8 @@ def main() -> int:
         final_docx = project_dir / "final.docx"
         print("3/3: reportifyr::build_report() + finalize_document() called directly (no make_doc_dirs()/render_report())...")
         result = subprocess.run(
-            ["Rscript", str(BUILD_REPORT_HELPER), str(DEMO_DIR), str(shell_docx), str(filled_docx), str(final_docx)],
+            ["Rscript", str(BUILD_REPORT_HELPER), str(shell_docx), str(filled_docx), str(final_docx)],
+            cwd=DEMO_DIR,
             capture_output=True,
             text=True,
             timeout=120,
