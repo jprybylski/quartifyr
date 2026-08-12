@@ -7,8 +7,9 @@ step -- `reportifyr` today). The same shell-generation approach is meant
 to extend across document kinds -- reports, presentations, analysis
 plans, memos -- over time; this extension currently covers the
 front-matter pieces most of them tend to need: a dynamic title page (with
-a draft/final status stamp), contributor/approval signature pages, a
-synopsis summary table, and numbered appendices.
+a draft/final status stamp), a fax-cover-sheet-style memo cover page,
+contributor/approval signature pages, a synopsis summary table, and
+numbered appendices.
 
 This extension adds those on top of
 [`quarto-plus`](https://github.com/A2-ai/quarto-plus)'s ToC/List of
@@ -91,8 +92,12 @@ default `"center"`).
 addresses render as genuine separate lines rather than one run-together
 paragraph — see `synopsis:`/`title-page-extra:` above for the same
 list-over-map reasoning) and adds an "Address" row to the info block, for
-memo-type documents that need a sender address on the title page. Omit it
-for document kinds that don't need one.
+report-style documents that just want a sender address line on their
+title page. Omit it for document kinds that don't need one. (This is a
+lighter-weight option than the "Memo cover page" filter below — if what
+you actually want is a fax-cover-sheet-style To/From/Date/Re cover with
+its own looser front-matter structure, use `memo:` instead of `title:`,
+not `address:` on top of a report title page.)
 
 **Fully flexible, not a fixed field list**: `date`/`lead-scientist`/
 `version`/`confidentiality` are named convenience fields (simpler to
@@ -149,9 +154,89 @@ orchestration driver is responsible for keeping the two in sync: render
 with `document-status: DRAFT` for anything headed to `report/draft/`, and
 `FINAL` when producing what will become `report/final/`.
 
+### Memo cover page
+
+```yaml
+memo:
+  to: "Jane Doe, CFO"
+  from: "John Smith, Controller"
+  date: "2026-08-12"
+  re: "Q3 Budget Review"
+  cc: "Finance Committee"    # optional
+memo-heading: "MEMORANDUM"    # optional, default "MEMORANDUM"
+```
+
+An alternative to the title page above for memo-type documents: a
+fax-cover-sheet-style cover page (a left-aligned `MEMORANDUM` banner over
+a To/From/Date/Re/Cc grid, not centered like a formal report cover)
+instead of a title/subtitle/logo/info-table title page, meant for
+documents that want a looser structure underneath
+-- no table of contents, list of figures/tables, or abbreviations list
+required. None of that omission needs any quartifyr-specific
+configuration: the ToC/List of Figures/List of Tables/abbreviations are
+`quarto-plus` shortcode divs you place in the body yourself (see
+`examples/demo-report/report.qmd` for what including them looks like),
+and the Signature page/Synopsis sections below stay no-ops if you never
+set their own frontmatter (`contributors:`/`approvers:`/`synopsis:`) --
+a memo simply omits whichever of those it doesn't need. See
+`examples/memo-example/` for a complete, minimal reference project built
+this way.
+
+This filter activates only when `memo:` is present in frontmatter --
+never set `title:` on a memo project (that's what triggers the title
+page above instead). If a project sets *both* by mistake, the memo cover
+is skipped with a warning and the title page renders instead, rather
+than producing a broken docx -- see `memo_cover.lua`'s file-header
+comment for why the two can't both render in the same document.
+
+`to`/`from`/`date`/`re`/`cc` render only the rows actually set, in that
+fixed order -- same "only show what's there" behavior as the title
+page's info-table fields, just without an open-ended `-extra:` list
+(these five are always the same fixed set for a memo, not open-ended).
+`memo-heading:` overrides the banner text (rendered uppercased), for
+projects that want e.g. `"INTERNAL MEMO"` instead of `"MEMORANDUM"`.
+
+Unlike the title page's invisible-tiny-heading ToC trick (see above),
+the `MEMORANDUM` banner is a single, real, *visible* `Heading 1`
+paragraph -- its ToC-entry text and its on-page text are the same
+string, so there's no duplicate-title problem to work around.
+
+`logo:`/`logo-width:` work identically to the title page (same fields,
+same behavior -- omit `logo:` and no space is reserved), but
+`logo-align:` **defaults to `"left"` here**, not `"center"` -- a
+letterhead-style logo in the top-left corner above a left-aligned
+`MEMORANDUM` banner is the typical memo look, unlike a formal report's
+centered title page. All three alignments are still available if you
+want a different look.
+
+`header-format:`/`confidentiality:` work identically to the title page.
+Page numbering does *not* work identically, though, and deliberately
+so: the title page leaves a `quartifyr-front-matter-start` bookmark so
+`apply-layout` gives it its own roman-numeral section ahead of the rest
+of the front matter -- the memo cover doesn't, since a memo has no other
+front-matter content between its cover and `{{< body-start >}}` (no ToC/
+synopsis/etc.), and giving it that same separate section would butt its
+boundary directly against `{{< body-start >}}`'s own with nothing
+between them, which renders as a genuinely blank page (confirmed in
+practice). Instead the memo cover just gets a confidentiality label with
+no page number in its footer, and the body restarts cleanly at arabic
+`"1"` -- see `utils.front_matter_start_bookmark()`'s comment in
+`utils.lua` for the full mechanism.
+
+One more thing worth knowing for a memo specifically, not something this
+filter controls: `quarto-plus`'s `header.lua` inserts a leading tab
+before every body heading unconditionally (it's meant to line up with a
+number like `1.` from `number-sections: true`) -- with numbering off, as
+a memo typically wants, that leaves a stray-looking indent on unnumbered
+headings. Set `indent-headers: false` in frontmatter to turn it off; see
+`examples/memo-example/report.qmd` for it in use alongside
+`number-sections: false`.
+
 ### Signature page
 
-Right after the title page, `contributors:` (with `authors:`/`reviewers:`
+Right after the title page (or the memo cover page, if `memo:` is set
+instead of `title:` — see above), `contributors:` (with
+`authors:`/`reviewers:`
 lists) and a separate top-level `approvers:` list render a single
 "Signatures" section — one heading, one ToC entry, covering both groups.
 "Contributors" and "Approvers" appear within that page as smaller bold

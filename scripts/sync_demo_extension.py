@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Keep examples/demo-report/_extensions/quartifyr/ in sync with the
+"""Keep every examples/*/_extensions/quartifyr/ in sync with the
 canonical _extensions/quartifyr/ at the repo root.
 
 Quarto's extension loader doesn't follow symlinks (confirmed: `quarto
-render` fails outright with a symlinked _extensions/quartifyr/), so the
-demo project has to carry a real, physical copy rather than a link that
-would guarantee sync by construction. This script is the alternative:
-run with --check (used by smoke_test.py, and safe to wire into CI) to
-fail loudly on drift, or with no args to re-copy and fix it.
+render` fails outright with a symlinked _extensions/quartifyr/), so each
+example project has to carry a real, physical copy rather than a link
+that would guarantee sync by construction. This script is the
+alternative: run with --check (used by each example's smoke_test.py, and
+safe to wire into CI) to fail loudly on drift, or with no args to re-copy
+and fix it.
 
 Usage:
     python3 scripts/sync_demo_extension.py          # re-sync (fixes drift)
@@ -23,7 +24,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCE = REPO_ROOT / "_extensions" / "quartifyr"
-DEST = REPO_ROOT / "examples" / "demo-report" / "_extensions" / "quartifyr"
+DESTS = [
+    REPO_ROOT / "examples" / "demo-report" / "_extensions" / "quartifyr",
+    REPO_ROOT / "examples" / "memo-example" / "_extensions" / "quartifyr",
+]
 
 
 def _diff_files(source: Path, dest: Path) -> list[str]:
@@ -43,26 +47,35 @@ def _diff_files(source: Path, dest: Path) -> list[str]:
 def main() -> int:
     check_only = "--check" in sys.argv
 
-    problems = _diff_files(SOURCE, DEST)
+    all_problems: dict[Path, list[str]] = {}
+    for dest in DESTS:
+        problems = _diff_files(SOURCE, dest)
+        if problems:
+            all_problems[dest] = problems
+        elif not check_only:
+            print(f"{dest} is in sync with {SOURCE}")
 
-    if not problems:
-        print(f"{DEST} is in sync with {SOURCE}")
+    if not all_problems:
+        if check_only:
+            print(f"All examples' _extensions/quartifyr/ copies are in sync with {SOURCE}")
         return 0
 
     if check_only:
-        print(f"error: {DEST} has drifted from {SOURCE}:", file=sys.stderr)
-        for p in problems:
-            print(f"  - {p}", file=sys.stderr)
+        for dest, problems in all_problems.items():
+            print(f"error: {dest} has drifted from {SOURCE}:", file=sys.stderr)
+            for p in problems:
+                print(f"  - {p}", file=sys.stderr)
         print(
             "\nRun `python3 scripts/sync_demo_extension.py` (no --check) to fix.",
             file=sys.stderr,
         )
         return 1
 
-    if DEST.exists():
-        shutil.rmtree(DEST)
-    shutil.copytree(SOURCE, DEST)
-    print(f"Synced {SOURCE} -> {DEST}")
+    for dest in all_problems:
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.copytree(SOURCE, dest)
+        print(f"Synced {SOURCE} -> {dest}")
     return 0
 
 

@@ -114,9 +114,6 @@ local logo_path = nil
 local logo_width = "2in"
 local logo_align = "center"
 
-local LABEL_PCT = 1500 -- 30%
-local VALUE_PCT = 3500 -- 70%
-
 local function styled_paragraph(style, text)
   return string.format(
     [[
@@ -128,10 +125,6 @@ local function styled_paragraph(style, text)
     utils.escape_xml(style),
     utils.escape_xml(text)
   )
-end
-
-local function spacer_paragraph()
-  return [[<w:p/>]]
 end
 
 -- See the file-header comment on why this exists: a genuinely
@@ -163,159 +156,6 @@ local function tiny_heading_paragraph(style, text)
     utils.escape_xml(style),
     utils.escape_xml(text)
   )
-end
-
--- A bordered box rather than a colored watermark, so DRAFT/FINAL stays
--- prominent without breaking the black/Times-New-Roman "professional
--- industrial" default look (see styling/styles/default.yaml).
-local function status_box(text)
-  return string.format(
-    [[
-  <w:p>
-    <w:pPr>
-      <w:pBdr>
-        <w:top w:val="single" w:sz="8" w:space="6" w:color="000000"/>
-        <w:left w:val="single" w:sz="8" w:space="6" w:color="000000"/>
-        <w:bottom w:val="single" w:sz="8" w:space="6" w:color="000000"/>
-        <w:right w:val="single" w:sz="8" w:space="6" w:color="000000"/>
-      </w:pBdr>
-      <w:jc w:val="center"/>
-      <w:spacing w:before="120" w:after="240"/>
-    </w:pPr>
-    <w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">%s</w:t></w:r>
-  </w:p>
-  ]],
-    utils.escape_xml(string.upper(text))
-  )
-end
-
--- Splits on literal newlines (e.g. from a YAML block scalar like
--- `address: |` for a multi-line address) into separate runs joined by
--- <w:br/>, so multi-line values render as real line breaks within one
--- cell/paragraph rather than one run with embedded "\n" characters
--- (which OOXML would just ignore/collapse).
-local function multiline_runs(value)
-  local runs = {}
-  for line in (value .. "\n"):gmatch("(.-)\n") do
-    if #runs > 0 then
-      table.insert(runs, "<w:br/>")
-    end
-    table.insert(runs, string.format('<w:t xml:space="preserve">%s</w:t>', utils.escape_xml(line)))
-  end
-  return table.concat(runs, "")
-end
-
-local function table_row(label, value)
-  return string.format(
-    [[
-    <w:tr>
-      <w:tc>
-        <w:tcPr><w:tcW w:w="%d" w:type="pct"/></w:tcPr>
-        <w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">%s</w:t></w:r></w:p>
-      </w:tc>
-      <w:tc>
-        <w:tcPr><w:tcW w:w="%d" w:type="pct"/></w:tcPr>
-        <w:p><w:r>%s</w:r></w:p>
-      </w:tc>
-    </w:tr>
-  ]],
-    LABEL_PCT,
-    utils.escape_xml(label),
-    VALUE_PCT,
-    multiline_runs(value)
-  )
-end
-
-local function field_table(rows)
-  local row_xml = {}
-  for _, r in ipairs(rows) do
-    table.insert(row_xml, table_row(r.label, r.value))
-  end
-  -- "TableNormal" (display name "Normal Table"), not "TableGrid" --
-  -- genuinely borderless (confirmed: no tblBorders/shading in its style
-  -- definition at all), unlike synopsis/signature tables which keep
-  -- visible borders on purpose. tblLook firstRow="0" additionally
-  -- prevents Word's default bold/shaded first-row treatment (omitting
-  -- tblLook entirely was the actual bug: Word applied it by default,
-  -- making the "Date" row look like an unwanted header row).
-  return string.format(
-    [[
-  <w:tbl>
-    <w:tblPr>
-      <w:tblStyle w:val="TableNormal"/>
-      <w:tblW w:w="5000" w:type="pct"/>
-      <w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>
-    </w:tblPr>
-    <w:tblGrid>
-      <w:gridCol/>
-      <w:gridCol/>
-    </w:tblGrid>
-    %s
-  </w:tbl>
-  ]],
-    table.concat(row_xml, "\n")
-  )
-end
-
-local function page_break_paragraph()
-  return [[<w:p><w:r><w:br w:type="page"/></w:r></w:p>]]
-end
-
--- An empty bookmarked paragraph marking where the title page ends and the
--- rest of the front matter (ToC, list of figures/tables, abbreviations,
--- synopsis, signature pages, ...) begins -- read by
--- styling/quartifyr_styling/layout.py's `apply-layout` step to give the
--- title page its own OOXML section, separate from the rest of the front
--- matter, so the title page alone can be excluded from page numbering
--- while the rest of the front matter numbers in roman numerals. Emitted
--- automatically (unlike `{{< body-start >}}`, which marks the front
--- matter/body boundary and has no fixed position an author didn't
--- specify) since the title page's end is always exactly here, right
--- after its own page break.
-local function front_matter_start_bookmark()
-  return [[
-  <w:p>
-    <w:bookmarkStart w:id="800002" w:name="quartifyr-front-matter-start"/>
-    <w:bookmarkEnd w:id="800002"/>
-  </w:p>
-  ]]
-end
-
--- Wraps an accumulated OOXML string as a single raw block, for mixing
--- into a list alongside genuine pandoc blocks (e.g. the logo image
--- below).
-local function raw_block(ooxml)
-  return pandoc.RawBlock("openxml", ooxml)
-end
-
--- A real pandoc.Image, not raw OOXML: embedding an image (the relationship
--- linking to the actual media file) is package-level plumbing a Lua
--- filter's RawBlock injection can't do -- only pandoc's own writer can,
--- which means the image has to travel through the pandoc AST as a genuine
--- Image element, not a string of hand-written XML like everything else
--- this filter emits. Centering it took a real investigation: neither a
--- `.center`-classed Div nor a `fig-align="center"` image attribute
--- produced any alignment in the rendered docx (confirmed empirically --
--- neither produced a <w:jc> anywhere). What does work: pandoc's
--- `custom-style` Div attribute, which applies a *named Word paragraph
--- style* directly -- wrapping in a Div styled "Subtitle" (already
--- center-aligned in the reference-doc, see styling/build_template.py)
--- makes the image inherit that alignment for free, no new style needed.
--- Left/right reuse the same custom-style mechanism against two dedicated
--- styles ("Logo Left"/"Logo Right", also added in build_template.py)
--- rather than "Subtitle" itself, so the logo's alignment isn't coupled to
--- Subtitle's italic/heading-font styling.
-local LOGO_ALIGN_STYLES = {
-  left = "Logo Left",
-  center = "Subtitle",
-  right = "Logo Right",
-}
-
-local function logo_block(path, width, align)
-  local img = pandoc.Image({}, path, "", pandoc.Attr("", {}, { { "width", width } }))
-  local para = pandoc.Para({ img })
-  local style = LOGO_ALIGN_STYLES[align] or LOGO_ALIGN_STYLES.center
-  return pandoc.Div({ para }, pandoc.Attr("", {}, { { "custom-style", style } }))
 end
 
 return {
@@ -394,20 +234,20 @@ return {
 
       -- Mixed list of pandoc blocks (RawBlock strings get accumulated and
       -- flushed as a group; the logo, when present, is a genuine
-      -- pandoc.Image block spliced in between -- see logo_block()'s
+      -- pandoc.Image block spliced in between -- see utils.logo_block()'s
       -- comment for why it can't just be more raw OOXML).
       local blocks = {}
       local ooxml_parts = {}
 
       local function flush_ooxml()
         if #ooxml_parts > 0 then
-          table.insert(blocks, raw_block(table.concat(ooxml_parts, "\n")))
+          table.insert(blocks, utils.raw_block(table.concat(ooxml_parts, "\n")))
           ooxml_parts = {}
         end
       end
 
       if logo_path then
-        table.insert(blocks, logo_block(logo_path, logo_width, logo_align))
+        table.insert(blocks, utils.logo_block(logo_path, logo_width, logo_align))
       end
 
       if report_type then
@@ -421,16 +261,16 @@ return {
         table.insert(ooxml_parts, styled_paragraph("Subtitle", doc_subtitle))
       end
 
-      table.insert(ooxml_parts, status_box(document_status))
+      table.insert(ooxml_parts, utils.status_box(document_status))
 
-      table.insert(ooxml_parts, spacer_paragraph())
+      table.insert(ooxml_parts, utils.spacer_paragraph())
 
       if #field_rows > 0 then
-        table.insert(ooxml_parts, field_table(field_rows))
+        table.insert(ooxml_parts, utils.field_table(field_rows))
       end
 
-      table.insert(ooxml_parts, page_break_paragraph())
-      table.insert(ooxml_parts, front_matter_start_bookmark())
+      table.insert(ooxml_parts, utils.page_break_paragraph())
+      table.insert(ooxml_parts, utils.front_matter_start_bookmark())
 
       flush_ooxml()
 

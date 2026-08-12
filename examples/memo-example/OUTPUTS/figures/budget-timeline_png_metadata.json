@@ -1,0 +1,70 @@
+{
+  "system_meta": {
+    "platform": "aarch64-apple-darwin23",
+    "software": {
+      "version": "R version 4.6.1 (2026-06-24)",
+      "packages_used": {
+        "ggplot2.version": "4.0.3",
+        "reportifyr.version": "0.4.0",
+        "methods.version": "4.6.1",
+        "RColorBrewer.version": "1.1.3",
+        "R6.version": "2.6.1",
+        "tidyselect.version": "1.2.1",
+        "farver.version": "2.1.2",
+        "magrittr.version": "2.0.5",
+        "gtable.version": "0.3.6",
+        "glue.version": "1.8.1",
+        "tibble.version": "3.3.1",
+        "this.path.version": "2.8.0",
+        "pkgconfig.version": "2.0.3",
+        "generics.version": "0.1.4",
+        "dplyr.version": "1.2.1",
+        "lifecycle.version": "1.0.5",
+        "utils.version": "4.6.1",
+        "cli.version": "3.6.6",
+        "pyro.version": "0.1.1",
+        "S7.version": "0.2.2",
+        "processx.version": "3.9.0",
+        "scales.version": "1.4.0",
+        "grid.version": "4.6.1",
+        "vctrs.version": "0.7.3",
+        "graphics.version": "4.6.1",
+        "withr.version": "3.0.3",
+        "grDevices.version": "4.6.1",
+        "stats.version": "4.6.1",
+        "compiler.version": "4.6.1",
+        "base.version": "4.6.1",
+        "pillar.version": "1.11.1",
+        "fs.version": "2.1.0",
+        "rlang.version": "1.3.0",
+        "log4r.version": "0.5.0",
+        "datasets.version": "4.6.1"
+      }
+    }
+  },
+  "source_meta": {
+    "type": "script",
+    "creation_author": "FILE NOT TRACKED BY GIT",
+    "latest_author": "FILE NOT TRACKED BY GIT",
+    "path": "scripts/01_analysis.R",
+    "creation_time": "FILE NOT TRACKED BY GIT",
+    "latest_time": "2026-08-12 18:09:11"
+  },
+  "object_meta": {
+    "author": "John Prybylski <jprybylski@gmail.com>",
+    "path": "OUTPUTS/figures/budget-timeline.png",
+    "creation_time": "2026-08-12 18:09:12",
+    "file_type": "png",
+    "meta_type": "NA",
+    "hash": "5921574dfe80b4072248de622066b327bea22ad8bbf5f5f64c5462d0450af797",
+    "table1": false,
+    "footnotes": {
+      "equations": [],
+      "notes": [
+        "Proposed Q3 budget review milestones."
+      ],
+      "abbreviations": []
+    }
+  },
+  "addl_meta": []
+}

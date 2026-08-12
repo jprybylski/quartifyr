@@ -157,9 +157,10 @@ resolution" section.
 | Path | What it is |
 | --- | --- |
 | [`styling/`](styling/README.md) | Python package: turns a style YAML (fonts, colors, page setup) into a docx `reference-doc`; the `standard_footnotes.yaml` → `abbreviations.tex` bridge; headless Word field recalculation via LibreOffice (experimental). `uv`-managed venv. |
-| [`_extensions/quartifyr/`](_extensions/quartifyr/README.md) | Quarto extension: dynamic title page + status stamp, contributor/approver signature pages, synopsis, numbered appendices, page header/footer with roman/arabic page numbering. Composes with [A2-ai's `quarto-plus`](https://github.com/A2-ai/quarto-plus) (ToC/List of Figures/List of Tables/abbreviations/captions) rather than duplicating it. |
+| [`_extensions/quartifyr/`](_extensions/quartifyr/README.md) | Quarto extension: dynamic title page + status stamp, a fax-cover-sheet-style memo cover page, contributor/approver signature pages, synopsis, numbered appendices, page header/footer with roman/arabic page numbering. Composes with [A2-ai's `quarto-plus`](https://github.com/A2-ai/quarto-plus) (ToC/List of Figures/List of Tables/abbreviations/captions) rather than duplicating it. |
 | [`r/`](r/README.md) | `rv`-managed R environment providing `render_report()`, the pass-1+pass-2 orchestration driver. Pulls `reportifyr` and `pyro` straight from GitHub (no CRAN release exists for either) as today's fill backend. |
 | [`examples/demo-report/`](examples/demo-report/README.md) | Complete, working example exercising every piece above, with an automated end-to-end smoke test — a reference to compare against, not the only way to start a project (see [Standing up a new project](#standing-up-a-new-project)). |
+| [`examples/memo-example/`](examples/memo-example/README.md) | The minimal end of the same pipeline: a memo cover page and a loose structure with no ToC/List of Figures/List of Tables/abbreviations/signature pages, also with its own smoke test. |
 
 Each org overrides just the parts of the default look that differ
 (`styling/styles/default.yaml` is Times New Roman, black text, flat
@@ -197,6 +198,12 @@ Rscript render.R --final
 Or just run the demo's own smoke test, which does step 4 for you and
 asserts the output is actually correct: `python3
 examples/demo-report/smoke_test.py`.
+
+[`examples/memo-example/`](examples/memo-example/README.md) works the
+same way (`cd examples/memo-example` instead of `examples/demo-report`)
+and demonstrates the other end of the same pipeline: a memo cover page
+instead of a report title page, with no ToC/List of Figures/List of
+Tables/abbreviations/signature pages.
 
 ## Standing up a new org
 

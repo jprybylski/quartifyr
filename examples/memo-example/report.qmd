@@ -1,0 +1,64 @@
+---
+memo:
+  to: "Jane Doe, CFO"
+  from: "John Smith, Controller"
+  date: "2026-08-12"
+  re: "Q3 Budget Review Timeline"
+  cc: "Finance Committee"
+document-status: "draft"
+logo: "assets/logo.png"
+logo-width: "1.5in"
+# header-format:/confidentiality: work the same as examples/demo-report's
+# title page (see memo_cover.lua's file-header comment for the one real
+# difference: this cover deliberately does NOT get its own
+# quartifyr-front-matter-start section -- see _extensions/quartifyr/
+# README.md's "Memo cover page" section for why).
+project: "ACME-001"
+memo_number: "MEMO-2026-014"
+header-format: "{project} - {memo_number}"
+confidentiality: "Internal Use Only"
+format: docx
+filters:
+  - quarto-plus
+  - quartifyr
+# Both deliberately off, unlike examples/demo-report -- a memo is meant
+# to read as a loose, short-form document, not a numbered formal report,
+# and quarto-plus's header.lua inserts a leading tab before every heading
+# unconditionally (meant to line up with a "1." from number-sections),
+# which looks like a stray indent once numbering itself is off.
+number-sections: false
+indent-headers: false
+---
+
+{{< body-start >}}
+
+# Purpose
+
+This memo summarizes the proposed timeline for the Q3 budget review and
+requests sign-off on the schedule below before circulating it to
+department heads.
+
+No table of contents, list of figures/tables, or abbreviations list is
+included -- unlike `examples/demo-report`, a memo's "loose structure"
+deliberately skips all of that (see the `examples/memo-example/README.md`
+and `_extensions/quartifyr/README.md`'s "Memo cover page" section for
+why none of that requires any quartifyr code changes to omit).
+
+# Proposed Schedule
+
+- Department budget submissions due August 21
+- Finance Committee review August 24-28
+- Consolidated review meeting September 2
+- Final sign-off September 9
+
+{{< fig_caption "FigTimeline" "Proposed Q3 budget review timeline" >}}
+
+{rpfy}:budget-timeline.png
+
+Milestone dates from the list above, shown as a single timeline for a
+quick visual check before circulating (see {{< crossref "FigTimeline" >}}).
+
+# Next Steps
+
+Please review the schedule above and reply with any conflicts by
+August 19 so the timeline can be finalized before submissions open.

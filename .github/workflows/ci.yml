@@ -125,19 +125,29 @@ jobs:
         working-directory: r
         run: rv sync
 
-      - name: rv sync (examples/demo-report)
-        working-directory: examples/demo-report
-        run: rv sync
+      # Looped rather than a second matrix axis (os x example): only these
+      # two steps and the smoke-test step below are per-example -- the
+      # rest of this job (rv install, apt deps, git identity, venv+
+      # template build) is shared setup that a second matrix dimension
+      # would needlessly double for no benefit.
+      - name: rv sync (examples/*)
+        run: |
+          for example in demo-report memo-example; do
+            (cd "examples/$example" && rv sync)
+          done
 
-      - name: Initialize reportifyr project (fresh clone -- .report_init.json is gitignored)
-        working-directory: examples/demo-report
-        run: Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'
+      - name: Initialize reportifyr projects (fresh clone -- .report_init.json is gitignored)
+        run: |
+          for example in demo-report memo-example; do
+            (cd "examples/$example" && Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())')
+          done
 
       # The render_report()/r/ convenience-wrapper path.
-      - name: Run demo smoke test
+      - name: Run example smoke tests
         run: |
           source .venv/bin/activate
           python3 examples/demo-report/smoke_test.py
+          python3 examples/memo-example/smoke_test.py
 
       # The decomposed "Using the pieces directly" path from the
       # repo-root README -- proves that documentation is actually true,
