@@ -161,8 +161,7 @@ round of clicking through Word's style pane.
 
 ## Quick start
 
-Requires, once each (platform-specific instructions at each link — none
-of this is macOS-only):
+Requires, once each (platform-specific instructions at each link):
 
 - [Quarto](https://quarto.org/docs/get-started/)
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python tooling)
