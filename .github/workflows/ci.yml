@@ -111,6 +111,20 @@ jobs:
           git config --global user.name "quartifyr CI"
           git config --global user.email "quartifyr-ci@users.noreply.github.com"
 
+      # rv sync below git-clones pyro/reportifyr (both public, no CRAN
+      # release -- see r/rproject.toml) anonymously over https. GitHub
+      # throttles anonymous git-over-https from the shared GitHub Actions
+      # runner IP pool and starts returning 401 ("could not read Username
+      # for 'https://github.com': terminal prompts disabled") once that's
+      # hit -- the same class of shared-IP rate limiting already worked
+      # around above for rv's own release-API call. Authenticating with
+      # the workflow's own GITHUB_TOKEN (not shared) avoids it.
+      - name: Authenticate anonymous git-over-https to github.com
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+
       # This is the repo-root Quick Start, run exactly as documented, so
       # this job also stands in as a check that the README instructions
       # themselves are correct and current.

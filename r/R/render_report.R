@@ -162,7 +162,14 @@ render_report <- function(
     error_on_status = FALSE
   )
   if (abbrevs_result$status != 0) {
-    stop("quartifyr-styling abbrevs failed:\n", abbrevs_result$stderr)
+    # cat() straight to stderr rather than folding the subprocess's stderr
+    # into stop()'s own condition message -- R's default top-level handler
+    # truncates printed error messages to getOption("warning.length")
+    # (1000 chars), which has been observed to silently cut off the actual
+    # failure reason from a long subprocess stderr, leaving only a
+    # generic-looking partial dump in CI logs.
+    cat(abbrevs_result$stderr, file = stderr())
+    stop("quartifyr-styling abbrevs failed (see stderr above)")
   }
 
   # --- Pass 1: render the shell with Quarto -------------------------------
@@ -183,7 +190,10 @@ render_report <- function(
     error_on_status = FALSE
   )
   if (quarto_result$status != 0) {
-    stop("quarto render failed:\n", quarto_result$stderr)
+    # See the abbrevs_result check above for why this is cat() + a short
+    # stop() rather than folding stderr into the condition message.
+    cat(quarto_result$stderr, file = stderr())
+    stop("quarto render failed (see stderr above)")
   }
   shell_docx <- file.path(project_dir, "report", "shell", shell_docx_name)
 
@@ -206,7 +216,10 @@ render_report <- function(
     error_on_status = FALSE
   )
   if (layout_result$status != 0) {
-    stop("quartifyr-styling apply-layout failed:\n", layout_result$stderr)
+    # See the abbrevs_result check above for why this is cat() + a short
+    # stop() rather than folding stderr into the condition message.
+    cat(layout_result$stderr, file = stderr())
+    stop("quartifyr-styling apply-layout failed (see stderr above)")
   }
 
   # --- Pass 2: fill the shell with reportifyr -----------------------------
