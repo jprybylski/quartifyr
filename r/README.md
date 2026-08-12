@@ -6,6 +6,14 @@
 (`render.R`) around it. `reportifyr` and `pyro` are pulled straight from
 GitHub (see `rproject.toml`) since neither has a CRAN release.
 
+This is a convenience wrapper, not a requirement — it chains `quarto
+render`, `quartifyr-styling apply-layout`, and `reportifyr::build_report()`
+together and adopts a specific `report/shell`/`report/draft`/`report/final`
+directory convention. If you already have your own Quarto and
+`reportifyr` project setup, you can call those three pieces yourself
+instead; see the repo-root README's
+[Using the pieces directly](../README.md#using-the-pieces-directly).
+
 ## Setup
 
 Requires [`rv`](https://a2-ai.github.io/rv-docs/) (cross-platform install

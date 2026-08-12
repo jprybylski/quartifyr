@@ -81,8 +81,65 @@ flowchart LR
    already does for hand-built shells; presentations are meant to use the
    same shell/fill split, filled by `reportifyr`'s sibling `presentifyr`.
 
-Both passes are driven by one call: `render_report()` in `r/` (see
-[`r/README.md`](r/README.md)).
+These two passes are independent tools, not a monolith. `reportifyr`
+doesn't know or care that a shell's `{rpfy}:` magic strings came from a
+quartifyr render rather than a hand-built one; `quarto render` doesn't
+know or care what happens to its docx afterward. `r/`'s `render_report()`
+(see [`r/README.md`](r/README.md)) is one convenience wrapper that chains
+both passes together and adopts a specific `report/shell` →
+`report/draft`/`report/final` directory convention (via
+`reportifyr::make_doc_dirs()`); it's optional. See
+[Using the pieces directly](#using-the-pieces-directly) below for the
+three plain tool calls underneath it.
+
+## Using the pieces directly
+
+You don't need this repo's `r/` orchestration driver, its `rv`-managed R
+environment, or its `report/shell`/`report/draft`/`report/final`
+directory convention to use quartifyr — that's all just what
+`render_report()` happens to do. If you already have your own Quarto
+project and your own `reportifyr` project set up, the underlying
+mechanics are three ordinary, independent tool calls:
+
+```bash
+# 1. Render the shell -- ordinary `quarto render`; quartifyr is just a
+#    Quarto extension plus a reference-doc, nothing project-structure-
+#    specific about how you invoke it.
+quarto render report.qmd --to docx --reference-doc org-reference.docx \
+  -M document-status:DRAFT
+
+# 2. (Optional) header/footer + page-restart post-processing, if your
+#    .qmd uses header-format:/{{< body-start >}} -- see
+#    _extensions/quartifyr/README.md.
+quartifyr-styling apply-layout --docx report.docx --qmd report.qmd --status draft
+```
+
+```r
+# 3. Fill it -- ordinary reportifyr, called exactly as you'd call it
+# against a hand-built shell. quartifyr's {rpfy}: placeholders ARE
+# reportifyr's own mechanism; there's nothing quartifyr-specific for
+# reportifyr to know about.
+reportifyr::build_report(
+  docx_in = "report.docx",
+  docx_out = "report-filled.docx",
+  figures_path = "OUTPUTS/figures",
+  tables_path = "OUTPUTS/tables",
+  standard_footnotes_yaml = "report/standard_footnotes.yaml",
+  config_yaml = "report/config.yaml"
+)
+```
+
+`docx_in`/`docx_out` are plain paths — no `report/shell/`-style directory
+naming required; that convention only exists because `render_report()`
+happens to use `reportifyr::make_doc_dirs()` to derive them. An existing
+reportifyr project's own layout and scripts work unchanged; quartifyr
+only touches the docx that flows between steps 1 and 3, not how or where
+you call them from.
+
+`render_report()` bundles these three calls into one because that's
+convenient for a project starting from scratch (and for
+[`examples/demo-report/`](examples/demo-report/README.md)) — it's a
+convenience, not a requirement.
 
 ## Components
 
@@ -148,8 +205,15 @@ See `styling/styles/default.yaml` for the full schema and
 
 ## Standing up a new project
 
-A project is a normal Quarto project plus the pieces `reportifyr` and
-this repo's `render_report()` expect. It needs:
+This is the full `render_report()` path — the convenience wrapper from
+[Using the pieces directly](#using-the-pieces-directly) above. If you
+already have a Quarto project and a `reportifyr` project, steps 2 and 4
+below are specific to `render_report()`'s own conventions and can be
+skipped; call `quarto render`, `quartifyr-styling apply-layout`, and
+`reportifyr::build_report()` yourself against your existing layout
+instead.
+
+A project set up the `render_report()` way needs:
 
 1. **The extensions**, physically copied (not symlinked — Quarto's
    extension loader doesn't follow symlinks) into `_extensions/` at the
@@ -159,9 +223,11 @@ this repo's `render_report()` expect. It needs:
    quarto add jprybylski/quartifyr
    ```
 2. **`_quarto.yml`** setting `project: {output-dir: report/shell}` — this
-   is what redirects the rendered docx into `report/shell/`, where
+   is only needed for `render_report()`'s own directory convention: it's
+   what redirects the rendered docx into `report/shell/`, where
    `reportifyr::make_doc_dirs()` (called by `render_report()`) expects to
-   find it.
+   find it. Skip this if you're calling `quarto render` yourself with an
+   explicit `--output` path.
 3. **A shell `.qmd`** at the project root with `filters: [quarto-plus,
    quartifyr]` and `toc-style-map: [{style: Title, level: 1}]`, plus
    frontmatter for whichever front-matter pieces you want (`title`,
