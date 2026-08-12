@@ -58,33 +58,45 @@ toc-style-map:
     level: 1
 ---
 
+::: {custom-style="Heading 1"}
 Synopsis
+:::
 
 ::: .synopsis
 :::
 
 {{< pagebreak >}}
 
+::: {custom-style="Heading 1"}
 Table of Contents
+:::
 
 ::: .toc
 :::
 
 {{< pagebreak >}}
 
+::: {custom-style="Heading 1"}
 List of Figures
+:::
 
 ::: .list_of_figures
 :::
 
 {{< pagebreak >}}
 
+::: {custom-style="Heading 1"}
 List of Tables
+:::
 
 ::: .list_of_tables
 :::
 
 {{< pagebreak >}}
+
+::: {custom-style="Heading 1"}
+Abbreviations
+:::
 
 Terms and abbreviations used in this report are listed below.
 

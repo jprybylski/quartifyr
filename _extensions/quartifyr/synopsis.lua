@@ -1,9 +1,9 @@
 -- ::: .synopsis :::
 --
--- Renders a bordered, full-width Synopsis summary table from a
--- `synopsis:` frontmatter block -- a standard CSR front-matter
--- convention. Fully dynamic: any number of rows, any labels, in
--- whatever order they're written --
+-- Renders a Synopsis summary -- label/value pairs flowing as plain
+-- paragraphs, not a table -- from a `synopsis:` frontmatter block, a
+-- standard CSR front-matter convention. Fully dynamic: any number of
+-- rows, any labels, in whatever order they're written --
 --
 --   synopsis:
 --     - label: "Objectives"
@@ -35,63 +35,41 @@
 -- already uses for the same reason.
 --
 -- `value:` accepts three shapes: a plain string (single paragraph, the
--- original behavior); a list of strings (multiple paragraphs within the
--- same cell); or a list mixing strings with `{image: "path", width:
--- "..."}` entries, interleaved in whatever order they're written.
+-- original behavior); a list of strings (multiple paragraphs); or a
+-- list mixing strings with `{image: "path", width: "..."}` entries,
+-- interleaved in whatever order they're written.
 --
--- An `image:` entry does NOT embed a picture directly -- it emits a
--- `{rpfy}:path<width: N>` magic string, exactly like a `{rpfy}:` figure
--- placeholder in the qmd body, just written into the cell from Lua
--- instead of by hand. This is deliberate, not a shortcut: reportifyr's
--- own figure-insertion (reportipyr's `add_figure()`/`add_figure_alt_text()`,
--- run by `reportifyr::build_report()` in pass 2) has first-class,
--- dedicated support for magic strings inside table cells -- confirmed by
--- reading its source (`iter_cell_paragraphs()` is used throughout
--- reportipyr's figures/alt_text/magic modules specifically for this).
--- Routing through the same mechanism as body figures means: the actual
--- picture lands genuinely inside the cell (not a full-width block
--- elsewhere -- an earlier version of this file tried embedding a real
--- `pandoc.Image` directly in pass 1, which only works by building the
--- table via pandoc's Table AST instead of raw OOXML, and that AST
--- table's column widths come out as fixed twips computed once against
--- whatever reference-doc exists at render time -- confirmed by testing:
--- identical gridCol values when rendered against reference-docs with
--- different page margins, a real regression against every other
--- percentage-width table in this extension); the figure gets
--- reportifyr's own provenance alt-text (a hash from the artifact's
--- `_metadata.json` sidecar, the same traceability every other
--- `{rpfy}:` figure gets); and -- since this never goes through
--- `{{< fig_caption >}}` -- it's excluded from quarto-plus's List of
--- Figures by construction (that list is populated only from its own
--- caption-style/SEQ-Figure-tagged paragraphs, not "any image in the
--- document").
+-- Not a table -- deliberately, after two earlier attempts that were:
+-- embedding a real `pandoc.Image` directly inside a table cell (which
+-- only works by building the table via pandoc's Table AST instead of
+-- raw OOXML, and that AST table's column widths come out as fixed twips
+-- computed once against whatever reference-doc exists at render time --
+-- confirmed by testing: identical gridCol values when rendered against
+-- reference-docs with different page margins, a real regression); and
+-- routing figures through reportifyr's own cell-aware `{rpfy}:` handling
+-- (reportipyr's `add_figure()` does support magic strings inside table
+-- cells, confirmed by reading its source), which does land the figure
+-- correctly inside the cell, but `reportifyr::build_report()`'s
+-- auto-generated Source/Notes/Abbreviations footnote for a cell figure
+-- groups *per Word table element* and inserts immediately after the
+-- whole table (`tbl_el.addnext(...)`, confirmed by reading
+-- reportipyr/footnotes.py) -- so the footnote always spans the full
+-- table width, underneath the row's label column too, not tucked
+-- directly beneath the figure itself. Plain body-level paragraphs
+-- sidestep this entirely: reportifyr's *body-level* (non-cell) figure
+-- and footnote handling inserts each figure's footnote as the very next
+-- paragraph after that specific figure, individually -- exactly the
+-- same mechanism a `{rpfy}:` figure in the qmd body already uses
+-- (confirmed: this is why the body's own Figure 1 has never had this
+-- problem). A synopsis figure is just another body-level `{rpfy}:`
+-- magic string, so it inherits that already-correct positioning for
+-- free, with no table-splitting bookkeeping needed at all.
 --
--- One consequence of going through reportifyr rather than embedding
--- directly: the picture doesn't exist yet after a plain `quarto render`
--- -- the cell shows the literal `{rpfy}:...` text until
+-- One consequence of going through reportifyr rather than embedding a
+-- picture directly: the picture doesn't exist yet after a plain `quarto
+-- render` -- the value shows the literal `{rpfy}:...` text until
 -- `reportifyr::build_report()` (pass 2) fills it in, exactly like any
 -- other magic-string figure in this project.
---
--- A second consequence, and why any row containing a `{rpfy}:` magic
--- string gets its own dedicated single-row table rather than sharing one
--- with every other row: `reportifyr::build_report()`'s footnote step
--- (reportipyr's `add_figure_footnotes()`) auto-inserts a Source/Notes/
--- Abbreviations block for every `{rpfy}:` figure, and for cell figures
--- specifically it groups that footnote *per table element*, inserting
--- one combined footnote paragraph immediately after the whole table
--- (`tbl_el.addnext(...)`, confirmed by reading its source) -- not
--- attached to any specific cell. If every synopsis row shared one table,
--- that footnote would land after the *entire synopsis*, misattributed
--- to whichever row happens to be last, and multiple figure-bearing rows
--- would have their footnotes merged together indiscriminately. Isolating
--- a figure-bearing row into its own table means reportifyr's per-table
--- grouping lands its footnote immediately after *that row alone* --
--- correctly scoped even with multiple figures in the same row (their
--- footnotes combine, which is reportifyr's own correct behavior for
--- multiple figures sharing one context) -- without merging across
--- unrelated rows. Rows with no magic string still share a table with
--- their neighbors, so plain text-only synopses render exactly as before
--- (one table, no fragmentation).
 --
 -- A "Title" row (from the top-level `title:` field) is always prepended
 -- automatically when synopsis rows are present. Omit `synopsis:` from
@@ -99,11 +77,6 @@
 -- renders nothing, so a shared shell template can leave the `:::
 -- .synopsis :::` marker in unconditionally and let each project's
 -- frontmatter decide.
---
--- Table width is percentage-based (w:type="pct"), not fixed twips, so it
--- genuinely spans the *current* usable text width regardless of the page
--- margins configured in the docx reference-doc (see
--- styling/styles/*.yaml's page.margins_in).
 
 local utils = require("utils")
 
@@ -123,66 +96,15 @@ end
 local doc_title = nil
 local rows = {} -- list of {label=, lines={...}}
 
-local LABEL_PCT = 1500 -- 30%
-local VALUE_PCT = 3500 -- 70%
-
-local function table_row(label, lines)
-  local value_paras = {}
-  if #lines == 0 then
-    table.insert(value_paras, "<w:p/>")
-  else
-    for _, line in ipairs(lines) do
-      table.insert(
-        value_paras,
-        string.format([[<w:p><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>]], utils.escape_xml(line))
-      )
-    end
-  end
-
+local function label_paragraph(label)
   return string.format(
-    [[
-    <w:tr>
-      <w:tc>
-        <w:tcPr><w:tcW w:w="%d" w:type="pct"/></w:tcPr>
-        <w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">%s</w:t></w:r></w:p>
-      </w:tc>
-      <w:tc>
-        <w:tcPr><w:tcW w:w="%d" w:type="pct"/></w:tcPr>
-        %s
-      </w:tc>
-    </w:tr>
-  ]],
-    LABEL_PCT,
-    utils.escape_xml(label),
-    VALUE_PCT,
-    table.concat(value_paras, "\n")
+    [[<w:p><w:pPr><w:spacing w:before="240"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">%s</w:t></w:r></w:p>]],
+    utils.escape_xml(label)
   )
 end
 
-local TABLE_OPEN = [[
-  <w:tbl>
-    <w:tblPr>
-      <w:tblStyle w:val="TableGrid"/>
-      <w:tblW w:w="5000" w:type="pct"/>
-      <w:tblLook w:val="04A0" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>
-    </w:tblPr>
-    <w:tblGrid>
-      <w:gridCol/>
-      <w:gridCol/>
-    </w:tblGrid>
-]]
-local TABLE_CLOSE = [[
-  </w:tbl>
-  <w:p/>
-]]
-
-local function row_has_magic_string(lines)
-  for _, line in ipairs(lines) do
-    if line:match("^{rpfy}:") then
-      return true
-    end
-  end
-  return false
+local function value_paragraph(line)
+  return string.format([[<w:p><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>]], utils.escape_xml(line))
 end
 
 -- reportifyr's magic-string width arg is a bare number of inches (see
@@ -262,30 +184,15 @@ return {
         return div
       end
 
-      -- See the file-level comment above for why figure-bearing rows
-      -- each get isolated into their own single-row table.
-      local blocks = {}
-      local segment_rows = { table_row("Title", { doc_title or "" }) }
-
-      local function flush_segment()
-        if #segment_rows > 0 then
-          table.insert(blocks, TABLE_OPEN .. table.concat(segment_rows, "\n") .. TABLE_CLOSE)
-          segment_rows = {}
-        end
-      end
-
+      local paras = { label_paragraph("Title"), value_paragraph(doc_title or "") }
       for _, r in ipairs(rows) do
-        if row_has_magic_string(r.lines) then
-          flush_segment()
-          table.insert(segment_rows, table_row(r.label, r.lines))
-          flush_segment()
-        else
-          table.insert(segment_rows, table_row(r.label, r.lines))
+        table.insert(paras, label_paragraph(r.label))
+        for _, line in ipairs(r.lines) do
+          table.insert(paras, value_paragraph(line))
         end
       end
-      flush_segment()
 
-      table.insert(div.content, pandoc.RawBlock("openxml", table.concat(blocks, "\n")))
+      table.insert(div.content, pandoc.RawBlock("openxml", table.concat(paras, "\n")))
       return div
     end,
   },

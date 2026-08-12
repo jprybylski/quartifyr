@@ -89,7 +89,7 @@ def main() -> int:
     checks: list[tuple[str, bool]] = []
 
     checks.append(("no leftover {rpfy}: magic strings", "{rpfy}:" not in joined))
-    checks.append(("at least 6 tables present (signatures + synopsis + PK summary + abbreviations)", len(document.tables) >= 6))
+    checks.append(("at least 6 tables present (title info + signatures + PK summary + abbreviations; synopsis is plain paragraphs, not a table)", len(document.tables) >= 6))
 
     with zipfile.ZipFile(final_docx) as z:
         images = [n for n in z.namelist() if n.startswith("word/media/")]
@@ -111,39 +111,80 @@ def main() -> int:
         ("PK summary table header present", any({"Cmax", "Cmin"}.issubset(set(row)) for row in all_rows))
     )
     checks.append(("synopsis section rendered", "Synopsis" in joined))
+
+    # Front-matter section labels (Synopsis, Table of Contents, List of
+    # Figures/Tables, Abbreviations) use pandoc's `custom-style="Heading
+    # 1"` Div attribute to get the real Heading 1 look without becoming a
+    # genuine numbered heading. This matches by *style name* ("Heading 1",
+    # with a space) -- get that backwards (the style *ID* "Heading1" has
+    # no space, the opposite convention from raw-OOXML pStyle references
+    # elsewhere in this extension) and pandoc silently fabricates a new,
+    # blank style with that literal name instead of erroring, so the text
+    # renders as plain, unstyled body text with no indication anything's
+    # wrong. Confirmed by making this exact mistake for real -- see
+    # _extensions/quartifyr/README.md's pStyle gotcha section.
+    checks.append(
+        (
+            "front-matter section labels use the real bold Heading 1 style, not a blank phantom one",
+            "<w:b/>" in document.styles["Heading 1"].element.xml,
+        )
+    )
+
+    # Synopsis is plain flowing paragraphs (label, then value line(s)), not
+    # a table -- deliberately: reportifyr's auto-generated footnote for a
+    # figure embedded in a table cell groups per *table element* and lands
+    # after the whole table, not under the specific figure. Plain
+    # body-level paragraphs get reportifyr's already-correct per-figure
+    # footnote placement instead (the same mechanism the body's own
+    # Figure 1 already uses without issue) -- see synopsis.lua's own
+    # comment for the full reasoning trail.
+    body_paragraphs = list(document.element.body.iter(qn("w:p")))
+    body_paragraph_texts = ["".join(t.text or "" for t in p.findall(".//" + qn("w:t"))) for p in body_paragraphs]
+
     checks.append(
         (
             "synopsis title row has the real report title",
             any(
-                len(row) >= 2 and row[0] == "Title" and row[1] == "Population Pharmacokinetics of Theophylline"
-                for row in all_rows
+                body_paragraph_texts[i] == "Title" and body_paragraph_texts[i + 1] == "Population Pharmacokinetics of Theophylline"
+                for i in range(len(body_paragraph_texts) - 1)
             ),
         )
     )
 
     checks.append(("logo image embedded on title page", any("png" in n.lower() for n in images)))
-    checks.append(("address rendered on title page", any("Raleigh, NC" in row_cell for row in all_rows for row_cell in row)))
+    checks.append(("address rendered on title page", "Raleigh, NC" in joined))
 
-    checks.append(
-        (
-            "synopsis value supports multi-line text",
-            any("demonstrating multi-line values with an embedded figure" in row_cell for row in all_rows for row_cell in row),
-        )
-    )
+    checks.append(("synopsis value supports multi-line text", "demonstrating multi-line values with an embedded figure" in joined))
     checks.append(("synopsis figure embedded as a real image", len(images) >= 2))
 
-    synopsis_cell_drawings = [d for table in document.tables for d in table._tbl.xpath(".//w:drawing")]
-    checks.append(("synopsis figure is genuinely inside the table cell, not a separate block", len(synopsis_cell_drawings) >= 1))
+    # The synopsis figure's magic string is the only one with a <width:...>
+    # arg (this filter always sets one) -- distinct from the body's own
+    # Figure 1 (no width arg, uses the artifact's original size) and the
+    # title-page logo (not a reportifyr figure at all), so its alt text is
+    # how to find it specifically among all the document's drawings.
+    synopsis_fig_idx = None
+    synopsis_fig_alt = ""
+    for i, p in enumerate(body_paragraphs):
+        for d in p.findall(".//" + qn("w:drawing")):
+            for dp in d.findall(".//" + qn("wp:docPr")):
+                descr = dp.get("descr") or ""
+                if "<width:" in descr:
+                    synopsis_fig_idx = i
+                    synopsis_fig_alt = descr
 
-    synopsis_alt_texts = [
-        dp.get("descr") or ""
-        for d in synopsis_cell_drawings
-        for dp in d.xpath(".//wp:docPr")
-    ]
+    checks.append(("synopsis figure embedded as a real body-level image (not inside a table)", synopsis_fig_idx is not None))
     checks.append(
         (
             "synopsis figure carries reportifyr's own provenance metadata (a content hash) as alt text",
-            any("hash:" in alt for alt in synopsis_alt_texts),
+            "hash:" in synopsis_fig_alt,
+        )
+    )
+    checks.append(
+        (
+            "synopsis figure's footnote lands immediately after the figure itself, not after an unrelated table",
+            synopsis_fig_idx is not None
+            and synopsis_fig_idx + 1 < len(body_paragraph_texts)
+            and body_paragraph_texts[synopsis_fig_idx + 1].startswith("[Source:"),
         )
     )
 
