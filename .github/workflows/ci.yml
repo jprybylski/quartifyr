@@ -32,12 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Windows isn't included here: `rv`'s own install script only
-        # targets macOS/Linux (confirmed by reading it -- it falls back
-        # to a Linux target on Windows, which fails). A real Windows
-        # install would need its own binary-download step, not attempted
-        # yet -- see r/README.md.
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -56,8 +51,8 @@ jobs:
       # on a fresh Linux runner (no pre-built binaries the way CRAN's
       # macOS/Windows repos provide) -- libuv for `fs` (a pyro/reportifyr
       # transitive dependency), the rest for ggplot2's own dependency
-      # chain (ragg/systemfonts/textshaping), which examples/demo-report
-      # also needs.
+      # chain (ragg/systemfonts/textshaping/gdtools), which
+      # examples/demo-report also needs.
       - name: Install R package system dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -66,11 +61,28 @@ jobs:
             libfontconfig1-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev \
             libharfbuzz-dev libfribidi-dev libcairo2-dev
 
-      - name: Install rv
-        run: curl -sSL https://raw.githubusercontent.com/A2-ai/rv/refs/heads/main/scripts/install.sh | bash
+      # `rv`'s own install script only targets macOS/Linux (confirmed by
+      # reading it -- on Windows it falls through to an "unknown OS,
+      # defaulting to linux-gnu target" branch and fetches the wrong
+      # binary). Windows gets its own step: download the released
+      # x86_64-pc-windows-msvc.zip directly and put it on PATH.
+      - name: Install rv (macOS/Linux)
+        if: runner.os != 'Windows'
+        run: |
+          curl -sSL https://raw.githubusercontent.com/A2-ai/rv/refs/heads/main/scripts/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Add rv and uv-installed tools to PATH
-        run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Install rv (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/A2-ai/rv/releases/latest"
+          $asset = $release.assets | Where-Object { $_.name -like "*x86_64-pc-windows-msvc.zip" }
+          $dest = "$env:USERPROFILE\.local\bin"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "$env:TEMP\rv.zip"
+          Expand-Archive -Path "$env:TEMP\rv.zip" -DestinationPath $dest -Force
+          echo "$dest" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       # reportifyr's context resolution (embedded in report/figure/table
       # metadata) shells out to `git config` and errors if no identity is
@@ -82,11 +94,15 @@ jobs:
 
       # This is the repo-root Quick Start, run exactly as documented, so
       # this job also stands in as a check that the README instructions
-      # themselves are correct and current.
+      # themselves are correct and current. `shell: bash` throughout
+      # (including on Windows, via the Git Bash that windows-latest
+      # runners already ship) so the venv-activate path is the only
+      # OS-specific bit, rather than duplicating every step in pwsh too.
       - name: Set up styling/ venv
+        shell: bash
         run: |
           uv venv .venv --python 3.12
-          source .venv/bin/activate
+          if [ "$RUNNER_OS" = "Windows" ]; then source .venv/Scripts/activate; else source .venv/bin/activate; fi
           uv pip install -e "./styling[dev]"
           quartifyr-styling build --style styling/styles/default.yaml --out templates/org-reference.docx
 
@@ -104,14 +120,16 @@ jobs:
 
       # The render_report()/r/ convenience-wrapper path.
       - name: Run demo smoke test
+        shell: bash
         run: |
-          source .venv/bin/activate
+          if [ "$RUNNER_OS" = "Windows" ]; then source .venv/Scripts/activate; else source .venv/bin/activate; fi
           python3 examples/demo-report/smoke_test.py
 
       # The decomposed "Using the pieces directly" path from the
       # repo-root README -- proves that documentation is actually true,
       # not just written down.
       - name: Run bare-bones pieces-only integration test
+        shell: bash
         run: |
-          source .venv/bin/activate
+          if [ "$RUNNER_OS" = "Windows" ]; then source .venv/Scripts/activate; else source .venv/bin/activate; fi
           python3 scripts/bare_bones_integration_test.py
