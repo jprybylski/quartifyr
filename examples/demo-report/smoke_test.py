@@ -92,6 +92,21 @@ def main() -> int:
     checks.append(("no leftover {rpfy}: magic strings", "{rpfy}:" not in joined))
     checks.append(("at least 6 tables present (title info + signatures + PK summary + abbreviations; synopsis is plain paragraphs, not a table)", len(document.tables) >= 6))
 
+    # build_template.py's reference-doc sets <w:updateFields w:val="true"/>
+    # in settings.xml so Word auto-recalculates every field (TOC, SEQ, REF,
+    # PAGE, ...) the moment a human opens the delivered file -- no manual
+    # "select all, F9", no dependency on recalculate-fields' headless
+    # LibreOffice automation. Confirmed here to survive the full pipeline
+    # (Quarto's reference-doc handling, apply-layout, reportifyr) into the
+    # actual delivered docx, not just the reference-doc itself.
+    update_fields = document.settings.element.find(qn("w:updateFields"))
+    checks.append(
+        (
+            "delivered docx auto-recalculates fields on open in Word (w:updateFields survived the full pipeline)",
+            update_fields is not None and update_fields.get(qn("w:val")) == "true",
+        )
+    )
+
     with zipfile.ZipFile(final_docx) as z:
         images = [n for n in z.namelist() if n.startswith("word/media/")]
     checks.append(("figure embedded as a real image", len(images) >= 1))
@@ -237,6 +252,23 @@ def main() -> int:
         (
             "synopsis figure excluded from the List of Figures (only Figure 1's own SEQ Figure field exists)",
             seq_figure_count == 1,
+        )
+    )
+
+    # crossref-hyperlinks: left at its default (true) in this demo -- both
+    # quarto-plus's {{< crossref "TblPkSummary" >}} and this extension's
+    # own {{< appendix_crossref "StatisticalMethods" >}} stay hyperlinked.
+    # "false" and "same-page" are exercised by styling/tests/test_layout.py
+    # and styling/tests/test_same_page_crossrefs.py instead of here, since
+    # this demo's render.R doesn't run the separate, opt-in
+    # resolve-same-page-crossrefs step "same-page" needs to mean anything
+    # beyond the default -- see report.qmd's comment for why.
+    instr_texts = re.findall(r"<w:instrText[^>]*>([^<]*)</w:instrText>", document_xml)
+    checks.append(
+        (
+            "both cross-references are hyperlinked (default crossref-hyperlinks: true)",
+            any(t.strip() == "REF TblPkSummary \\h" for t in instr_texts)
+            and any(t.strip() == "REF StatisticalMethods \\h" for t in instr_texts),
         )
     )
 

@@ -53,6 +53,19 @@ filters:
 # untouched (confirmed) since they aren't real pandoc Header nodes at
 # all. Per-project toggle -- set to false to turn numbering off.
 number-sections: true
+# Figure/Table/Appendix cross-references (the {{< crossref >}}/
+# {{< appendix_crossref >}} shortcodes below) default to always
+# hyperlinked -- left at that default here rather than demonstrated as
+# "same-page", since exercising "same-page" for real requires the
+# separate, opt-in, post-reportifyr resolve-same-page-crossrefs step
+# (headless-LibreOffice-dependent, not run by this demo's render.R, same
+# as recalculate_fields) -- setting it here without ever resolving it
+# would render identically to the default anyway, misleadingly implying
+# more than this pipeline actually exercises. "same-page" mode itself is
+# covered by styling/tests/test_layout.py (marker insertion) and
+# styling/tests/test_same_page_crossrefs.py (marker resolution) instead;
+# see _extensions/quartifyr/README.md's "Figures, tables, and
+# cross-references" section for the full behavior.
 ---
 
 ::: {custom-style="Heading 1"}
@@ -116,7 +129,13 @@ through quartifyr's two-pass shell/fill pipeline.
 
 ## Summary Statistics
 
-{{< tbl_caption "Table 1" "Per-subject PK summary statistics" >}}
+<!-- The first arg is a bookmark ID (must start with "Table"/"Tbl" so
+     {{< crossref >}} can look it up), not the displayed number -- the
+     "Table 1" text below comes entirely from a live SEQ field, so it's
+     deliberately spelled without a digit here to avoid looking like a
+     manually-typed number: reorder/add/remove tables and it still
+     renumbers itself correctly on the next field recalculation. -->
+{{< tbl_caption "TblPkSummary" "Per-subject PK summary statistics" >}}
 
 {rpfy}:pk-summary.csv
 
@@ -125,12 +144,13 @@ the sampling period.
 
 ## Concentration-Time Profile
 
-{{< fig_caption "Figure 1" "Concentration-time profile" >}}
+{{< fig_caption "FigConcTime" "Concentration-time profile" >}}
 
 {rpfy}:conc-time.png
 
 Individual concentration-time trajectories for all subjects in the study,
-plotted on the same axes.
+plotted on the same axes, summarized numerically in
+{{< crossref "TblPkSummary" >}}.
 
 {{< pagebreak >}}
 

@@ -315,6 +315,75 @@ appendices (e.g. "Figure 12" inside Appendix B, not "Figure B-1") — see
 the comment at the top of `appendix.lua` for why and how that could be
 extended later.
 
+### Figures, tables, and cross-references
+
+Auto-numbering and cross-referencing for figures and tables is already
+available — it's `quarto-plus`'s own machinery, not something this
+extension adds on top:
+
+```
+{{< fig_caption "FigConcTime" "Concentration-time profile" >}}
+{{< tbl_caption "TblPkSummary" "Per-subject PK summary statistics" >}}
+
+See {{< crossref "TblPkSummary" >}} for the full profile.
+```
+
+The first argument is a bookmark ID `crossref` looks up by (it must start
+with `Figure`/`Fig` or `Table`/`Tbl`, case-insensitive, for `quarto-plus`
+to know which counter it belongs to) — **not** the displayed number.
+Deliberately spelled without a digit above (`FigConcTime`, not `Figure1`):
+the actual "Figure 1"/"Table 1" text comes entirely from a live Word `SEQ
+Figure`/`SEQ Table` field, so reordering/adding/removing figures or tables
+renumbers correctly on the next field recalculation regardless of what the
+bookmark ID says — an ID like `Figure1` would still work, but reads as a
+manually-typed number even though it isn't one. `crossref` itself resolves
+to that live number via a `REF ... \h` field back to the bookmark. This
+extension's own `appendix_crossref` (above) emits the identical `REF ...
+\h` shape for appendix references, reimplemented rather than reused only
+because `quarto-plus`'s version is hardcoded to the "Figure"/"Table" SEQ
+names.
+
+The `\h` switch is what makes a resolved cross-reference a clickable
+hyperlink — Word does this unconditionally by default, regardless of
+whether the reference and its target end up on the same page or ten pages
+apart. `crossref-hyperlinks:` in the shell `.qmd`'s frontmatter controls
+this, document-wide, for every `crossref`/`appendix_crossref` alike:
+
+```yaml
+crossref-hyperlinks: true          # default -- always a hyperlink
+crossref-hyperlinks: false         # never a hyperlink
+crossref-hyperlinks: "same-page"   # hyperlink only when the target is on a different page
+```
+
+`true`/`false` are handled entirely by `quartifyr-styling apply-layout`
+(`../../styling/quartifyr_styling/layout.py`), which adds or strips the
+`\h` switch directly on the rendered docx's `REF` fields rather than
+patching each shortcode separately, so it applies uniformly no matter
+which extension emitted the field.
+
+`"same-page"` needs an extra step, and can't be resolved by `apply-layout`
+alone: real page numbers don't exist yet at that point — `apply-layout`
+runs on the pass-1 shell, before reportifyr has filled in the actual
+content pagination depends on. So `apply-layout` only *marks* each
+same-page crossref (a small bookmark next to its `REF` field) and leaves
+it hyperlinked, the safe fallback if nothing resolves the mark later. The
+actual decision happens in a separate, **opt-in** post-reportifyr step —
+`quartifyr-styling resolve-same-page-crossrefs` (see
+`../../styling/README.md` and `../../r/README.md`'s `render_report()`
+`resolve_same_page_crossrefs` argument) — which reads each marked
+crossref's and its target's real page number via headless LibreOffice
+(read-only; it never re-saves the docx itself) and strips `\h` wherever
+they match. It's off by default and inherits the same intermittent-hang
+behavior already documented for `recalculate-fields` (see
+`../../styling/quartifyr_styling/same_page_crossrefs.py`'s docstring) —
+an earlier version of this mode instead tried to push the whole
+comparison into a live nested Word field so Word/LibreOffice would
+resolve it on its own; abandoned after confirming, via a real
+headless-LibreOffice round-trip, that it silently corrupts the field
+rather than evaluating it. If you never run
+`resolve-same-page-crossrefs`, a `"same-page"` document just stays
+hyperlinked everywhere, same as `true`.
+
 ### Numbered sections
 
 ```yaml

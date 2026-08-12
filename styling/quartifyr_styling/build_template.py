@@ -222,6 +222,76 @@ def _add_page_number_footer(doc: DocumentObject, config: StyleConfig) -> None:
     _field_run("PAGE")
 
 
+# Elements CT_Settings's schema (ECMA-376) requires to come *after*
+# w:updateFields, in order -- copied from python-docx's own
+# docx.oxml.settings.CT_Settings._tag_seq (not importable: that module
+# deletes the name off the class after using it internally), starting
+# right after "w:updateFields" itself. Used to find the correct insertion
+# point among whatever settings python-docx's bundled default template
+# (which this reference-doc is built on top of) happens to already
+# contain -- appending blindly to the end would put it after elements the
+# schema requires to precede it.
+_SETTINGS_AFTER_UPDATE_FIELDS = (
+    "w:hdrShapeDefaults",
+    "w:footnotePr",
+    "w:endnotePr",
+    "w:compat",
+    "w:docVars",
+    "w:rsids",
+    "m:mathPr",
+    "w:attachedSchema",
+    "w:themeFontLang",
+    "w:clrSchemeMapping",
+    "w:doNotIncludeSubdocsInStats",
+    "w:doNotAutoCompressPictures",
+    "w:forceUpgrade",
+    "w:captions",
+    "w:readModeInkLockDown",
+    "w:smartTagType",
+    "sl:schemaLibrary",
+    "w:shapeDefaults",
+    "w:doNotEmbedSmartTags",
+    "w:decimalSymbol",
+    "w:listSeparator",
+)
+
+
+def _enable_update_fields_on_open(doc: DocumentObject) -> None:
+    """Sets ``<w:updateFields w:val="true"/>`` in the reference-doc's
+    ``word/settings.xml``, so Word automatically recalculates every field
+    (``TOC``, ``SEQ``, ``REF``, ``PAGE``, ...) the moment a delivered
+    document is opened -- no manual "select all, F9", and no dependency on
+    ``quartifyr-styling recalculate-fields``'s headless-LibreOffice
+    automation, for anyone opening the file in real Microsoft Word.
+
+    Not a full replacement for ``recalculate-fields``: LibreOffice doesn't
+    reliably honor this flag the same way in every mode (confirmed only
+    for interactive opens, not verified for the headless
+    ``--convert-to``-style invocations this project's own tooling uses),
+    and it can't help ``crossref-hyperlinks: "same-page"`` at all -- that
+    mode's whole point is to bake in a one-time editorial decision before
+    delivery, not leave it for whichever application opens the file to
+    re-decide live. It's a complementary, zero-dependency win for the
+    ordinary case of a human opening the final docx in Word, confirmed
+    (via ``examples/demo-report/smoke_test.py``) to survive Quarto's
+    reference-doc pipeline into the actual rendered output -- pandoc's
+    docx writer carries the reference-doc's ``settings.xml`` through
+    largely as-is.
+    """
+    settings = doc.settings.element
+    update_fields = OxmlElement("w:updateFields")
+    update_fields.set(qn("w:val"), "true")
+
+    successor = next(
+        (child for child in settings if child.tag in {qn(tag) for tag in _SETTINGS_AFTER_UPDATE_FIELDS}),
+        None,
+    )
+    if successor is not None:
+        successor.addprevious(update_fields)
+    else:
+        settings.append(update_fields)
+
+
 def build_reference_docx(config: StyleConfig, output_path: str | Path) -> Path:
     """Build a Quarto ``reference-doc`` docx from ``config`` and write it to ``output_path``."""
     doc = Document()
@@ -275,6 +345,7 @@ def build_reference_docx(config: StyleConfig, output_path: str | Path) -> Path:
     _style_table_grid(doc, config)
     _style_header(doc, config)
     _add_page_number_footer(doc, config)
+    _enable_update_fields_on_open(doc)
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)

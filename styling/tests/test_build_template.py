@@ -102,6 +102,25 @@ def test_footer_has_page_number_field(tmp_path):
     assert 'w:fldCharType="end"' in xml
 
 
+def test_settings_enable_update_fields_on_open(tmp_path):
+    _, doc = _build(tmp_path)
+    update_fields = doc.settings.element.find(qn("w:updateFields"))
+    assert update_fields is not None
+    assert update_fields.get(qn("w:val")) == "true"
+
+
+def test_update_fields_inserted_at_schema_correct_position(tmp_path):
+    # w:updateFields must come after w:savePreviewPicture and before
+    # w:compat per CT_Settings' schema order -- appending blindly to the
+    # end would land it after w:compat/w:rsids/etc, which real-world
+    # bundled templates already contain.
+    _, doc = _build(tmp_path)
+    tags = [child.tag for child in doc.settings.element]
+    assert qn("w:savePreviewPicture") in tags
+    assert qn("w:compat") in tags
+    assert tags.index(qn("w:savePreviewPicture")) < tags.index(qn("w:updateFields")) < tags.index(qn("w:compat"))
+
+
 def test_org_override_changes_heading_color_and_body_font(tmp_path):
     override_path = tmp_path / "org.yaml"
     override_path.write_text(

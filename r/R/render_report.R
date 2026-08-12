@@ -56,6 +56,19 @@
 #'   you've confirmed it's reliable in your own environment. A failure here
 #'   only warns, it never fails the overall render (the doc is still fully
 #'   usable, just needs a manual "select all, F9" in Word).
+#' @param resolve_same_page_crossrefs Whether to run `quartifyr-styling
+#'   resolve-same-page-crossrefs` (headless LibreOffice, read-only -- it
+#'   never re-saves the docx itself) on each produced docx afterward, to
+#'   resolve any `crossref-hyperlinks: "same-page"` markers into a final
+#'   hyperlinked/not decision now that real content and pagination exist.
+#'   A no-op (skips LibreOffice entirely) if the `.qmd` didn't use that
+#'   setting. Default `FALSE`, same reasoning as `recalculate_fields` --
+#'   it drives the identical headless-LibreOffice mechanism and inherits
+#'   its intermittent-hang behavior (see
+#'   `same_page_crossrefs.py`'s docstring). If never enabled, a document
+#'   using `crossref-hyperlinks: "same-page"` just stays hyperlinked
+#'   everywhere -- the same safe fallback `apply-layout` already leaves in
+#'   place. A failure here only warns, same as `recalculate_fields`.
 #'
 #' @return A list with `shell`, `draft`, and (when `status = "final"`) `final`
 #'   docx paths.
@@ -82,7 +95,8 @@ render_report <- function(
   figures_path = file.path(dirname(shell_qmd), "OUTPUTS", "figures"),
   tables_path = file.path(dirname(shell_qmd), "OUTPUTS", "tables"),
   venv_bin = file.path(toolkit_root, ".venv", "bin"),
-  recalculate_fields = FALSE
+  recalculate_fields = FALSE,
+  resolve_same_page_crossrefs = FALSE
 ) {
   status <- match.arg(status)
 
@@ -224,6 +238,29 @@ render_report <- function(
 
     out
   })
+
+  if (resolve_same_page_crossrefs) {
+    outputs <- Filter(Negate(is.null), list(result$draft, result$final))
+    for (output_path in outputs) {
+      same_page_result <- tryCatch(
+        processx::run(
+          command = quartifyr_styling_bin,
+          args = c("resolve-same-page-crossrefs", "--docx", output_path),
+          error_on_status = FALSE,
+          timeout = 150
+        ),
+        error = function(e) {
+          warning("quartifyr-styling resolve-same-page-crossrefs errored on ", output_path, ": ", conditionMessage(e))
+          NULL
+        }
+      )
+      if (!is.null(same_page_result) && same_page_result$status != 0) {
+        warning(
+          "quartifyr-styling resolve-same-page-crossrefs failed on ", output_path, ":\n", same_page_result$stderr
+        )
+      }
+    }
+  }
 
   if (recalculate_fields) {
     outputs <- Filter(Negate(is.null), list(result$draft, result$final))

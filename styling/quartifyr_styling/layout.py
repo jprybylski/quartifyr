@@ -46,6 +46,41 @@ inject XML into the existing body flow). ``python-docx``'s ``Section`` API
 handles that plumbing correctly (confirmed via testing), so this runs
 after Quarto's render as a distinct step, via ``quartifyr-styling
 apply-layout``.
+
+Also controls crossref hyperlinking via ``crossref-hyperlinks:``: every
+figure/table/appendix cross-reference -- whether from quarto-plus's
+``crossref`` shortcode or this extension's own ``appendix_crossref`` --
+compiles to a Word ``REF <bookmark> \\h`` field, and the ``\\h`` switch is
+what makes it a clickable hyperlink. Three modes, since the switch is
+identical regardless of which extension emitted the field and is rewritten
+once here at the OOXML level rather than in each Lua shortcode separately:
+
+- ``true`` (default): leave every crossref hyperlinked, matching
+  quarto-plus's own out-of-the-box behavior.
+- ``false``: strip ``\\h`` from every crossref, document-wide -- never a
+  hyperlink, regardless of where the reference and its target land.
+- ``"same-page"``: the org convention this exists for -- a crossref is a
+  hyperlink only when its target is on a *different* page; on the same
+  page it renders as plain resolved text. This can't be resolved here:
+  real page numbers don't exist yet at this step (pass 1 -- the shell is
+  still empty of reportifyr's actual content, so pagination here would be
+  meaningless even if computed). An earlier version of this mode tried
+  pushing the comparison into a live nested Word field
+  (``IF {PAGE} = {PAGEREF bookmark} "{REF bookmark}" "{REF bookmark
+  \\h}"``) so Word/LibreOffice would resolve it whenever the *final*
+  document gets paginated -- abandoned after confirming, via a real
+  headless-LibreOffice round-trip, that it silently mangles the nested
+  field into garbage (a stray always-hyperlinked ``PAGEREF`` plus a
+  broken ``IF FORMULA "" ""``) rather than evaluating it -- not just
+  unverified, but demonstrated broken through the one engine available to
+  test with. Instead, this mode only *marks* each same-page-mode crossref
+  here (a small bookmark next to its ``REF`` field, so it can be found
+  again later) and leaves the field itself hyperlinked, matching mode
+  ``true``, as the safe fallback if nothing ever resolves the mark. The
+  actual page-number comparison and ``\\h`` decision happens afterward, in
+  ``quartifyr_styling.same_page_crossrefs.resolve_same_page_crossrefs()``
+  -- which must run after reportifyr's pass 2 (real content, real
+  pagination) -- see that module for why and how.
 """
 
 from __future__ import annotations
@@ -60,6 +95,13 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Emu
+
+from ._ooxml_fields import (
+    SAME_PAGE_MARKER_ID_BASE,
+    SAME_PAGE_MARKER_PREFIX,
+    match_ref_field_run_group,
+    strip_hyperlink_switch,
+)
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?\n)---\s*\n", re.DOTALL)
 _FRONT_MATTER_START_BOOKMARK = "quartifyr-front-matter-start"
@@ -249,6 +291,69 @@ def _set_pg_num_type(section, *, start: int, fmt: str | None = None) -> None:
     sectPr.append(pg_num_type)
 
 
+_VALID_CROSSREF_HYPERLINK_MODES = ("always", "never", "same-page")
+
+
+def _resolve_crossref_hyperlink_mode(value: bool | str) -> str:
+    """Normalizes the ``crossref-hyperlinks:`` frontmatter value (a YAML
+    ``true``/``false``, or the literal string ``"same-page"``) into one of
+    ``_VALID_CROSSREF_HYPERLINK_MODES``.
+    """
+    if isinstance(value, bool):
+        return "never" if value is False else "always"
+    if isinstance(value, str) and value.strip().lower() == "same-page":
+        return "same-page"
+    raise LayoutError(f'crossref-hyperlinks: {value!r} not recognized -- use `true`, `false`, or `"same-page"`')
+
+
+def _strip_crossref_hyperlinks(document) -> None:
+    """Removes the ``\\h`` switch from every ``REF`` field's instruction
+    text, so Word renders the resolved cross-reference as plain text
+    instead of a hyperlink.
+
+    Field-agnostic on purpose: it walks raw ``w:instrText`` elements
+    rather than calling into any particular Lua shortcode's output, so it
+    catches quarto-plus's ``crossref`` (figures/tables) and this
+    extension's own ``appendix_crossref`` identically.
+    """
+    for instr_text in document.element.body.iter(qn("w:instrText")):
+        strip_hyperlink_switch(instr_text)
+
+
+def _mark_crossrefs_for_same_page_resolution(document) -> None:
+    """Inserts a small marker bookmark immediately before every ``REF
+    <bookmark> [\\h]`` field's run group, so
+    ``same_page_crossrefs.resolve_same_page_crossrefs()`` can find each one
+    again after reportifyr's pass 2 (once real pagination exists) and
+    decide whether it should be hyperlinked.
+
+    Doesn't touch the field itself -- it's left hyperlinked, the same as
+    mode ``true``, as the safe fallback if that later resolution step
+    never runs.
+    """
+    marker_id = SAME_PAGE_MARKER_ID_BASE
+    marker_count = 0
+    for p in document.element.body.iter(qn("w:p")):
+        runs = list(p.findall(qn("w:r")))
+        i = 0
+        while i < len(runs):
+            found = match_ref_field_run_group(runs, i)
+            if found is None:
+                i += 1
+                continue
+            marker_count += 1
+            marker_id += 1
+            anchor = runs[i]
+            bookmark_start = OxmlElement("w:bookmarkStart")
+            bookmark_start.set(qn("w:id"), str(marker_id))
+            bookmark_start.set(qn("w:name"), f"{SAME_PAGE_MARKER_PREFIX}{marker_count}")
+            bookmark_end = OxmlElement("w:bookmarkEnd")
+            bookmark_end.set(qn("w:id"), str(marker_id))
+            anchor.addprevious(bookmark_start)
+            anchor.addprevious(bookmark_end)
+            i += 1
+
+
 def _find_bookmark_paragraph(document, name: str):
     body = document.element.body
     for p in body.iter(qn("w:p")):
@@ -292,6 +397,7 @@ def apply_layout(
     status: str = "DRAFT",
     confidential_label: str = "",
     show_page_numbers: bool = True,
+    crossref_hyperlinks: bool | str = True,
 ) -> Path:
     """Applies header/footer + page-numbering layout to ``docx_path``, in place.
 
@@ -300,10 +406,19 @@ def apply_layout(
     single section: the header (if ``header_left_text`` is given)
     applies throughout, and no footer/page-numbering changes happen
     (there's no defined split point for either).
+
+    ``crossref_hyperlinks`` (default ``True``, matching quarto-plus's own
+    always-hyperlinked ``REF ... \\h`` fields): ``True``/``False`` for
+    always/never hyperlinked, document-wide, or the string ``"same-page"``
+    to mark every crossref for later resolution by
+    ``same_page_crossrefs.resolve_same_page_crossrefs()`` once real
+    pagination exists (post reportifyr) -- see the module docstring for
+    how each mode works.
     """
     docx_path = Path(docx_path)
     if not docx_path.exists():
         raise FileNotFoundError(f"docx not found: {docx_path}")
+    crossref_hyperlink_mode = _resolve_crossref_hyperlink_mode(crossref_hyperlinks)
 
     document = docx.Document(str(docx_path))
     front_matter_start_p = _find_bookmark_paragraph(document, _FRONT_MATTER_START_BOOKMARK)
@@ -398,6 +513,11 @@ def apply_layout(
         section.header.is_linked_to_previous = False
         _write_header_paragraph(section.header.paragraphs[0], section, header_left_text, status.upper())
 
+    if crossref_hyperlink_mode == "never":
+        _strip_crossref_hyperlinks(document)
+    elif crossref_hyperlink_mode == "same-page":
+        _mark_crossrefs_for_same_page_resolution(document)
+
     document.save(str(docx_path))
     return docx_path
 
@@ -410,15 +530,18 @@ def apply_layout_from_qmd(
 ) -> Path:
     """Convenience wrapper: reads ``qmd_path``'s frontmatter, resolves
     ``header-format:`` against it and ``status``, resolves the footer's
-    confidentiality label from ``confidentiality:``, and applies the
-    layout.
+    confidentiality label from ``confidentiality:``, resolves
+    ``crossref-hyperlinks:`` (default ``True`` -- ``True``/``False``/
+    ``"same-page"``), and applies the layout.
     """
     frontmatter = read_qmd_frontmatter(qmd_path)
     header_left_text = resolve_header_left_text(frontmatter, status)
     confidential_label = resolve_confidential_label(frontmatter)
+    crossref_hyperlinks = frontmatter.get("crossref-hyperlinks", True)
     return apply_layout(
         docx_path,
         header_left_text=header_left_text,
         status=status,
         confidential_label=confidential_label,
+        crossref_hyperlinks=crossref_hyperlinks,
     )

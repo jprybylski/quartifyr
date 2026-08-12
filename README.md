@@ -112,9 +112,10 @@ quarto render report.qmd --to docx --reference-doc org-reference.docx \
 #    and you still get a basic footer straight from step 1 -- whatever
 #    the reference-doc itself was built with (by default: a continuous
 #    page number, no restart) -- but header-format:/confidentiality:/
-#    {{< body-start >}} in the .qmd have no effect without this step;
-#    see _extensions/quartifyr/README.md's "Page header/footer and page
-#    numbering" section for exactly what each piece needs.
+#    crossref-hyperlinks:/{{< body-start >}} in the .qmd have no effect
+#    without this step; see _extensions/quartifyr/README.md's "Page
+#    header/footer and page numbering" and "Figures, tables, and
+#    cross-references" sections for exactly what each piece needs.
 quartifyr-styling apply-layout --docx report.docx --qmd report.qmd --status draft
 ```
 
@@ -144,6 +145,12 @@ you call them from.
 convenient for a project starting from scratch (and for
 [`examples/demo-report/`](examples/demo-report/README.md)) — it's a
 convenience, not a requirement.
+
+If `crossref-hyperlinks: "same-page"` is set, one more optional step goes
+after step 3, on the *filled* docx: `quartifyr-styling
+resolve-same-page-crossrefs --docx report-filled.docx` — see
+`styling/README.md` and `r/README.md`'s "Same-page cross-reference
+resolution" section.
 
 ## Components
 

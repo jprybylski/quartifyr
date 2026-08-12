@@ -135,7 +135,10 @@ standalone project, pass both explicitly; see the repo-root README's
    from `OUTPUTS/`, producing `report/draft/<name>-draft.docx`.
 5. When `status = "final"`, also runs `reportifyr::finalize_document()`,
    producing `report/final/<name>-final.docx`.
-6. Optionally (`recalculate_fields = TRUE`, default off), runs
+6. Optionally (`resolve_same_page_crossrefs = TRUE`, default off), runs
+   `quartifyr-styling resolve-same-page-crossrefs` on each produced docx
+   -- see "Same-page cross-reference resolution" below.
+7. Optionally (`recalculate_fields = TRUE`, default off), runs
    `quartifyr-styling recalculate-fields` on each produced docx -- see
    "Word field recalculation" below.
 
@@ -167,16 +170,67 @@ nothing to configure in `render_report()` itself:
 See `../_extensions/quartifyr/README.md` and
 `../styling/README.md`'s `apply-layout` section for the mechanics.
 
+## Same-page cross-reference resolution (optional, off by default)
+
+`crossref-hyperlinks: "same-page"` in the shell `.qmd`'s frontmatter (see
+`../_extensions/quartifyr/README.md`'s "Figures, tables, and
+cross-references" section) asks for figure/table/appendix
+cross-references to be hyperlinked only when their target lands on a
+*different* page. `apply_layout()` (step 3, above) can't resolve that by
+itself -- it runs on the empty pass-1 shell, before real pagination
+exists -- so it only marks each crossref for later resolution and leaves
+it hyperlinked (the safe fallback).
+
+`../styling/quartifyr_styling/same_page_crossrefs.py` is that later step:
+it reads each marked crossref's and its target's real page number via a
+small headless-LibreOffice macro (read-only -- it never re-saves the
+docx; every actual edit happens in Python) and strips the hyperlink where
+they match. A no-op, skipping LibreOffice entirely, if the document has
+no same-page markers at all.
+
+It's off by default (`resolve_same_page_crossrefs = FALSE`) and drives
+the exact same headless-`soffice --headless ... macro:///...` mechanism
+as `recalculate-fields` below, so it inherits that mechanism's own
+documented unreliability wholesale -- not independently re-verified
+end-to-end in this project's own development environment (every attempted
+run, of this step and of the pre-existing `recalculate-fields`, timed out
+rather than completing). An earlier version of `"same-page"` instead
+tried to push the whole comparison into a live nested Word field so
+Word/LibreOffice would resolve it on its own during any later
+recalculation; abandoned after confirming, via a real headless-LibreOffice
+round-trip, that it silently corrupts the field instead of evaluating it
+-- see `same_page_crossrefs.py`'s module docstring for the full story.
+Treat this as experimental, the same as `recalculate_fields`: turn it on
+only after confirming it's reliable in your own environment, and a
+failure here only warns, never fails the render.
+
 ## Word field recalculation (optional, off by default)
 
 Quarto/pandoc docx output contains native Word field codes (`TOC`, `SEQ`,
 `REF`) that don't self-populate -- without recalculation, a delivered docx
 shows "Right-click to update field" instead of the actual ToC.
+
+**For anyone opening the delivered docx in real Microsoft Word, this is
+already handled for free**, no LibreOffice involved: the reference-doc
+(`../styling/quartifyr_styling/build_template.py`) sets `<w:updateFields
+w:val="true"/>` in `word/settings.xml`, which tells Word to recalculate
+every field automatically the moment the file is opened -- confirmed to
+survive Quarto's reference-doc handling, `apply-layout`, and `reportifyr`
+into the actual delivered docx (`examples/demo-report/smoke_test.py`
+asserts on this). This is a genuine Word feature, not something quartifyr
+invented, and has none of the reliability caveats below -- it's a document
+setting Word itself honors, not an external process. It doesn't help
+anyone opening the file in a *headless* pipeline (e.g. this project's own
+CI, or a script converting the docx without ever displaying it) or in
+LibreOffice running non-interactively, which is what the rest of this
+section is for.
+
 `../styling/quartifyr_styling/recalculate_fields.py` drives headless
-LibreOffice to do that recalculation automatically, and it *works* --
-verified end-to-end: a real render's ToC went from "Right-click to update
-field" to real, correctly-paginated entries (" Signatures2", " Results5",
-etc.) after running it.
+LibreOffice to do that same recalculation for those non-interactive cases,
+so a produced docx already shows resolved fields even before anyone opens
+it in Word. It *works* -- verified end-to-end: a real render's ToC went
+from "Right-click to update field" to real, correctly-paginated entries
+(" Signatures2", " Results5", etc.) after running it.
 
 It's off by default in `render_report()` (`recalculate_fields = FALSE`)
 and should be considered **experimental**: repeated real-world runs

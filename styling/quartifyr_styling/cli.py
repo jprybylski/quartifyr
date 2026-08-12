@@ -9,6 +9,7 @@ from .abbreviations import AbbreviationsError, build_abbreviations_tex
 from .build_template import build_reference_docx
 from .layout import LayoutError, apply_layout_from_qmd
 from .recalculate_fields import FieldRecalculationError, recalculate_fields
+from .same_page_crossrefs import SamePageCrossrefError, resolve_same_page_crossrefs
 from .schema import StyleConfig, StyleConfigError
 
 
@@ -40,6 +41,16 @@ def _cmd_recalculate_fields(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"recalculated {output_path}")
+    return 0
+
+
+def _cmd_resolve_same_page_crossrefs(args: argparse.Namespace) -> int:
+    try:
+        output_path = resolve_same_page_crossrefs(args.docx, timeout_seconds=args.timeout)
+    except (SamePageCrossrefError, FileNotFoundError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"resolved same-page crossrefs in {output_path}")
     return 0
 
 
@@ -77,6 +88,17 @@ def build_parser() -> argparse.ArgumentParser:
     recalc.add_argument("--docx", required=True, help="Path to the docx to recalculate (modified in place)")
     recalc.add_argument("--timeout", type=int, default=120, help="Timeout in seconds (default: 120)")
     recalc.set_defaults(func=_cmd_recalculate_fields)
+
+    same_page = subparsers.add_parser(
+        "resolve-same-page-crossrefs",
+        help=(
+            "Resolve crossref-hyperlinks: \"same-page\" markers in a filled docx (post reportifyr) via "
+            "headless LibreOffice, read-only -- decides hyperlinked vs. plain per cross-reference"
+        ),
+    )
+    same_page.add_argument("--docx", required=True, help="Path to the filled docx to resolve (modified in place)")
+    same_page.add_argument("--timeout", type=int, default=120, help="Timeout in seconds (default: 120)")
+    same_page.set_defaults(func=_cmd_resolve_same_page_crossrefs)
 
     layout = subparsers.add_parser(
         "apply-layout",

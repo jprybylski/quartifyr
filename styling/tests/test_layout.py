@@ -9,6 +9,7 @@ from lxml import etree
 from quartifyr_styling.layout import (
     LayoutError,
     apply_layout,
+    apply_layout_from_qmd,
     read_qmd_frontmatter,
     resolve_confidential_label,
     resolve_header_left_text,
@@ -79,6 +80,37 @@ def _add_page_field_run(paragraph) -> None:
     fld_end.set(qn("w:fldCharType"), "end")
     run._r.append(fld_begin)
     run._r.append(instr)
+    run._r.append(fld_end)
+
+
+def _add_ref_field_run(paragraph, *, bookmark: str, hyperlink: bool, cached_text: str = "Figure 1") -> None:
+    """Mirrors the exact 5-run ``begin/instrText/separate/result/end``
+    ``REF <bookmark> \\h`` field group quarto-plus's ``crossref`` shortcode
+    and this extension's own ``appendix_crossref`` both emit (as distinct
+    sibling ``<w:r>`` elements, not merged into one -- load-bearing for
+    ``_match_ref_field_run_group()``, which scans for that exact shape).
+    """
+    run = paragraph.add_run()
+    fld_begin = OxmlElement("w:fldChar")
+    fld_begin.set(qn("w:fldCharType"), "begin")
+    run._r.append(fld_begin)
+
+    run = paragraph.add_run()
+    instr = OxmlElement("w:instrText")
+    instr.set(qn("xml:space"), "preserve")
+    instr.text = f" REF {bookmark} \\h " if hyperlink else f" REF {bookmark} "
+    run._r.append(instr)
+
+    run = paragraph.add_run()
+    fld_sep = OxmlElement("w:fldChar")
+    fld_sep.set(qn("w:fldCharType"), "separate")
+    run._r.append(fld_sep)
+
+    paragraph.add_run(cached_text)
+
+    run = paragraph.add_run()
+    fld_end = OxmlElement("w:fldChar")
+    fld_end.set(qn("w:fldCharType"), "end")
     run._r.append(fld_end)
 
 
@@ -198,3 +230,114 @@ def test_apply_layout_without_bookmarks_is_single_section(tmp_path):
 def test_apply_layout_missing_file_raises():
     with pytest.raises(FileNotFoundError):
         apply_layout("/does/not/exist.docx", header_left_text="x")
+
+
+def _build_docx_with_crossref(path: Path) -> None:
+    document = docx.Document()
+    p = document.add_paragraph("See ")
+    _add_ref_field_run(p, bookmark="Figure1", hyperlink=True)
+    _add_page_field_run(document.sections[0].footer.paragraphs[0])
+    document.save(str(path))
+
+
+def _ref_instr_text(document) -> str:
+    for instr in document.element.body.iter(qn("w:instrText")):
+        if instr.text and "REF" in instr.text:
+            return instr.text
+    raise AssertionError("no REF field found")
+
+
+def test_apply_layout_keeps_crossref_hyperlink_by_default(tmp_path):
+    docx_path = tmp_path / "test.docx"
+    _build_docx_with_crossref(docx_path)
+
+    apply_layout(docx_path, header_left_text="Header")
+
+    result = docx.Document(str(docx_path))
+    assert "\\h" in _ref_instr_text(result)
+
+
+def test_apply_layout_strips_crossref_hyperlink_when_disabled(tmp_path):
+    docx_path = tmp_path / "test.docx"
+    _build_docx_with_crossref(docx_path)
+
+    apply_layout(docx_path, header_left_text="Header", crossref_hyperlinks=False)
+
+    result = docx.Document(str(docx_path))
+    text = _ref_instr_text(result)
+    assert "\\h" not in text
+    assert "REF Figure1" in text
+    # PAGE fields are untouched -- only REF fields' \h switch is stripped.
+    assert "PAGE" in result.sections[0].footer.paragraphs[0]._p.xml
+
+
+def test_apply_layout_from_qmd_reads_crossref_hyperlinks_frontmatter(tmp_path):
+    docx_path = tmp_path / "test.docx"
+    _build_docx_with_crossref(docx_path)
+
+    qmd_path = tmp_path / "report.qmd"
+    qmd_path.write_text("---\ntitle: Foo\ncrossref-hyperlinks: false\n---\n\nBody.\n")
+
+    apply_layout_from_qmd(docx_path, qmd_path, status="draft")
+
+    result = docx.Document(str(docx_path))
+    assert "\\h" not in _ref_instr_text(result)
+
+
+def test_apply_layout_rejects_unrecognized_crossref_hyperlinks_value(tmp_path):
+    docx_path = tmp_path / "test.docx"
+    _build_docx_with_crossref(docx_path)
+
+    with pytest.raises(LayoutError, match="crossref-hyperlinks"):
+        apply_layout(docx_path, crossref_hyperlinks="every-other-tuesday")
+
+
+def test_apply_layout_same_page_marks_ref_field_but_leaves_it_hyperlinked(tmp_path):
+    docx_path = tmp_path / "test.docx"
+    _build_docx_with_crossref(docx_path)
+
+    apply_layout(docx_path, crossref_hyperlinks="same-page")
+
+    result = docx.Document(str(docx_path))
+    # The field itself is untouched -- still hyperlinked, the safe
+    # fallback if same_page_crossrefs.resolve_same_page_crossrefs() never
+    # runs against the filled document.
+    assert "\\h" in _ref_instr_text(result)
+
+    # A marker bookmark now sits immediately before the field, for that
+    # later step to find.
+    bookmark_names = [
+        b.get(qn("w:name"))
+        for b in result.element.body.iter(qn("w:bookmarkStart"))
+        if b.get(qn("w:name"))
+    ]
+    assert any(name.startswith("quartifyr-crossref-target-") for name in bookmark_names)
+
+
+def test_apply_layout_same_page_leaves_non_ref_fields_untouched(tmp_path):
+    docx_path = tmp_path / "test.docx"
+    _build_docx_with_crossref(docx_path)
+
+    apply_layout(docx_path, crossref_hyperlinks="same-page")
+
+    result = docx.Document(str(docx_path))
+    assert "PAGE" in result.sections[0].footer.paragraphs[0]._p.xml
+    assert result.sections[0].footer.paragraphs[0]._p.xml.count("PAGE") >= 1
+
+
+def test_apply_layout_from_qmd_reads_same_page_crossref_hyperlinks(tmp_path):
+    docx_path = tmp_path / "test.docx"
+    _build_docx_with_crossref(docx_path)
+
+    qmd_path = tmp_path / "report.qmd"
+    qmd_path.write_text('---\ntitle: Foo\ncrossref-hyperlinks: "same-page"\n---\n\nBody.\n')
+
+    apply_layout_from_qmd(docx_path, qmd_path, status="draft")
+
+    result = docx.Document(str(docx_path))
+    bookmark_names = [
+        b.get(qn("w:name"))
+        for b in result.element.body.iter(qn("w:bookmarkStart"))
+        if b.get(qn("w:name"))
+    ]
+    assert any(name.startswith("quartifyr-crossref-target-") for name in bookmark_names)

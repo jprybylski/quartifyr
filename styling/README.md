@@ -34,6 +34,15 @@ reference-doc" section for how an org can keep its style YAML and built
 reference-doc elsewhere, and how most project authors can skip running
 `build` entirely by reusing an already-built `.docx`.
 
+The generated reference-doc also sets `<w:updateFields w:val="true"/>` in
+`word/settings.xml`, so Word automatically recalculates every field (ToC,
+`SEQ`, `REF`, `PAGE`, ...) the moment a delivered document is opened — no
+manual "select all, F9", no LibreOffice involved. See `../r/README.md`'s
+"Word field recalculation" section for how this relates to
+`recalculate-fields` below (this covers real Word opening the file
+interactively; `recalculate-fields` covers headless/non-interactive
+pipelines that never open it in an application at all).
+
 The generated docx becomes Quarto's `reference-doc:` for the shell render:
 
 ```bash
@@ -77,6 +86,32 @@ draft/final status once a header is enabled. Also reads `confidentiality:`
 for the footer's left-side label (the same field `title_page.lua` renders
 on the title page). A `.qmd` with no `header-format:` and no `{{<
 body-start >}}` is left untouched -- both are opt-in.
+
+Also reads `crossref-hyperlinks:` (default `true`) -- `false` strips the
+`\h` hyperlink switch from every figure/table/appendix cross-reference's
+`REF` field, document-wide, regardless of whether `quarto-plus`'s
+`crossref` shortcode or this extension's own `appendix_crossref` emitted
+it. `"same-page"` can't be resolved here (no real pagination exists yet
+on the pass-1 shell) -- it just marks each crossref for a separate,
+opt-in, post-reportifyr step; see the next command and
+`../_extensions/quartifyr/README.md`'s "Figures, tables, and
+cross-references" section.
+
+```bash
+quartifyr-styling resolve-same-page-crossrefs --docx report/draft/report-draft.docx
+```
+
+Resolves the markers `apply-layout`'s `crossref-hyperlinks: "same-page"`
+left behind, now that reportifyr's pass 2 has filled in real content and
+pagination means something -- run on the *filled* draft/final docx, not
+the shell. A no-op (skips LibreOffice entirely) if the document has no
+same-page markers. Read-only with respect to LibreOffice: it drives a
+headless-LibreOffice macro only to read each marked crossref's and its
+target's page number (never to re-save the docx, which stays entirely in
+Python's hands) -- see
+`quartifyr_styling/same_page_crossrefs.py`'s docstring for why, and for
+this feature's own experimental/flaky-headless-LibreOffice caveat
+(inherited from, and equivalent to, `recalculate-fields`'s below).
 
 ## Tests
 
