@@ -8,8 +8,10 @@ GitHub (see `rproject.toml`) since neither has a CRAN release.
 
 ## Setup
 
+Requires [`rv`](https://a2-ai.github.io/rv-docs/) (cross-platform install
+instructions at that link), then:
+
 ```bash
-brew install a2-ai/tap/rv   # if not already installed
 cd r && rv sync
 ```
 

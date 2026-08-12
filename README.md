@@ -10,6 +10,24 @@ presentations, analysis plans, and memos are meant to follow the same
 shell/fill split over time — see [Document kinds](#document-kinds)
 below.
 
+## Install
+
+quartifyr's shell-generation piece (`_extensions/quartifyr/`) is a
+regular Quarto extension, installed the standard way:
+
+```bash
+quarto add jprybylski/quartifyr
+```
+
+That's the title page, signature pages, synopsis, numbered appendices,
+and page header/footer, composed with
+[A2-ai's `quarto-plus`](https://github.com/A2-ai/quarto-plus) for ToC/
+list of figures/list of tables/abbreviations rather than duplicating
+them. The rest of this repo — `styling/` (turns a style YAML into a docx
+`reference-doc`) and `r/` (the orchestration driver that runs Quarto then
+hands off to a fill tool) — is the surrounding toolkit that pairs with
+it; see [Components](#components) below.
+
 ## Why
 
 Hand-built Word "shell" templates don't scale across projects or orgs —
@@ -71,7 +89,7 @@ Both passes are driven by one call: `render_report()` in `r/` (see
 | Path | What it is |
 | --- | --- |
 | [`styling/`](styling/README.md) | Python package: turns a style YAML (fonts, colors, page setup) into a docx `reference-doc`; the `standard_footnotes.yaml` → `abbreviations.tex` bridge; headless Word field recalculation via LibreOffice (experimental). `uv`-managed venv. |
-| [`_extensions/quartifyr/`](_extensions/quartifyr/README.md) | Quarto extension: dynamic title page + status stamp, contributor/approver signature pages, numbered appendices. Composes with [A2-ai's `quarto-plus`](https://github.com/A2-ai/quarto-plus) (ToC/List of Figures/List of Tables/abbreviations/captions) rather than duplicating it. |
+| [`_extensions/quartifyr/`](_extensions/quartifyr/README.md) | Quarto extension: dynamic title page + status stamp, contributor/approver signature pages, synopsis, numbered appendices, page header/footer with roman/arabic page numbering. Composes with [A2-ai's `quarto-plus`](https://github.com/A2-ai/quarto-plus) (ToC/List of Figures/List of Tables/abbreviations/captions) rather than duplicating it. |
 | [`r/`](r/README.md) | `rv`-managed R environment providing `render_report()`, the pass-1+pass-2 orchestration driver. Pulls `reportifyr` and `pyro` straight from GitHub (no CRAN release exists for either) as today's fill backend. |
 | [`examples/demo-report/`](examples/demo-report/README.md) | Complete, working example exercising every piece above, with an automated end-to-end smoke test — a reference to compare against, not the only way to start a project (see [Standing up a new project](#standing-up-a-new-project)). |
 
@@ -82,31 +100,33 @@ round of clicking through Word's style pane.
 
 ## Quick start
 
-```bash
-# 1. Toolchain (once)
-brew install --cask quarto
-brew install uv
-brew install a2-ai/tap/rv
+Requires, once each (platform-specific instructions at each link — none
+of this is macOS-only):
 
-# 2. Python tooling
+- [Quarto](https://quarto.org/docs/get-started/)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python tooling)
+- [rv](https://a2-ai.github.io/rv-docs/) (R package management)
+
+```bash
+# 1. Python tooling
 uv venv .venv --python 3.12
 source .venv/bin/activate
 uv pip install -e "./styling[dev]"
 
-# 3. Org docx styling
+# 2. Org docx styling
 quartifyr-styling build --style styling/styles/default.yaml --out templates/org-reference.docx
 
-# 4. R tooling
+# 3. R tooling
 cd r && rv sync && cd ..
 
-# 5. Run the demo end to end
+# 4. Run the demo end to end
 cd examples/demo-report
 rv sync
 Rscript render.R --final
 # -> report/draft/report-draft.docx, report/final/report-final.docx
 ```
 
-Or just run the demo's own smoke test, which does steps 5 for you and
+Or just run the demo's own smoke test, which does step 4 for you and
 asserts the output is actually correct: `python3
 examples/demo-report/smoke_test.py`.
 
@@ -206,7 +226,7 @@ are deliberately incomplete rather than papered over:
 
 | | pharmtex (LaTeX) | quartifyr |
 | --- | --- | --- |
-| Toolchain | Full LaTeX distribution + custom packages | Quarto + R + Python, all mainstream, `brew install`-able |
+| Toolchain | Full LaTeX distribution + custom packages | Quarto + R + Python, all mainstream, cross-platform installers |
 | Org styling | LaTeX template files, org-specific macros | One YAML file per org |
 | Failure mode | Obscure LaTeX compile errors, package resolution | Ordinary Quarto/R/Python errors with normal stack traces |
 | Output format | PDF | `.docx` — reviewers use Word's own track-changes/comments |
