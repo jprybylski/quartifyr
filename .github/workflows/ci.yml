@@ -52,11 +52,33 @@ jobs:
         with:
           enable-cache: true
 
+      # System headers rv-managed R packages need to compile from source
+      # on a fresh Linux runner (no pre-built binaries the way CRAN's
+      # macOS/Windows repos provide) -- libuv for `fs` (a pyro/reportifyr
+      # transitive dependency), the rest for ggplot2's own dependency
+      # chain (ragg/systemfonts/textshaping), which examples/demo-report
+      # also needs.
+      - name: Install R package system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libuv1-dev libcurl4-openssl-dev libssl-dev libxml2-dev \
+            libfontconfig1-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev \
+            libharfbuzz-dev libfribidi-dev
+
       - name: Install rv
         run: curl -sSL https://raw.githubusercontent.com/A2-ai/rv/refs/heads/main/scripts/install.sh | bash
 
       - name: Add rv and uv-installed tools to PATH
         run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # reportifyr's context resolution (embedded in report/figure/table
+      # metadata) shells out to `git config` and errors if no identity is
+      # set -- CI runners have none by default.
+      - name: Configure git identity for reportifyr
+        run: |
+          git config --global user.name "quartifyr CI"
+          git config --global user.email "quartifyr-ci@users.noreply.github.com"
 
       # This is the repo-root Quick Start, run exactly as documented, so
       # this job also stands in as a check that the README instructions

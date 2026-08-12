@@ -253,8 +253,8 @@ class StyleConfig:
 
     @classmethod
     def load(cls, base_path: str | Path, override_path: str | Path | None = None) -> "StyleConfig":
-        base_dict = yaml.safe_load(Path(base_path).read_text())
+        base_dict = yaml.safe_load(Path(base_path).read_text(encoding="utf-8"))
         if override_path is not None:
-            override_dict = yaml.safe_load(Path(override_path).read_text())
+            override_dict = yaml.safe_load(Path(override_path).read_text(encoding="utf-8"))
             base_dict = deep_merge(base_dict, override_dict)
         return cls.from_dict(base_dict)

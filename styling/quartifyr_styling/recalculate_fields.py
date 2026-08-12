@@ -102,9 +102,9 @@ class FieldRecalculationError(RuntimeError):
 def _seed_profile(profile_dir: Path) -> None:
     standard_dir = profile_dir / "user" / "basic" / "Standard"
     standard_dir.mkdir(parents=True, exist_ok=True)
-    (standard_dir / "Module1.xba").write_text(_MACRO_XBA)
-    (standard_dir / "script.xlb").write_text(_SCRIPT_XLB)
-    (profile_dir / "user" / "basic" / "script.xlc").write_text(_SCRIPT_XLC)
+    (standard_dir / "Module1.xba").write_text(_MACRO_XBA, encoding="utf-8")
+    (standard_dir / "script.xlb").write_text(_SCRIPT_XLB, encoding="utf-8")
+    (profile_dir / "user" / "basic" / "script.xlc").write_text(_SCRIPT_XLC, encoding="utf-8")
 
 
 def _kill_process_tree(proc: subprocess.Popen) -> None:

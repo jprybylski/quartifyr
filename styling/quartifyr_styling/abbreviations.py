@@ -53,7 +53,7 @@ def _require_no_braces(value: str, *, field: str, abbrev_key: str) -> str:
 def load_abbreviations(footnotes_yaml: str | Path) -> dict[str, str]:
     """Read the ``abbreviations:`` block out of a reportifyr-style footnotes YAML."""
     path = Path(footnotes_yaml)
-    data = yaml.safe_load(path.read_text()) or {}
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     abbreviations = data.get("abbreviations")
     if not abbreviations:
         raise AbbreviationsError(f"{path} has no top-level 'abbreviations:' block")
@@ -77,5 +77,5 @@ def build_abbreviations_tex(footnotes_yaml: str | Path, output_path: str | Path)
     text = render_abbreviations_tex(abbreviations)
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(text)
+    output_path.write_text(text, encoding="utf-8")
     return output_path

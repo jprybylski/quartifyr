@@ -69,7 +69,7 @@ class LayoutError(RuntimeError):
 
 def read_qmd_frontmatter(qmd_path: str | Path) -> dict:
     """Parses the YAML frontmatter block (between the first two ``---`` lines) of a ``.qmd`` file."""
-    text = Path(qmd_path).read_text()
+    text = Path(qmd_path).read_text(encoding="utf-8")
     match = _FRONTMATTER_RE.match(text)
     if not match:
         return {}
