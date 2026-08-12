@@ -112,6 +112,7 @@ local document_status = nil
 local field_rows = {} -- list of {label=, value=}, in display order
 local logo_path = nil
 local logo_width = "2in"
+local logo_align = "center"
 
 local LABEL_PCT = 1500 -- 30%
 local VALUE_PCT = 3500 -- 70%
@@ -300,10 +301,21 @@ end
 -- style* directly -- wrapping in a Div styled "Subtitle" (already
 -- center-aligned in the reference-doc, see styling/build_template.py)
 -- makes the image inherit that alignment for free, no new style needed.
-local function logo_block(path, width)
+-- Left/right reuse the same custom-style mechanism against two dedicated
+-- styles ("Logo Left"/"Logo Right", also added in build_template.py)
+-- rather than "Subtitle" itself, so the logo's alignment isn't coupled to
+-- Subtitle's italic/heading-font styling.
+local LOGO_ALIGN_STYLES = {
+  left = "Logo Left",
+  center = "Subtitle",
+  right = "Logo Right",
+}
+
+local function logo_block(path, width, align)
   local img = pandoc.Image({}, path, "", pandoc.Attr("", {}, { { "width", width } }))
   local para = pandoc.Para({ img })
-  return pandoc.Div({ para }, pandoc.Attr("", {}, { { "custom-style", "Subtitle" } }))
+  local style = LOGO_ALIGN_STYLES[align] or LOGO_ALIGN_STYLES.center
+  return pandoc.Div({ para }, pandoc.Attr("", {}, { { "custom-style", style } }))
 end
 
 return {
@@ -319,6 +331,15 @@ return {
       document_status = stringify_or_nil(meta["document-status"]) or "DRAFT"
       logo_path = stringify_or_nil(meta.logo)
       logo_width = stringify_or_nil(meta["logo-width"]) or "2in"
+      logo_align = stringify_or_nil(meta["logo-align"]) or "center"
+      if logo_align ~= "left" and logo_align ~= "center" and logo_align ~= "right" then
+        quarto.log.warning(
+          "title_page.lua: logo-align must be 'left', 'center', or 'right' (got '"
+            .. logo_align
+            .. "'); defaulting to 'center'"
+        )
+        logo_align = "center"
+      end
 
       local report_date = stringify_or_nil(meta.date)
       local lead_scientist = stringify_or_nil(meta["lead-scientist"])
@@ -386,7 +407,7 @@ return {
       end
 
       if logo_path then
-        table.insert(blocks, logo_block(logo_path, logo_width))
+        table.insert(blocks, logo_block(logo_path, logo_width, logo_align))
       end
 
       if report_type then

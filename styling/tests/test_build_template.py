@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import docx
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 
 from quartifyr_styling.build_template import build_reference_docx
@@ -60,6 +61,13 @@ def test_caption_is_italic_not_bold(tmp_path):
     caption = doc.styles["Caption"]
     assert caption.font.italic is True
     assert caption.font.bold is False
+
+
+def test_logo_alignment_styles_present(tmp_path):
+    _, doc = _build(tmp_path)
+    assert doc.styles["Logo Left"].paragraph_format.alignment == WD_ALIGN_PARAGRAPH.LEFT
+    assert doc.styles["Logo Right"].paragraph_format.alignment == WD_ALIGN_PARAGRAPH.RIGHT
+    assert doc.styles["Subtitle"].paragraph_format.alignment == WD_ALIGN_PARAGRAPH.CENTER
 
 
 def test_page_size_and_margins_applied(tmp_path):

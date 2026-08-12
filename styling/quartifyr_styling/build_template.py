@@ -320,6 +320,19 @@ def build_reference_docx(config: StyleConfig, output_path: str | Path) -> Path:
     _set_font(doc.styles["Subtitle"], config.fonts.heading, config.fonts.sizes.subtitle, color=config.colors.title, italic=True)
     _set_paragraph_format(doc.styles["Subtitle"], alignment=WD_ALIGN_PARAGRAPH.CENTER, space_after_pt=6)
 
+    # "Logo Left"/"Logo Right" exist purely so title_page.lua's logo-align
+    # frontmatter option has a named paragraph style to point its Div's
+    # custom-style attribute at -- centering already reuses "Subtitle" (see
+    # that filter's logo_block() comment for why alignment has to travel
+    # through a *named* style rather than a Div class or image attribute).
+    # Based on "Normal" rather than "Subtitle" so the logo's alignment isn't
+    # coupled to Subtitle's italic/heading-font styling, which is otherwise
+    # invisible on an image but would be a surprising coupling to leave in.
+    logo_left = _get_or_add_style(doc, "Logo Left", WD_STYLE_TYPE.PARAGRAPH, base="Normal")
+    _set_paragraph_format(logo_left, alignment=WD_ALIGN_PARAGRAPH.LEFT)
+    logo_right = _get_or_add_style(doc, "Logo Right", WD_STYLE_TYPE.PARAGRAPH, base="Normal")
+    _set_paragraph_format(logo_right, alignment=WD_ALIGN_PARAGRAPH.RIGHT)
+
     for level in range(1, 7):
         style = doc.styles[f"Heading {level}"]
         _set_font(

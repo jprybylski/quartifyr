@@ -33,6 +33,7 @@ version: "1.0"
 confidentiality: "Confidential — Do Not Distribute"
 logo: "assets/logo.png"          # optional
 logo-width: "2in"                 # optional, default "2in"
+logo-align: "center"              # optional, "left"/"center"/"right", default "center"
 address:                          # optional, for memo-type documents
   - "Acme Pharma"
   - "123 Research Parkway, Suite 400"
@@ -82,7 +83,9 @@ rows stay readable without table gridlines.
 `logo:` (a path to an image, relative to the `.qmd`) places a centered
 logo below the title-page fields — omit it and no space is reserved, no
 placeholder box. `logo-width:` controls its rendered width (default
-`"2in"`; any pandoc-recognized image width, e.g. `"150px"`).
+`"2in"`; any pandoc-recognized image width, e.g. `"150px"`). `logo-align:`
+controls its horizontal alignment (`"left"`, `"center"`, or `"right"`;
+default `"center"`).
 
 `address:` is a YAML list of lines (not a single string, so multi-line
 addresses render as genuine separate lines rather than one run-together
