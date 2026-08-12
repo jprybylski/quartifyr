@@ -44,24 +44,28 @@
   },
   "source_meta": {
     "type": "script",
-    "creation_author": "FILE NOT TRACKED BY GIT",
-    "latest_author": "FILE NOT TRACKED BY GIT",
+    "creation_author": "John Prybylski <jprybylski@gmail.com>",
+    "latest_author": "John Prybylski <jprybylski@gmail.com>",
     "path": "scripts/01_analysis.R",
-    "creation_time": "FILE NOT TRACKED BY GIT",
-    "latest_time": "2026-08-11 18:24:41"
+    "creation_time": "2026-08-11 22:28:55",
+    "latest_time": "2026-08-11 22:28:55"
   },
   "object_meta": {
     "author": "John Prybylski <jprybylski@gmail.com>",
     "path": "OUTPUTS/tables/pk-summary.csv",
-    "creation_time": "2026-08-11 18:24:42",
+    "creation_time": "2026-08-12 16:55:19",
     "file_type": "csv",
     "meta_type": "NA",
-    "hash": "f14de7a106df8a767dc569c296585dd4cf8bcb8aefa8dc2b6417216e03f2acc6",
+    "hash": "61294773c8f4ce56a73ed8502a8a778667c877e21ce4f36e76415e22bb2aadc4",
     "table1": false,
     "footnotes": {
       "equations": [],
-      "notes": [],
-      "abbreviations": []
+      "notes": [
+        "Values are per-participant summary statistics computed directly from observed concentrations; no imputation or model-based estimation was performed."
+      ],
+      "abbreviations": [
+        "PK"
+      ]
     }
   },
   "addl_meta": []

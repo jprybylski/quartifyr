@@ -38,9 +38,9 @@ synopsis:
     value: "Individual concentration-time profiles were summarized descriptively from the built-in Theoph dataset; no model-based estimation was performed for this demonstration report."
   - label: "Results"
     value:
-      - "Peak concentrations and inter-subject variability are summarized in Table 1 and Figure 1."
-      - "The synopsis figure below is a duplicate rendering of that same concentration-time profile -- demonstrating multi-line values with an embedded figure, not a numbered figure of its own (it's excluded from the List of Figures, unlike Figure 1 in the body)."
-      - image: "conc-time.png"
+      - "Peak concentrations and inter-participant variability are summarized in Table 1 and Figure 1."
+      - "The synopsis figure below is a duplicate rendering of that same concentration-time profile -- demonstrating multi-line values with an embedded figure, not a numbered figure of its own (it's excluded from the List of Figures, unlike Figure 1 in the body). It's a separate saved copy (conc-time-synopsis.png) rather than a second reference to conc-time.png, since reportifyr dedupes figure metadata footnotes by filename document-wide and Figure 1's own footnote should win that dedup, not the synopsis preview's."
+      - image: "conc-time-synopsis.png"
         width: "4in"
 format: docx
 filters:
@@ -135,11 +135,11 @@ through quartifyr's two-pass shell/fill pipeline.
      deliberately spelled without a digit here to avoid looking like a
      manually-typed number: reorder/add/remove tables and it still
      renumbers itself correctly on the next field recalculation. -->
-{{< tbl_caption "TblPkSummary" "Per-subject PK summary statistics" >}}
+{{< tbl_caption "TblPkSummary" "Per-participant PK summary statistics" >}}
 
 {rpfy}:pk-summary.csv
 
-Per-subject maximum, minimum, and average observed concentration across
+Per-participant maximum, minimum, and average observed concentration across
 the sampling period.
 
 ## Concentration-Time Profile
@@ -148,7 +148,7 @@ the sampling period.
 
 {rpfy}:conc-time.png
 
-Individual concentration-time trajectories for all subjects in the study,
+Individual concentration-time trajectories for all participants in the study,
 plotted on the same axes, summarized numerically in
 {{< crossref "TblPkSummary" >}}.
 
@@ -156,7 +156,7 @@ plotted on the same axes, summarized numerically in
 
 {{< appendix "StatisticalMethods" "Statistical Methods" >}}
 
-Per-subject summary statistics were computed directly from the observed
+Per-participant summary statistics were computed directly from the observed
 concentration-time data; no model-based estimation was performed for this
 demonstration report. See {{< appendix_crossref "StatisticalMethods" >}}
 for the complete methodology.
