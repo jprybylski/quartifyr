@@ -131,6 +131,22 @@ def main() -> int:
         )
     )
     checks.append(("synopsis figure embedded as a real image", len(images) >= 2))
+
+    synopsis_cell_drawings = [d for table in document.tables for d in table._tbl.xpath(".//w:drawing")]
+    checks.append(("synopsis figure is genuinely inside the table cell, not a separate block", len(synopsis_cell_drawings) >= 1))
+
+    synopsis_alt_texts = [
+        dp.get("descr") or ""
+        for d in synopsis_cell_drawings
+        for dp in d.xpath(".//wp:docPr")
+    ]
+    checks.append(
+        (
+            "synopsis figure carries reportifyr's own provenance metadata (a content hash) as alt text",
+            any("hash:" in alt for alt in synopsis_alt_texts),
+        )
+    )
+
     with zipfile.ZipFile(final_docx) as z:
         document_xml = z.read("word/document.xml").decode("utf-8")
     seq_figure_count = document_xml.count("SEQ Figure")

@@ -214,6 +214,62 @@ unlike the title page and signature pages (always first/second by
 construction), a synopsis's conventional position varies more by org, so
 this one isn't auto-inserted.
 
+**Multi-line values, and values with a figure**: `value:` also accepts a
+YAML list instead of a plain string — each string item becomes its own
+paragraph within the cell, and an `{image: "...", width: "..."}` item
+embeds a figure inline, in whatever order they're written:
+
+```yaml
+synopsis:
+  - label: "Results"
+    value:
+      - "Peak concentrations are summarized in Figure 1."
+      - image: "summary-plot.png"
+        width: "3in"   # optional, defaults to 3in
+```
+
+`image:` is a **bare filename within `OUTPUTS/figures/`**, not a path
+that includes that directory — the same convention a `{rpfy}:` figure
+placeholder in the qmd body already uses. This isn't a shortcut for
+embedding an arbitrary picture: it emits a `{rpfy}:filename.png<width:
+N>` magic string into the cell, so the figure only actually appears
+after `reportifyr::build_report()` (pass 2) fills it in from
+`OUTPUTS/figures/` — a plain `quarto render` alone shows the literal
+`{rpfy}:...` text, exactly like any other figure placeholder in this
+project. Getting the filename convention wrong doesn't error -- reportifyr
+just logs a "Figure file not found" warning and leaves the cell showing
+the raw magic string (confirmed by making this exact mistake while
+building this feature: writing the full relative path instead of the
+bare filename silently produced nothing).
+
+Routing through `{rpfy}:` rather than embedding a picture directly
+(which is what an earlier version of this feature did) is deliberate:
+`reportipyr` (the Python package `reportifyr::build_report()` drives)
+has dedicated, first-class support for magic strings inside table
+cells — confirmed by reading its source — so the figure genuinely lands
+inside the cell, carries the same provenance alt text (a content hash
+from the artifact's `_metadata.json` sidecar) every other `{rpfy}:`
+figure gets, and — since it's never captioned via `{{< fig_caption >}}`
+— stays excluded from `quarto-plus`'s List of Figures, the same as
+before.
+
+`reportifyr::build_report()` also auto-inserts a Source/Notes/
+Abbreviations footnote block for every `{rpfy}:` figure, cell figures
+included — this extension can't turn that off (and doesn't try to;
+the footnote *is* the "appropriate reportifyr-generated metadata"
+this feature is for). What it does control is *where that footnote
+lands*: reportifyr groups it per Word table element, inserting one
+combined footnote immediately after the whole table — not attached to
+any specific cell. A synopsis row containing a `{rpfy}:` magic string
+therefore gets its own dedicated single-row table rather than sharing
+one with every other row, so the footnote lands immediately after
+*that row alone* (confirmed by rendering: it appears directly below
+the row's own table, not after the whole synopsis). Multiple figures
+in the same row still combine into one footnote, correctly, since
+they share that row's table; rows with no magic string keep sharing a
+table with their neighbors, so a plain text-only synopsis still
+renders as a single table with no fragmentation.
+
 ### Appendices
 
 ```

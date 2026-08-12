@@ -40,7 +40,7 @@ synopsis:
     value:
       - "Peak concentrations and inter-subject variability are summarized in Table 1 and Figure 1."
       - "The synopsis figure below is a duplicate rendering of that same concentration-time profile -- demonstrating multi-line values with an embedded figure, not a numbered figure of its own (it's excluded from the List of Figures, unlike Figure 1 in the body)."
-      - image: "OUTPUTS/figures/conc-time.png"
+      - image: "conc-time.png"
         width: "4in"
 format: docx
 filters:
