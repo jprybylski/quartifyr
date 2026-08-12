@@ -60,7 +60,7 @@
 -- bare top-level `foo: bar` keys, which can't be told apart from
 -- unrelated frontmatter and wouldn't have a reliable order anyway.
 
-local utils = require("utils")
+local utils = require("quartifyr_utils")
 
 -- `address:` needs multi-line support (street/suite/city-state-zip), but
 -- pandoc.utils.stringify() collapses ALL line breaks to spaces (confirmed

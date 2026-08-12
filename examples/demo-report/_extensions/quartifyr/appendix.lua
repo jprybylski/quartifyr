@@ -29,7 +29,7 @@
 -- bookmark bookkeeping here; left as a documented follow-up rather than
 -- done unreliably.
 
-local utils = require("utils")
+local utils = require("quartifyr_utils")
 
 -- Offset away from quarto-plus's own crossref.lua bookmark ids (which
 -- start at 1 and increment per caption) so the two extensions' w:id values

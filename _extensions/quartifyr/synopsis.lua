@@ -78,7 +78,7 @@
 -- .synopsis :::` marker in unconditionally and let each project's
 -- frontmatter decide.
 
-local utils = require("utils")
+local utils = require("quartifyr_utils")
 
 local DEFAULT_FIGURE_WIDTH = "3in"
 

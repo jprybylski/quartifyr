@@ -53,7 +53,7 @@
 -- rendering both a title page and a memo banner in the same document
 -- would just produce two conflicting, stacked cover pages.
 
-local utils = require("utils")
+local utils = require("quartifyr_utils")
 
 local function stringify_or_nil(meta_val)
   if meta_val == nil then

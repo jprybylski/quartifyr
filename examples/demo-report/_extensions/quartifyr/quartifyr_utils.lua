@@ -1,3 +1,15 @@
+-- Named quartifyr_utils, not utils, deliberately: quarto runs every filter
+-- from every extension listed in a project's `filters:` (e.g. quarto-plus
+-- and quartifyr together) inside one shared Lua state, and `require()`
+-- caches modules by name alone in the process-global `package.loaded`
+-- table -- not by path. quarto-plus ships its own same-named "utils.lua"
+-- (a much smaller module, no logo_block/status_box/field_table/etc.);
+-- whichever extension's filter first calls require("utils") wins that
+-- name for every subsequent require("utils") call in the whole chain,
+-- silently handing this extension's own filters someone else's module.
+-- Confirmed as the cause of an intermittent `attempt to call a nil value
+-- (field 'logo_block')` failure. A generic name like "utils" is only
+-- safe when nothing else sharing the same Lua state also claims it.
 local M = {}
 
 function M.escape_xml(s)

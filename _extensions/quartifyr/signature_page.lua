@@ -51,7 +51,7 @@
 -- in front of that, yielding the correct final order: title page, then
 -- signature pages, then the rest of the document.
 
-local utils = require("utils")
+local utils = require("quartifyr_utils")
 
 local CONTRIBUTOR_GROUPS = {
   { key = "authors", label = "Author" },
