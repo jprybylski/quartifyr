@@ -108,9 +108,13 @@ mechanics are three ordinary, independent tool calls:
 quarto render report.qmd --to docx --reference-doc org-reference.docx \
   -M document-status:DRAFT
 
-# 2. (Optional) header/footer + page-restart post-processing, if your
-#    .qmd uses header-format:/{{< body-start >}} -- see
-#    _extensions/quartifyr/README.md.
+# 2. (Optional) header/footer + page-restart post-processing. Skip this
+#    and you still get a basic footer straight from step 1 -- whatever
+#    the reference-doc itself was built with (by default: a continuous
+#    page number, no restart) -- but header-format:/confidentiality:/
+#    {{< body-start >}} in the .qmd have no effect without this step;
+#    see _extensions/quartifyr/README.md's "Page header/footer and page
+#    numbering" section for exactly what each piece needs.
 quartifyr-styling apply-layout --docx report.docx --qmd report.qmd --status draft
 ```
 
@@ -179,6 +183,7 @@ cd r && rv sync && cd ..
 # 4. Run the demo end to end
 cd examples/demo-report
 rv sync
+Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'   # first clone only
 Rscript render.R --final
 # -> report/draft/report-draft.docx, report/final/report-final.docx
 ```

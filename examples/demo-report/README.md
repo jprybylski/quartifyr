@@ -37,17 +37,25 @@ a real `reportifyr` fill pass.
 
 ## Running it
 
-```bash
-cd examples/demo-report
-Rscript render.R           # -> report/draft/report-draft.docx
-Rscript render.R --final   # also -> report/final/report-final.docx
-```
-
 Requires this repo's toolchain to already be set up: `rv sync` in both
 `../../r/` and this directory, and the `styling/` venv (`uv venv .venv &&
 uv pip install -e "./styling[dev]"` from the repo root, plus
 `quartifyr-styling build` to produce `templates/org-reference.docx` if you
 haven't already).
+
+`.report_init.json` is gitignored (it embeds a username/timestamp), so a
+fresh clone needs one setup call before the first render -- this is safe
+to run even though `report/standard_footnotes.yaml`/`report/config.yaml`/
+`OUTPUTS/` are already committed: `reportifyr::initialize_report_project()`
+only creates files that don't already exist, it never overwrites them.
+
+```bash
+cd examples/demo-report
+Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'
+
+Rscript render.R           # -> report/draft/report-draft.docx
+Rscript render.R --final   # also -> report/final/report-final.docx
+```
 
 ## Smoke test
 

@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  styling-tests:
+    name: styling pytest (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # Pure Python, no Quarto/R involved -- `uv run` manages its own
+      # ephemeral venv from styling/pyproject.toml, so this needs no
+      # manual venv setup and works identically on all three platforms.
+      - name: Run styling/ pytest suite
+        working-directory: styling
+        run: uv run --extra dev pytest tests -v
+
+  full-pipeline:
+    name: full pipeline (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows isn't included here: `rv`'s own install script only
+        # targets macOS/Linux (confirmed by reading it -- it falls back
+        # to a Linux target on Windows, which fails). A real Windows
+        # install would need its own binary-download step, not attempted
+        # yet -- see r/README.md.
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: quarto-dev/quarto-actions/setup@v2
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "4.6"
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install rv
+        run: curl -sSL https://raw.githubusercontent.com/A2-ai/rv/refs/heads/main/scripts/install.sh | bash
+
+      - name: Add rv and uv-installed tools to PATH
+        run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # This is the repo-root Quick Start, run exactly as documented, so
+      # this job also stands in as a check that the README instructions
+      # themselves are correct and current.
+      - name: Set up styling/ venv
+        run: |
+          uv venv .venv --python 3.12
+          source .venv/bin/activate
+          uv pip install -e "./styling[dev]"
+          quartifyr-styling build --style styling/styles/default.yaml --out templates/org-reference.docx
+
+      - name: rv sync (r/)
+        working-directory: r
+        run: rv sync
+
+      - name: rv sync (examples/demo-report)
+        working-directory: examples/demo-report
+        run: rv sync
+
+      - name: Initialize reportifyr project (fresh clone -- .report_init.json is gitignored)
+        working-directory: examples/demo-report
+        run: Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'
+
+      # The render_report()/r/ convenience-wrapper path.
+      - name: Run demo smoke test
+        run: |
+          source .venv/bin/activate
+          python3 examples/demo-report/smoke_test.py
+
+      # The decomposed "Using the pieces directly" path from the
+      # repo-root README -- proves that documentation is actually true,
+      # not just written down.
+      - name: Run bare-bones pieces-only integration test
+        run: |
+          source .venv/bin/activate
+          python3 scripts/bare_bones_integration_test.py

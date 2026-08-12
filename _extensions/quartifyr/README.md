@@ -268,32 +268,43 @@ report_number: "RPT-2026-014"
 header-format: "{project} - {report_number}"
 ```
 
-Requires `styling/`'s post-render `quartifyr-styling apply-layout` step
-(run automatically by `r/R/render_report.R` -- see `../../r/README.md`'s
-"Page header/footer and page numbering" section and
-`../../styling/README.md`'s `apply-layout` entry), since a genuinely
-independent second header/footer means adding new *parts* to the docx
-package, which a Lua filter's `RawBlock` injection can't do on its own.
+Everything in this section requires `styling/`'s post-render
+`quartifyr-styling apply-layout` step (run automatically by
+`r/R/render_report.R` -- see `../../r/README.md`'s "Page header/footer
+and page numbering" section and `../../styling/README.md`'s
+`apply-layout` entry), since a genuinely independent second header/footer
+means adding new *parts* to the docx package, which a Lua filter's
+`RawBlock` injection can't do on its own.
 
-`header-format:` is opt-in (omit it and no header is added at all). Once
-set, every page gets a two-zone header: the resolved template flush left
-(any frontmatter key works as a `{placeholder}`, e.g. `{project}`), and
-the draft/final status flush right -- always shown once a header is
-enabled, the same "impossible to miss" precedent as the title page's own
-status stamp.
+**What a plain `quarto render` gives you without that step**:
+`header-format:`, `confidentiality:`, and `{{< body-start >}}` are all
+inert on their own -- nothing in this extension or `quarto-plus` reads
+`header-format:`/`confidentiality:`, so setting them without also running
+`apply-layout` has no visible effect at all (no error, no header, no
+footer label). `{{< body-start >}}` similarly does nothing by itself; it
+just leaves an invisible bookmark for `apply-layout` to find later. What
+you *do* get for free, straight from `quarto render --reference-doc
+org-reference.docx`, is whatever basic footer the reference-doc itself
+was built with -- by default (`styling/styles/default.yaml`'s `footer:`
+block) that's a centered, continuous page number across the entire
+document, title page included, no restart, no roman numerals. Turn it
+off entirely with `footer: {show_page_number: false}` in the style YAML,
+or give it static text via `footer: {text: "..."}`; either way, that part
+needs no post-processing.
 
-Every footer shows a confidentiality label on the left (reusing whatever
-`confidentiality:` is set to on the title page -- see Title page above --
-blank if unset) and a page number on the right, except the title page,
-which never shows a page number at all. `title_page.lua` automatically
-marks where the title page ends, so pairing it with `{{< body-start >}}`
--- placed right before your first real body heading, e.g. `# Introduction`
--- splits page numbering into three regions: the title page (no number),
-the rest of the front matter (ToC, list of figures/tables, abbreviations,
-synopsis, signature pages, ... -- lowercase roman, starting at "i"), and
-the body (arabic, restarting at "1"). Without `{{< body-start >}}`, the
-document stays a single section -- the header (if set) still applies
-throughout, but there's no page-number split.
+**What `apply-layout` adds**: a two-zone header (the resolved
+`header-format:` template flush left, draft/final status flush right --
+always shown once a header is enabled, the same "impossible to miss"
+precedent as the title page's own status stamp), a confidentiality label
+in the footer's left zone (reusing whatever `confidentiality:` is set to
+on the title page -- see Title page above -- blank if unset), and, if
+`{{< body-start >}}` is present (placed right before your first real body
+heading, e.g. `# Introduction`), a three-way page-numbering split: the
+title page gets no page number at all, the rest of the front matter (ToC,
+list of figures/tables, abbreviations, synopsis, signature pages, ...)
+numbers in lowercase roman starting at "i", and the body restarts at
+arabic "1". Without `{{< body-start >}}`, `apply-layout` still adds the
+header, just with no page-number split (single section throughout).
 
 ### A pStyle gotcha (if you're extending this extension)
 
