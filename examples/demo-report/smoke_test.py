@@ -124,6 +124,23 @@ def main() -> int:
     checks.append(("logo image embedded on title page", any("png" in n.lower() for n in images)))
     checks.append(("address rendered on title page", any("Raleigh, NC" in row_cell for row in all_rows for row_cell in row)))
 
+    checks.append(
+        (
+            "synopsis value supports multi-line text",
+            any("demonstrating multi-line values with an embedded figure" in row_cell for row in all_rows for row_cell in row),
+        )
+    )
+    checks.append(("synopsis figure embedded as a real image", len(images) >= 2))
+    with zipfile.ZipFile(final_docx) as z:
+        document_xml = z.read("word/document.xml").decode("utf-8")
+    seq_figure_count = document_xml.count("SEQ Figure")
+    checks.append(
+        (
+            "synopsis figure excluded from the List of Figures (only Figure 1's own SEQ Figure field exists)",
+            seq_figure_count == 1,
+        )
+    )
+
     checks.append(("document split into title/front-matter/body sections", len(document.sections) == 3))
     title_section, front_matter_section, body_section = document.sections
 

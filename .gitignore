@@ -20,10 +20,12 @@ templates/*.docx
 
 # reportifyr working documents (project-specific, not toolkit source)
 examples/*/report/shell/*.docx
-# Quarto copies referenced assets (e.g. a title-page logo) into the
-# output-dir alongside the rendered docx -- a render byproduct, not source
-# (the source lives at examples/*/assets/).
+# Quarto copies referenced assets (e.g. a title-page logo, or a
+# synopsis figure pulled from OUTPUTS/) into the output-dir alongside the
+# rendered docx -- a render byproduct, not source (the source lives at
+# examples/*/assets/ and examples/*/OUTPUTS/ respectively).
 examples/*/report/shell/assets/
+examples/*/report/shell/OUTPUTS/
 examples/*/abbreviations.tex
 examples/*/report/draft/*
 examples/*/report/final/*

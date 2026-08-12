@@ -26,8 +26,21 @@
 #'   runs `reportifyr::finalize_document()` to produce a `report/final/`
 #'   output alongside the `report/draft/` one.
 #' @param toolkit_root Root of the quartifyr checkout (contains `templates/`,
-#'   `_extensions/`, `.venv/`). Defaults to the git repo root.
-#' @param reference_doc Path to the docx reference-template. See `styling/`.
+#'   `_extensions/`, `.venv/`). Defaults to `here::here()`, which only
+#'   resolves correctly when the calling project is nested *inside* a
+#'   quartifyr checkout (as `examples/demo-report/` is -- and even there,
+#'   its own `render.R` computes `toolkit_root` explicitly rather than
+#'   relying on this default, since `here::here()`'s root-finding walks up
+#'   from the caller's own working directory, not from wherever quartifyr
+#'   itself happens to live). For a genuinely independent project (its own
+#'   git repo, not nested inside a quartifyr checkout), this default is
+#'   wrong -- it'll resolve to the calling project's own root instead. Pass
+#'   `reference_doc` (and `venv_bin`, unless the `styling/` venv's `bin/`
+#'   is already on `PATH`) explicitly in that case; see the repo-root
+#'   README's "Style YAML and reference-doc" section.
+#' @param reference_doc Path to the docx reference-template. See `styling/`
+#'   and the repo-root README's "Style YAML and reference-doc" section for
+#'   how to generate, locate, and share one.
 #' @param standard_footnotes_yaml,config_yaml,figures_path,tables_path
 #'   Passed through to reportifyr; default to the standard project layout
 #'   `reportifyr::initialize_report_project()` creates, alongside `shell_qmd`.

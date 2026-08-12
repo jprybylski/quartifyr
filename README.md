@@ -207,6 +207,58 @@ quartifyr-styling build \
 See `styling/styles/default.yaml` for the full schema and
 `styling/quartifyr_styling/schema.py` for validation rules.
 
+## Style YAML and reference-doc: generating, locating, sharing
+
+**Generating a style YAML**: there's no interactive wizard — "generate"
+means copy `styling/styles/default.yaml` and edit just the fields that
+differ, as shown above. That file doubles as both the default preset
+and the schema reference; `styling/quartifyr_styling/schema.py`
+documents validation rules (hex colors, positive sizes, valid page
+sizes, ...).
+
+**Where a style YAML lives**: `styling/styles/*.yaml` is just this
+repo's own convention for keeping org styles alongside the tool that
+builds them — nothing requires it. `--style`/`--override` take plain
+file paths, so an org can keep its style YAML(s) anywhere: a separate
+internal config repo, a shared drive, wherever it already manages
+shared config.
+
+**Where the built reference-doc lives**: likewise, wherever `--out`
+points. `templates/org-reference.docx` (relative to this checkout) is
+what this repo's own docs default to because `render_report()`'s
+`reference_doc` parameter defaults to `file.path(toolkit_root,
+"templates", "org-reference.docx")`, and `toolkit_root` itself defaults
+to `here::here()`. For `examples/demo-report/`, that resolves correctly
+only because its own `render.R` computes `toolkit_root` explicitly, as
+a relative path back up to this repo's root (it doesn't rely on the
+`here::here()` default at all — see its source). **A genuinely
+independent project (its own git repo, not nested inside a quartifyr
+checkout) can't rely on that default** — `here::here()` would resolve
+to the new project's own root instead of quartifyr's. Pass
+`reference_doc` explicitly instead (and `venv_bin` too, unless the
+`styling/` venv's `bin/` is already on `PATH`):
+
+```r
+render_report(
+  shell_qmd = "report.qmd",
+  status = "draft",
+  reference_doc = "/path/to/org-reference.docx",
+  venv_bin = "/path/to/quartifyr/.venv/bin"
+)
+```
+
+**Sharing a reference-doc so most users never run `quartifyr-styling
+build`**: only whoever owns an org's styling needs to run `build` at
+all. Once built, `templates/org-reference.docx` is an ordinary `.docx`
+file — distribute *that* however your org already shares binary
+artifacts (commit a copy into each project's own repo under its own
+`templates/`, a shared drive, an internal artifact store, ...), and
+point each project's `reference_doc` at wherever it landed. Committing
+a copy into each project is the simplest option for a standalone
+project: it makes the project fully self-contained (no need to locate
+or even keep a quartifyr checkout around just to render) at the cost of
+re-copying the file whenever the org's styling changes.
+
 ## Standing up a new project
 
 This is the full `render_report()` path — the convenience wrapper from
@@ -246,6 +298,10 @@ A project set up the `render_report()` way needs:
    ```
 5. **A docx reference-template** — reuse an existing org one, or build a
    new one (see [Standing up a new org](#standing-up-a-new-org) above).
+   If this project isn't nested inside a quartifyr checkout, pass
+   `reference_doc` (and likely `venv_bin`) explicitly to `render_report()`
+   — see [Style YAML and reference-doc](#style-yaml-and-reference-doc-generating-locating-sharing)
+   above for why the defaults don't apply there.
 
 Then write your own `scripts/`, producing `OUTPUTS/tables/`/
 `OUTPUTS/figures/` artifacts via `reportifyr`'s

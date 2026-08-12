@@ -27,6 +27,13 @@ organization — see `styles/default.yaml` for the full schema and
 `quartifyr_styling/schema.py` for validation rules (hex colors, positive
 sizes, etc.).
 
+`--style`/`--override`/`--out` are plain file paths, not fixed locations
+— `styling/styles/*.yaml` and `templates/org-reference.docx` are just
+this repo's own convention. See the repo-root README's "Style YAML and
+reference-doc" section for how an org can keep its style YAML and built
+reference-doc elsewhere, and how most project authors can skip running
+`build` entirely by reusing an already-built `.docx`.
+
 The generated docx becomes Quarto's `reference-doc:` for the shell render:
 
 ```bash

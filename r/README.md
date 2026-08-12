@@ -113,6 +113,12 @@ being rendered). The project's `_quarto.yml` must set `project:
 so this is load-bearing, not just a naming convention. See
 `examples/demo-report/` for a working example of this layout.
 
+The example above omits `reference_doc`/`venv_bin`, relying on their
+defaults (see `?render_report`/`R/render_report.R`'s own docs) -- that
+only works for a project nested inside this quartifyr checkout. For a
+standalone project, pass both explicitly; see the repo-root README's
+"Style YAML and reference-doc" section.
+
 ## What `render_report()` actually does
 
 1. Regenerates `abbreviations.tex` next to `shell_qmd` from the project's
