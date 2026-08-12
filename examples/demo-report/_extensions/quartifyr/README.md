@@ -1,14 +1,13 @@
 # quartifyr (Quarto extension)
 
-This is the front-matter piece of **quartifyr**, a code-first system for
-generating standardized scientific/regulated documents with Quarto +
-`reportifyr`'s two-pass shell/fill workflow (see the repo-root README for
-the full picture). It's not scoped to "reports" specifically or to a title
-page specifically — the same shell-generation approach is meant to extend
-to presentations, analysis plans, memos, and other standardized document
-kinds over time; this extension currently covers the front-matter pieces
-most of those document kinds tend to need: a dynamic title page (with a
-draft/final status stamp), contributor/approval signature pages, a
+This is the shell-generation piece of **quartifyr**, a code-first system
+for generating standardized scientific/regulated documents with Quarto
+(see the repo-root README for the full picture, including the pass-2 fill
+step -- `reportifyr` today). The same shell-generation approach is meant
+to extend across document kinds -- reports, presentations, analysis
+plans, memos -- over time; this extension currently covers the
+front-matter pieces most of them tend to need: a dynamic title page (with
+a draft/final status stamp), contributor/approval signature pages, a
 synopsis summary table, and numbered appendices.
 
 This extension adds those on top of
@@ -32,6 +31,15 @@ date: "2026-08-11"
 lead-scientist: "Jane Doe, PharmD"
 version: "1.0"
 confidentiality: "Confidential — Do Not Distribute"
+logo: "assets/logo.png"          # optional
+logo-width: "2in"                 # optional, default "2in"
+address:                          # optional, for memo-type documents
+  - "Acme Pharma"
+  - "123 Research Parkway, Suite 400"
+  - "Raleigh, NC 27609"
+project: "ACME-001"               # feeds header-format below, not shown on its own
+report_number: "RPT-2026-014"     # feeds header-format below, not shown on its own
+header-format: "{project} - {report_number}"   # optional, see Page header/footer below
 title-page-extra:
   - label: "Sponsor"
     value: "Acme Pharma"
@@ -71,8 +79,22 @@ toc-style-map:
 All fields except `title` are optional — the title page only renders the
 rows that are actually set, so the same shell template works whether a
 project has a `lead-scientist` or not. The info block (Date/Lead
-Scientist/Version/Confidentiality/...) renders as a full-width, bordered
-table, not centered text lines.
+Scientist/Version/Confidentiality/...) renders as a full-width table, not
+centered text lines — borderless and unshaded (no header-row styling on
+the first row), with the label column bold and the value column plain so
+rows stay readable without table gridlines.
+
+`logo:` (a path to an image, relative to the `.qmd`) places a centered
+logo below the title-page fields — omit it and no space is reserved, no
+placeholder box. `logo-width:` controls its rendered width (default
+`"2in"`; any pandoc-recognized image width, e.g. `"150px"`).
+
+`address:` is a YAML list of lines (not a single string, so multi-line
+addresses render as genuine separate lines rather than one run-together
+paragraph — see `synopsis:`/`title-page-extra:` above for the same
+list-over-map reasoning) and adds an "Address" row to the info block, for
+memo-type documents that need a sender address on the title page. Omit it
+for document kinds that don't need one.
 
 **Fully flexible, not a fixed field list**: `date`/`lead-scientist`/
 `version`/`confidentiality` are named convenience fields (simpler to
@@ -237,6 +259,41 @@ appendix headings, since those are raw OOXML this extension injects
 directly rather than genuine pandoc `Header` nodes — `number-sections`
 only walks real ones. Per-project opt-in; see
 `examples/demo-report/report.qmd` for a working example.
+
+### Page header/footer and page numbering
+
+```yaml
+project: "ACME-001"
+report_number: "RPT-2026-014"
+header-format: "{project} - {report_number}"
+```
+
+Requires `styling/`'s post-render `quartifyr-styling apply-layout` step
+(run automatically by `r/R/render_report.R` -- see `../../r/README.md`'s
+"Page header/footer and page numbering" section and
+`../../styling/README.md`'s `apply-layout` entry), since a genuinely
+independent second header/footer means adding new *parts* to the docx
+package, which a Lua filter's `RawBlock` injection can't do on its own.
+
+`header-format:` is opt-in (omit it and no header is added at all). Once
+set, every page gets a two-zone header: the resolved template flush left
+(any frontmatter key works as a `{placeholder}`, e.g. `{project}`), and
+the draft/final status flush right -- always shown once a header is
+enabled, the same "impossible to miss" precedent as the title page's own
+status stamp.
+
+Every footer shows a confidentiality label on the left (reusing whatever
+`confidentiality:` is set to on the title page -- see Title page above --
+blank if unset) and a page number on the right, except the title page,
+which never shows a page number at all. `title_page.lua` automatically
+marks where the title page ends, so pairing it with `{{< body-start >}}`
+-- placed right before your first real body heading, e.g. `# Introduction`
+-- splits page numbering into three regions: the title page (no number),
+the rest of the front matter (ToC, list of figures/tables, abbreviations,
+synopsis, signature pages, ... -- lowercase roman, starting at "i"), and
+the body (arabic, restarting at "1"). Without `{{< body-start >}}`, the
+document stays a single section -- the header (if set) still applies
+throughout, but there's no page-number split.
 
 ### A pStyle gotcha (if you're extending this extension)
 

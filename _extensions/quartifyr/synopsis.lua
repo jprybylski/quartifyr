@@ -114,6 +114,7 @@ return {
         <w:tblPr>
           <w:tblStyle w:val="TableGrid"/>
           <w:tblW w:w="5000" w:type="pct"/>
+          <w:tblLook w:val="04A0" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>
         </w:tblPr>
         <w:tblGrid>
           <w:gridCol/>

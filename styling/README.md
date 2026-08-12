@@ -49,6 +49,28 @@ caveat:
 quartifyr-styling recalculate-fields --docx path/to/report-final.docx
 ```
 
+Apply a dynamic page header and footer, and (if the `.qmd` uses `{{<
+body-start >}}`) split the rendered docx into title-page/front-matter/body
+OOXML sections so the title page has no page number, the rest of the
+front matter numbers in lowercase roman, and the body restarts at arabic
+"1" -- run this on the shell docx right after the Quarto render, before
+`reportifyr`'s pass-2 fill (this is what `render_report()` does
+automatically -- see `../r/README.md`'s "Page header/footer and page
+numbering" section):
+
+```bash
+quartifyr-styling apply-layout --docx report/shell/report.docx --qmd report.qmd --status draft
+```
+
+Reads `--qmd`'s frontmatter for `header-format:` (a `"{project} -
+{report_number}"`-style template, resolved against any frontmatter keys
+plus `{status}` from `--status`) and applies it to the header's left
+zone on every page -- the header's right zone always shows the
+draft/final status once a header is enabled. Also reads `confidentiality:`
+for the footer's left-side label (the same field `title_page.lua` renders
+on the title page). A `.qmd` with no `header-format:` and no `{{<
+body-start >}}` is left untouched -- both are opt-in.
+
 ## Tests
 
 ```bash

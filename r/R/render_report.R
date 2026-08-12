@@ -3,7 +3,11 @@
 #' @description
 #' Two-pass report generation in one call: (1) regenerates
 #' `abbreviations.tex` from `standard_footnotes.yaml` and renders `shell_qmd`
-#' with Quarto against a quartifyr docx reference-template, then (2) hands
+#' with Quarto against a quartifyr docx reference-template, (1.5) applies
+#' `quartifyr-styling apply-layout` to the rendered shell -- a dynamic page
+#' header (from `header-format:` frontmatter) and, if the `.qmd` uses
+#' `{{< body-start >}}`, splitting front matter from the body into separate
+#' OOXML sections so body page numbering restarts at 1 -- then (2) hands
 #' the resulting shell to `reportifyr::build_report()` to fill in tables,
 #' figures, and footnotes from `OUTPUTS/`, and (when `status = "final"`)
 #' `reportifyr::finalize_document()` on top of that.
@@ -155,6 +159,28 @@ render_report <- function(
     stop("quarto render failed:\n", quarto_result$stderr)
   }
   shell_docx <- file.path(project_dir, "report", "shell", shell_docx_name)
+
+  # --- Header/footer + page-restart-at-body layout -------------------------
+  # Splits shell_docx into front-matter/body OOXML sections at the
+  # {{< body-start >}} bookmark (if the .qmd uses it) and applies a dynamic
+  # header resolved from the .qmd's `header-format:` frontmatter (if set).
+  # Both are opt-in per-project; a .qmd with neither is left untouched by
+  # this step. Runs on the shell docx, before reportifyr's pass 2, so the
+  # header/footer/section structure is already in place when reportifyr
+  # fills in tables/figures/footnotes.
+  layout_result <- processx::run(
+    command = quartifyr_styling_bin,
+    args = c(
+      "apply-layout",
+      "--docx", shell_docx,
+      "--qmd", shell_qmd,
+      "--status", status
+    ),
+    error_on_status = FALSE
+  )
+  if (layout_result$status != 0) {
+    stop("quartifyr-styling apply-layout failed:\n", layout_result$stderr)
+  }
 
   # --- Pass 2: fill the shell with reportifyr -----------------------------
   # Scoped to project_dir so reportifyr's cwd-based project/venv detection

@@ -1,10 +1,14 @@
 # quartifyr
 
 A code-first system for generating standardized scientific/regulated
-documents, built on [Quarto](https://quarto.org) +
-[`reportifyr`](https://github.com/A2-ai/reportifyr). Reports today;
+documents with [Quarto](https://quarto.org): an org's docx styling and a
+document's title/signature/ToC/abbreviations front matter come from YAML
+and a `.qmd`, not a hand-edited Word template. A separate pass-2 tool
+then fills the rendered shell with real content — today that's
+[`reportifyr`](https://github.com/A2-ai/reportifyr) for reports;
 presentations, analysis plans, and memos are meant to follow the same
-approach over time — see [Scope](#scope) below.
+shell/fill split over time — see [Document kinds](#document-kinds)
+below.
 
 ## Why
 
@@ -19,12 +23,13 @@ reviewers to comment on directly than the Word documents they already
 know.
 
 quartifyr's answer: generate everything — the org's docx styling, the
-report shell's title/signature/ToC/abbreviations front matter, appendix
+shell's title/signature/ToC/abbreviations front matter, appendix
 numbering — from code and YAML, output real `.docx` all the way through,
-and let `reportifyr` do what it already does well: filling that shell with
-real tables, figures, and footnotes. No LaTeX. No manual Word template
-surgery. A new org's look is a YAML diff; a new project is a copy of the
-demo and a frontmatter edit.
+then hand the shell to a fill tool to do what it already does well:
+filling it with real tables, figures, and footnotes. That's `reportifyr`
+today. No LaTeX. No manual Word template surgery. A new org's look is a
+YAML diff; a new project is a `.qmd` with the right frontmatter, not a
+Word template someone hand-builds from scratch.
 
 ## Architecture: two passes
 
@@ -37,7 +42,7 @@ flowchart LR
         qmd --> render
         render --> shell["shell.docx\n(structure + placeholders,\nno real content yet)"]
     end
-    subgraph Pass2["Pass 2 — reportifyr (R)"]
+    subgraph Pass2["Pass 2 — fill (reportifyr, R)"]
         outputs["OUTPUTS/\n(tables, figures + metadata)"] --> fill["reportifyr::build_report()"]
         shell --> fill
         fill --> draft["report/draft/*.docx"]
@@ -52,10 +57,11 @@ flowchart LR
    tables, list of abbreviations (only ones actually used), numbered
    appendices — but no actual figures/tables yet, just `reportifyr`
    magic-string placeholders (`{rpfy}:filename.ext`).
-2. **Pass 2 (`reportifyr`, R)** fills that shell with real tables, figures,
-   and footnotes from an `OUTPUTS/` directory, exactly as `reportifyr`
-   already does for hand-built shells today, then optionally
-   `finalize_document()`s it.
+2. **Pass 2 (fill)** fills that shell with real tables, figures, and
+   footnotes from an `OUTPUTS/` directory, then optionally finalizes it.
+   `reportifyr` is today's fill tool for reports, doing this exactly as it
+   already does for hand-built shells; presentations are meant to use the
+   same shell/fill split, filled by `reportifyr`'s sibling `presentifyr`.
 
 Both passes are driven by one call: `render_report()` in `r/` (see
 [`r/README.md`](r/README.md)).
@@ -66,8 +72,8 @@ Both passes are driven by one call: `render_report()` in `r/` (see
 | --- | --- |
 | [`styling/`](styling/README.md) | Python package: turns a style YAML (fonts, colors, page setup) into a docx `reference-doc`; the `standard_footnotes.yaml` → `abbreviations.tex` bridge; headless Word field recalculation via LibreOffice (experimental). `uv`-managed venv. |
 | [`_extensions/quartifyr/`](_extensions/quartifyr/README.md) | Quarto extension: dynamic title page + status stamp, contributor/approver signature pages, numbered appendices. Composes with [A2-ai's `quarto-plus`](https://github.com/A2-ai/quarto-plus) (ToC/List of Figures/List of Tables/abbreviations/captions) rather than duplicating it. |
-| [`r/`](r/README.md) | `rv`-managed R environment pulling `reportifyr` and `pyro` straight from GitHub (no CRAN release exists for either), plus `render_report()`, the pass-1+pass-2 orchestration driver. |
-| [`examples/demo-report/`](examples/demo-report/README.md) | Complete, working example exercising every piece above, with an automated end-to-end smoke test. Start here. |
+| [`r/`](r/README.md) | `rv`-managed R environment providing `render_report()`, the pass-1+pass-2 orchestration driver. Pulls `reportifyr` and `pyro` straight from GitHub (no CRAN release exists for either) as today's fill backend. |
+| [`examples/demo-report/`](examples/demo-report/README.md) | Complete, working example exercising every piece above, with an automated end-to-end smoke test — a reference to compare against, not the only way to start a project (see [Standing up a new project](#standing-up-a-new-project)). |
 
 Each org overrides just the parts of the default look that differ
 (`styling/styles/default.yaml` is Times New Roman, black text, flat
@@ -122,49 +128,59 @@ See `styling/styles/default.yaml` for the full schema and
 
 ## Standing up a new project
 
-```bash
-cp -r examples/demo-report path/to/new-project
-cd path/to/new-project
-rm -rf .venv .report_init.json .rpfy-logs OUTPUTS/*/* rv/library
-```
+A project is a normal Quarto project plus the pieces `reportifyr` and
+this repo's `render_report()` expect. It needs:
 
-Then:
+1. **The extensions**, physically copied (not symlinked — Quarto's
+   extension loader doesn't follow symlinks) into `_extensions/` at the
+   project root, alongside the shell `.qmd`:
+   ```bash
+   quarto add A2-ai/quarto-plus
+   quarto add jprybylski/quartifyr
+   ```
+2. **`_quarto.yml`** setting `project: {output-dir: report/shell}` — this
+   is what redirects the rendered docx into `report/shell/`, where
+   `reportifyr::make_doc_dirs()` (called by `render_report()`) expects to
+   find it.
+3. **A shell `.qmd`** at the project root with `filters: [quarto-plus,
+   quartifyr]` and `toc-style-map: [{style: Title, level: 1}]`, plus
+   frontmatter for whichever front-matter pieces you want (`title`,
+   `contributors`/`approvers`, `synopsis`, `header-format`, ...) — see
+   [`_extensions/quartifyr/README.md`](_extensions/quartifyr/README.md)
+   for the full list, and use `{{< body-start >}}`/`{rpfy}:` placeholders/
+   `quarto-plus`'s caption shortcodes in the body as needed.
+4. **`reportifyr`'s own project structure** (`report/standard_footnotes.yaml`,
+   `report/config.yaml`, `OUTPUTS/`):
+   ```bash
+   Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'
+   ```
+5. **A docx reference-template** — reuse an existing org one, or build a
+   new one (see [Standing up a new org](#standing-up-a-new-org) above).
 
-1. If the new project lives outside this repo (the normal case — its own
-   git repo, not nested under `quartifyr/`), you can also remove `.here`;
-   it's only needed for projects nested inside another git repo (see
-   `examples/demo-report/README.md`'s explanation).
-2. `Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'`
-   to regenerate `.report_init.json` and the `report/`/`OUTPUTS/`
-   structure for this project.
-3. Edit `report.qmd`'s frontmatter (title, lead scientist,
-   contributors/approvers, etc.) and body content.
-4. Extend `report/standard_footnotes.yaml` with any project-specific
-   abbreviations (it starts from `reportifyr`'s org-wide defaults).
-5. Point `render.R` at your own `reference_doc` if you're not using the
-   default org styling.
-6. Write your own `scripts/`, producing `OUTPUTS/tables/`,
-   `OUTPUTS/figures/` artifacts via `reportifyr`'s
-   `write_csv_with_metadata()`/`ggsave_with_metadata()` wrappers.
-7. `Rscript render.R` (add `--final` once ready to finalize).
+Then write your own `scripts/`, producing `OUTPUTS/tables/`/
+`OUTPUTS/figures/` artifacts via `reportifyr`'s
+`write_csv_with_metadata()`/`ggsave_with_metadata()` wrappers, and render
+with `Rscript render.R` (add `--final` once ready to finalize).
 
-## Scope
+[`examples/demo-report/`](examples/demo-report/README.md) has all of the
+above wired together and working end to end — a reference to check your
+own setup against, not a starting point you're expected to fork.
 
-This is not a "title page generator." The two-pass, code-first
-shell/fill approach is meant to generalize across document kinds that
-scientific/regulated teams standardize on:
+## Document kinds
 
-- **Reports** (the current focus, via `reportifyr`)
-- **Presentations** — co-generated alongside reports, tying into A2-ai's
-  sibling `presentifyr` package (same "fyr" ecosystem as `reportifyr` and
-  `pyro`)
+The shell/fill split generalizes across whatever document kinds a
+scientific/regulated team standardizes on, not just reports:
+
+- **Reports** (the current focus, filled by `reportifyr`)
+- **Presentations** — filled by `reportifyr`'s sibling `presentifyr`
+  (same "fyr" ecosystem as `reportifyr` and `pyro`)
 - **Analysis plans**
 - **Memos**
 
-The pieces already built stay deliberately document-kind-agnostic where
-that costs nothing (the style YAML schema, the docx template generator);
+The pieces already built stay document-kind-agnostic where that costs
+nothing (the style YAML schema, the docx template generator);
 document-kind-specific pieces (title/signature pages, appendix numbering)
-live in the Quarto extension and are added as needed rather than
+live in the Quarto extension and get added as needed rather than
 speculatively.
 
 ## Status and known limitations
@@ -195,4 +211,4 @@ are deliberately incomplete rather than papered over:
 | Failure mode | Obscure LaTeX compile errors, package resolution | Ordinary Quarto/R/Python errors with normal stack traces |
 | Output format | PDF | `.docx` — reviewers use Word's own track-changes/comments |
 | Learning curve | Steep (LaTeX syntax, package ecosystem) | A `.qmd` is Markdown + YAML frontmatter |
-| Report fill | Custom | `reportifyr` (unchanged, proven, already in use) |
+| Report fill | Custom | `reportifyr` today — pass-2 is a pluggable fill step, not fixed to it |

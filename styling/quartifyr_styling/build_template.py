@@ -176,6 +176,17 @@ def _style_table_grid(doc: DocumentObject, config: StyleConfig) -> None:
         style.element.append(style_pr)
 
 
+def _style_header(doc: DocumentObject, config: StyleConfig) -> None:
+    """Styles the "Header" paragraph style so dynamic header text (added by
+    quartifyr_styling.layout's post-render step, since the actual per-project
+    text -- project code, report number, draft/final status -- isn't known
+    until render time) inherits correct formatting automatically instead of
+    Word's own default header look.
+    """
+    _set_font(doc.styles["Header"], config.fonts.body, config.fonts.sizes.footnote, color=config.colors.text)
+    _set_paragraph_format(doc.styles["Header"], alignment=WD_ALIGN_PARAGRAPH.CENTER)
+
+
 def _add_page_number_footer(doc: DocumentObject, config: StyleConfig) -> None:
     section = doc.sections[0]
     section.footer.is_linked_to_previous = False
@@ -262,6 +273,7 @@ def build_reference_docx(config: StyleConfig, output_path: str | Path) -> Path:
         _configure_toc_style(doc, level, config, page_width_in, config.page.margins_in.left)
 
     _style_table_grid(doc, config)
+    _style_header(doc, config)
     _add_page_number_footer(doc, config)
 
     output_path = Path(output_path)

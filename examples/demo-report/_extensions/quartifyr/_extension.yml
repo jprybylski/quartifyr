@@ -5,6 +5,7 @@ quarto-required: ">=1.6.36"
 contributes:
   shortcodes:
     - appendix.lua
+    - body_start.lua
   filters:
     # Order matters here for two independent reasons:
     #

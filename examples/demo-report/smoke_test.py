@@ -21,6 +21,7 @@ import zipfile
 from pathlib import Path
 
 import docx
+from docx.enum.text import WD_TAB_ALIGNMENT
 from docx.oxml.ns import qn
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -117,6 +118,55 @@ def main() -> int:
                 len(row) >= 2 and row[0] == "Title" and row[1] == "Population Pharmacokinetics of Theophylline"
                 for row in all_rows
             ),
+        )
+    )
+
+    checks.append(("logo image embedded on title page", any("png" in n.lower() for n in images)))
+    checks.append(("address rendered on title page", any("Raleigh, NC" in row_cell for row in all_rows for row_cell in row)))
+
+    checks.append(("document split into title/front-matter/body sections", len(document.sections) == 3))
+    title_section, front_matter_section, body_section = document.sections
+
+    header_expected = "ACME-001 - RPT-2026-014\tFINAL"
+    checks.append(("dynamic 2-zone page header resolved from header-format:", title_section.header.paragraphs[0].text == header_expected))
+    checks.append(
+        (
+            "header applies to all three sections",
+            title_section.header.paragraphs[0].text
+            == front_matter_section.header.paragraphs[0].text
+            == body_section.header.paragraphs[0].text,
+        )
+    )
+    # Tab stop must actually be flush right, not landing on the Header
+    # style's own inherited center tab -- see layout.py's
+    # _clear_inherited_tab_stops() docstring for the real-Word-verified bug
+    # this guards against.
+    header_tabs = title_section.header.paragraphs[0].paragraph_format.tab_stops
+    checks.append(("header has exactly one active (non-cleared) tab stop", sum(1 for t in header_tabs if t.alignment != WD_TAB_ALIGNMENT.CLEAR) == 1))
+
+    confidential_expected = "Confidential — Do Not Distribute"
+    checks.append(("title page footer has confidentiality label but no page number", title_section.footer.paragraphs[0].text == confidential_expected))
+    checks.append(("front-matter footer has confidentiality label + roman page number", front_matter_section.footer.paragraphs[0].text == f"{confidential_expected}\t1" and any("PAGE" in p._p.xml for p in front_matter_section.footer.paragraphs)))
+    checks.append(("body footer has confidentiality label + arabic page number", body_section.footer.paragraphs[0].text == f"{confidential_expected}\t1" and any("PAGE" in p._p.xml for p in body_section.footer.paragraphs)))
+    footer_tabs = body_section.footer.paragraphs[0].paragraph_format.tab_stops
+    checks.append(("footer has exactly one active (non-cleared) tab stop", sum(1 for t in footer_tabs if t.alignment != WD_TAB_ALIGNMENT.CLEAR) == 1))
+
+    front_matter_pg_num_type = front_matter_section._sectPr.find(qn("w:pgNumType"))
+    checks.append(
+        (
+            "front-matter section numbers in lowercase roman starting at i",
+            front_matter_pg_num_type is not None
+            and front_matter_pg_num_type.get(qn("w:start")) == "1"
+            and front_matter_pg_num_type.get(qn("w:fmt")) == "lowerRoman",
+        )
+    )
+    body_pg_num_type = body_section._sectPr.find(qn("w:pgNumType"))
+    checks.append(
+        (
+            "body section numbers in arabic, restarting at 1",
+            body_pg_num_type is not None
+            and body_pg_num_type.get(qn("w:start")) == "1"
+            and body_pg_num_type.get(qn("w:fmt")) == "decimal",
         )
     )
 

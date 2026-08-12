@@ -51,13 +51,46 @@ so this is load-bearing, not just a naming convention. See
    CLI (see `../styling/README.md`).
 2. Renders `shell_qmd` with Quarto against `templates/org-reference.docx`,
    passing `-M document-status:DRAFT` or `:FINAL` depending on `status`.
-3. Runs `reportifyr::build_report()` to fill in tables/figures/footnotes
+3. Runs `quartifyr-styling apply-layout` on the rendered shell -- applies a
+   dynamic page header (from the `.qmd`'s `header-format:` frontmatter, if
+   set) and, if the `.qmd` uses `{{< body-start >}}`, splits front matter
+   from the body into separate OOXML sections so body page numbering
+   restarts at 1. See "Page header/footer and page-restart" below.
+4. Runs `reportifyr::build_report()` to fill in tables/figures/footnotes
    from `OUTPUTS/`, producing `report/draft/<name>-draft.docx`.
-4. When `status = "final"`, also runs `reportifyr::finalize_document()`,
+5. When `status = "final"`, also runs `reportifyr::finalize_document()`,
    producing `report/final/<name>-final.docx`.
-5. Optionally (`recalculate_fields = TRUE`, default off), runs
+6. Optionally (`recalculate_fields = TRUE`, default off), runs
    `quartifyr-styling recalculate-fields` on each produced docx -- see
    "Word field recalculation" below.
+
+## Page header/footer and page numbering
+
+Opt-in, driven entirely by the shell `.qmd`'s frontmatter and body --
+nothing to configure in `render_report()` itself:
+
+- `header-format: "{project} - {report_number}"` (any frontmatter keys as
+  `{placeholder}`s) renders a two-zone header on every page: the resolved
+  template flush left, and the draft/final status flush right (always
+  shown, once a header is enabled).
+- `title_page.lua` automatically marks where the title page ends, and
+  `{{< body-start >}}`, placed right before the first real body heading
+  (e.g. right before `# Introduction`), marks where the numbered body
+  begins. Together, these split the document into three page-numbering
+  regions: the title page (no page number at all), the rest of the
+  front matter (ToC, list of figures/tables, abbreviations, synopsis,
+  signature pages, ... -- lowercase roman, starting at "i"), and the
+  body (arabic, restarting at "1"). If a `.qmd` never uses `{{<
+  body-start >}}`, the document is left as a single section -- the
+  header (if set) still applies throughout, but there's no page-number
+  split.
+- Every footer also shows a confidentiality label on the left, reusing
+  whatever `confidentiality:` is already set to for the title page (see
+  `../_extensions/quartifyr/README.md`) -- blank if `confidentiality:`
+  isn't set.
+
+See `../_extensions/quartifyr/README.md` and
+`../styling/README.md`'s `apply-layout` section for the mechanics.
 
 ## Word field recalculation (optional, off by default)
 

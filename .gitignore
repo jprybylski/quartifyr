@@ -20,6 +20,10 @@ templates/*.docx
 
 # reportifyr working documents (project-specific, not toolkit source)
 examples/*/report/shell/*.docx
+# Quarto copies referenced assets (e.g. a title-page logo) into the
+# output-dir alongside the rendered docx -- a render byproduct, not source
+# (the source lives at examples/*/assets/).
+examples/*/report/shell/assets/
 examples/*/abbreviations.tex
 examples/*/report/draft/*
 examples/*/report/final/*

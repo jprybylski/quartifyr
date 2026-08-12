@@ -1,12 +1,23 @@
 ---
 title: "Population Pharmacokinetics of Theophylline"
 subtitle: "Demonstration Report"
-report-type: "Clinical Study Report"
+report-type: "Modeling Analysis Report"
 document-status: "draft"
 date: "2026-08-11"
 lead-scientist: "Jane Doe, PharmD"
 version: "1.0"
 confidentiality: "Confidential — Do Not Distribute"
+logo: "assets/logo.png"
+logo-width: "2in"
+address:
+  - "quartifyr Demo Sponsor"
+  - "123 Research Parkway, Suite 400"
+  - "Raleigh, NC 27609"
+# {project}/{report_number} feed header-format: below; report-type/
+# lead-scientist/etc. above are separate, title-page-only fields.
+project: "ACME-001"
+report_number: "RPT-2026-014"
+header-format: "{project} - {report_number}"
 title-page-extra:
   - label: "Sponsor"
     value: "quartifyr Demo Sponsor"
@@ -77,6 +88,8 @@ Terms and abbreviations used in this report are listed below.
 :::
 
 {{< pagebreak >}}
+
+{{< body-start >}}
 
 # Introduction
 

@@ -7,6 +7,7 @@ import sys
 
 from .abbreviations import AbbreviationsError, build_abbreviations_tex
 from .build_template import build_reference_docx
+from .layout import LayoutError, apply_layout_from_qmd
 from .recalculate_fields import FieldRecalculationError, recalculate_fields
 from .schema import StyleConfig, StyleConfigError
 
@@ -42,6 +43,16 @@ def _cmd_recalculate_fields(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_apply_layout(args: argparse.Namespace) -> int:
+    try:
+        output_path = apply_layout_from_qmd(args.docx, args.qmd, status=args.status)
+    except (LayoutError, FileNotFoundError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"applied layout to {output_path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="quartifyr-styling")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -66,6 +77,15 @@ def build_parser() -> argparse.ArgumentParser:
     recalc.add_argument("--docx", required=True, help="Path to the docx to recalculate (modified in place)")
     recalc.add_argument("--timeout", type=int, default=120, help="Timeout in seconds (default: 120)")
     recalc.set_defaults(func=_cmd_recalculate_fields)
+
+    layout = subparsers.add_parser(
+        "apply-layout",
+        help="Split a rendered docx into front-matter/body sections at {{< body-start >}} and apply a dynamic header",
+    )
+    layout.add_argument("--docx", required=True, help="Path to the rendered docx (modified in place)")
+    layout.add_argument("--qmd", required=True, help="Path to the shell .qmd (read for header-format: and its placeholders)")
+    layout.add_argument("--status", required=True, choices=["draft", "final", "DRAFT", "FINAL"], help="Resolved draft/final status")
+    layout.set_defaults(func=_cmd_apply_layout)
 
     return parser
 
