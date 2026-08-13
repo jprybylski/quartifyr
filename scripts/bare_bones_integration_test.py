@@ -121,7 +121,7 @@ def main() -> int:
         # A2-ai/quarto-plus` already left in the demo project.
         shutil.copytree(DEMO_DIR / "_extensions" / "A2-ai", project_dir / "_extensions" / "A2-ai")
         qmd_path = project_dir / "report.qmd"
-        qmd_path.write_text(REPORT_QMD)
+        qmd_path.write_text(REPORT_QMD, encoding="utf-8")
 
         shell_docx = project_dir / "shell.docx"
         print("1/3: quarto render (no _quarto.yml, no output-dir convention)...")
