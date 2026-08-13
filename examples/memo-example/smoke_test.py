@@ -10,7 +10,7 @@ filled in with a real caption, no leftover reportifyr magic strings, and
 signature-page/synopsis/ToC artifacts, confirming title_page.lua/
 signature_page.lua/synopsis.lua all stayed no-ops for a memo project.
 
-Requires the full toolchain: R (with this repo's rv-managed packages),
+Requires the full toolchain: R (with this repo's renv-managed packages),
 Quarto, and the styling/ venv. Run from anywhere:
 
     python3 examples/memo-example/smoke_test.py

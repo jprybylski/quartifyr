@@ -23,7 +23,7 @@ Three components, each independently usable:
 | --- | --- | --- |
 | `_extensions/quartifyr/` | Quarto extension: title page, signature pages, synopsis, appendices, page header/footer | Lua (pandoc filters/shortcodes) |
 | `styling/` | Turns a style YAML into a docx `reference-doc`; abbreviations bridge; `apply-layout` post-processing; headless LibreOffice field recalc | Python (`quartifyr-styling` package) |
-| `r/` | `render_report()` orchestration driver chaining Quarto render → `apply-layout` → `reportifyr::build_report()` | R (`rv`-managed) |
+| `r/` | `render_report()` orchestration driver chaining Quarto render → `apply-layout` → `reportifyr::build_report()` | R (`renv`-managed) |
 
 `examples/demo-report/` is a complete working example exercising every
 piece, with an automated end-to-end smoke test — treat it as the
@@ -67,7 +67,7 @@ quartifyr-styling recalculate-fields --docx path/to/report-final.docx   # experi
 ### R (`r/`)
 
 ```bash
-cd r && rv sync   # requires rv: https://a2-ai.github.io/rv-docs/
+cd r && Rscript -e 'renv::restore()'   # requires renv: https://rstudio.github.io/renv/
 
 # As a CLI
 Rscript render.R /path/to/project/report.qmd
@@ -100,7 +100,7 @@ python3 scripts/quarto_only_smoke_test.py
 ```
 
 Both integration tests require the full toolchain on `PATH` (Quarto, R
-with `rv`-synced packages, the `styling/` venv) and skip (exit 0) if
+with `renv`-restored packages, the `styling/` venv) and skip (exit 0) if
 `Rscript`/`quarto` aren't available. These are the tests that actually
 prove correctness — the `styling/` pytest suite covers unit-level Python
 logic only, and there is no Lua unit test suite, so changes to
@@ -109,15 +109,13 @@ test.
 
 ### CI
 
-`.github/workflows/ci.yml` runs `styling-tests` (pure Python, all three
-OSes) and `full-pipeline` (Quarto+R+reportifyr, Linux/macOS only — `rv`
-doesn't reliably support R 4.6 on Windows, see `r/README.md`). The
-full-pipeline job runs the repo-root Quick Start commands verbatim, so it
-also doubles as a check that the README itself stays accurate.
-`full-pipeline`'s very first step after the Quarto setup action is
-`scripts/quarto_only_smoke_test.py`, deliberately before any R/uv/rv
-setup — proof the Quarto-only render path has no R or Python dependency
-of its own.
+`.github/workflows/ci.yml` runs `styling-tests` and `full-pipeline`
+(Quarto+R+reportifyr), both across all three OSes. The full-pipeline job
+runs the repo-root Quick Start commands verbatim, so it also doubles as a
+check that the README itself stays accurate. `full-pipeline`'s very first
+step after the Quarto setup action is `scripts/quarto_only_smoke_test.py`,
+deliberately before any R/uv setup — proof the Quarto-only render path
+has no R or Python dependency of its own.
 
 ## Architecture notes that span files
 

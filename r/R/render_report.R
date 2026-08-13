@@ -44,8 +44,10 @@
 #' @param standard_footnotes_yaml,config_yaml,figures_path,tables_path
 #'   Passed through to reportifyr; default to the standard project layout
 #'   `reportifyr::initialize_report_project()` creates, alongside `shell_qmd`.
-#' @param venv_bin Path to the `styling/` venv's `bin/` directory (holds the
-#'   `quartifyr-styling` CLI used for the abbreviations bridge).
+#' @param venv_bin Path to the `styling/` venv's executables directory
+#'   (holds the `quartifyr-styling` CLI used for the abbreviations
+#'   bridge) -- `bin/` on Linux/macOS, `Scripts/` on Windows (a `uv venv`/
+#'   `python -m venv` layout difference, not a quartifyr convention).
 #' @param recalculate_fields Whether to run `quartifyr-styling
 #'   recalculate-fields` (headless LibreOffice) on each produced docx
 #'   afterward, so the delivered file's ToC page numbers/entries are
@@ -94,7 +96,7 @@ render_report <- function(
   config_yaml = file.path(dirname(shell_qmd), "report", "config.yaml"),
   figures_path = file.path(dirname(shell_qmd), "OUTPUTS", "figures"),
   tables_path = file.path(dirname(shell_qmd), "OUTPUTS", "tables"),
-  venv_bin = file.path(toolkit_root, ".venv", "bin"),
+  venv_bin = file.path(toolkit_root, ".venv", if (.Platform$OS.type == "windows") "Scripts" else "bin"),
   recalculate_fields = FALSE,
   resolve_same_page_crossrefs = FALSE
 ) {
@@ -141,7 +143,10 @@ render_report <- function(
     stop("standard_footnotes_yaml not found: ", standard_footnotes_yaml)
   }
 
-  quartifyr_styling_bin <- file.path(venv_bin, "quartifyr-styling")
+  quartifyr_styling_bin <- file.path(
+    venv_bin,
+    if (.Platform$OS.type == "windows") "quartifyr-styling.exe" else "quartifyr-styling"
+  )
   if (!file.exists(quartifyr_styling_bin)) {
     stop(
       "quartifyr-styling not found at ", quartifyr_styling_bin,

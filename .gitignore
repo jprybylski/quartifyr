@@ -8,8 +8,8 @@ __pycache__/
 # Local tool downloads (quarto CLI tarball, etc.) - not part of the repo
 .tools/
 
-# rv already ships its own rv/.gitignore (ignores rv/library/) in each
-# rv-managed subproject (r/, examples/demo-report/) - nothing needed here.
+# renv already ships its own renv/.gitignore (ignores renv/library/) in
+# each renv-managed subproject (r/, examples/*/) - nothing needed here.
 
 # Generated build artifacts - regenerate with `quartifyr-styling build`.
 # org-reference.docx is the one exception: it's committed on purpose so

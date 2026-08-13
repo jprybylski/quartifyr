@@ -2,7 +2,7 @@
 """Integration test for the "Using the pieces directly" path documented
 in the repo-root README: plain `quarto render` + `quartifyr-styling
 apply-layout` + a direct `reportifyr::build_report()` call, with none of
-`r/`'s `render_report()` orchestration, its `rv`-managed environment, or
+`r/`'s `render_report()` orchestration, its `renv`-managed environment, or
 its `report/shell`/`report/draft`/`report/final` directory convention
 involved.
 
@@ -12,7 +12,7 @@ but a physical copy of the extensions and a bare `report.qmd` -- no
 `_quarto.yml`, no `render.R`, no `r/` at all.
 
 Reuses `examples/demo-report`'s already-initialized reportifyr project
-(its `OUTPUTS/`, `standard_footnotes.yaml`, `config.yaml`, and rv-managed
+(its `OUTPUTS/`, `standard_footnotes.yaml`, `config.yaml`, and renv-managed
 `reportifyr`/`pyro` installation) as the *reportifyr* side of the test --
 having a working reportifyr project on disk somewhere is a reportifyr
 prerequisite, unrelated to what's being tested here -- while proving
@@ -20,7 +20,7 @@ prerequisite, unrelated to what's being tested here -- while proving
 structure required between the Quarto render and the reportifyr fill.
 
 Requires the full toolchain: Quarto, R (with examples/demo-report's
-rv-managed packages already synced and initialized), and the styling/
+renv-managed packages already restored and initialized), and the styling/
 venv. Run from anywhere:
 
     python3 scripts/bare_bones_integration_test.py
@@ -91,7 +91,9 @@ def main() -> int:
     if shutil.which("Rscript") is None:
         print("SKIP: Rscript not found on PATH", file=sys.stderr)
         return 0
-    quartifyr_styling_bin = REPO_ROOT / ".venv" / "bin" / "quartifyr-styling"
+    venv_subdir = "Scripts" if sys.platform == "win32" else "bin"
+    exe_suffix = ".exe" if sys.platform == "win32" else ""
+    quartifyr_styling_bin = REPO_ROOT / ".venv" / venv_subdir / f"quartifyr-styling{exe_suffix}"
     if not quartifyr_styling_bin.exists():
         print(f"SKIP: quartifyr-styling not found at {quartifyr_styling_bin}", file=sys.stderr)
         return 0
@@ -119,7 +121,7 @@ def main() -> int:
         # A2-ai/quarto-plus` already left in the demo project.
         shutil.copytree(DEMO_DIR / "_extensions" / "A2-ai", project_dir / "_extensions" / "A2-ai")
         qmd_path = project_dir / "report.qmd"
-        qmd_path.write_text(REPORT_QMD)
+        qmd_path.write_text(REPORT_QMD, encoding="utf-8")
 
         shell_docx = project_dir / "shell.docx"
         print("1/3: quarto render (no _quarto.yml, no output-dir convention)...")
@@ -164,8 +166,20 @@ def main() -> int:
         filled_docx = project_dir / "filled.docx"
         final_docx = project_dir / "final.docx"
         print("3/3: reportifyr::build_report() + finalize_document() called directly (no make_doc_dirs()/render_report())...")
+        # .as_posix(), not str(): reportifyr's make_doc_dirs() (called
+        # internally by build_report()/finalize_document()) splits
+        # docx_in on "/" to derive sibling output paths, with no
+        # backslash handling -- a native Windows path here silently
+        # corrupts into garbage paths (confirmed via a real CI failure:
+        # "draft.docx/C:\...\shell.docx-clean.docx"). render_report()
+        # never hits this because R's own file.path() always uses "/",
+        # even on Windows; this script builds paths with Python's
+        # pathlib instead, which defaults to "\" there.
         result = subprocess.run(
-            ["Rscript", str(BUILD_REPORT_HELPER), str(shell_docx), str(filled_docx), str(final_docx)],
+            [
+                "Rscript", str(BUILD_REPORT_HELPER),
+                shell_docx.as_posix(), filled_docx.as_posix(), final_docx.as_posix(),
+            ],
             cwd=DEMO_DIR,
             capture_output=True,
             text=True,

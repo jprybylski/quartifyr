@@ -6,7 +6,7 @@ Quarto + reportifyr exactly as a report author would) and asserts on the
 resulting docx: no leftover reportifyr magic strings, the expected tables/
 images/abbreviations are present, and appendix numbering resolved.
 
-Requires the full toolchain: R (with this repo's rv-managed packages),
+Requires the full toolchain: R (with this repo's renv-managed packages),
 Quarto, and the styling/ venv. Run from anywhere:
 
     python3 examples/demo-report/smoke_test.py

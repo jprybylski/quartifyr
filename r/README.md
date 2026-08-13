@@ -1,10 +1,10 @@
 # quartifyr r/
 
-`rv`-managed R environment providing the pass-2 orchestration driver:
+`renv`-managed R environment providing the pass-2 orchestration driver:
 `R/render_report.R`'s `render_report()` runs the full two-pass pipeline
 (Quarto shell render → `reportifyr` fill) in one call, plus a thin CLI
 (`render.R`) around it. `reportifyr` and `pyro` are pulled straight from
-GitHub (see `rproject.toml`) since neither has a CRAN release.
+GitHub (see `DESCRIPTION`) since neither has a CRAN release.
 
 This is a convenience wrapper, not a requirement — it chains `quarto
 render`, `quartifyr-styling apply-layout`, and `reportifyr::build_report()`
@@ -16,110 +16,31 @@ instead; see the repo-root README's
 
 ## Setup
 
-Requires [`rv`](https://a2-ai.github.io/rv-docs/) (cross-platform install
-instructions at that link), then:
+Requires [`renv`](https://rstudio.github.io/renv/) (`install.packages("renv")`
+from any R session), then:
 
 ```bash
-cd r && rv sync
+cd r && Rscript -e 'renv::restore()'
 ```
 
-**Windows**: `rv sync` currently isn't reliable on Windows for this
-project, for two identified reasons ([investigated here](https://github.com/jprybylski/quartifyr/issues/4)):
+This installs every package pinned in `renv.lock` -- including
+`reportifyr`/`pyro`, pulled straight from GitHub (`DESCRIPTION`'s
+`Remotes:` field tells `renv` where to fetch them from) -- into a
+project-local `renv/library/`, isolated from any other R project's
+library. `.Rprofile` (`source("renv/activate.R")`) activates that library
+automatically the moment R starts in this directory, so no further setup
+is needed once `restore()` finishes.
 
-- This project's `rproject.toml` files used to pin
-  `r_version = "4.6"`, while `pyro` and `reportifyr` (both pulled from
-  GitHub, always built from source -- see `rproject.toml`) each carry
-  their *own* bundled `rproject.toml` pinned to `r_version = "4.5"`. `rv`
-  activates its managed library by walking up from an R subprocess's cwd
-  looking for an `rproject.toml`; during `rv sync`, the subprocess built
-  to compile `pyro`/`reportifyr` from source picks up *their* bundled
-  file, not just this project's, so running R 4.6.1 against that 4.5 pin
-  made `rv` enter "safe mode" -- confirmed directly, a real Windows CI
-  run of this repo reproduced the exact message: "R version specified in
-  config (4.5) does not match session version (4.6.1)... entering safe
-  mode". This is now fixed by pinning `r_version = "4.5"` here too,
-  matching upstream.
+`DESCRIPTION`'s `Imports:` list, not what any individual `.R` file happens
+to `library()`/`::`-reference, is what `renv::snapshot()` treats as this
+project's direct dependencies (`snapshot.type: explicit` in
+`renv/settings.json`) -- add a new direct dependency there before running
+`renv::install()`/`renv::snapshot()` for it.
 
-That fix wasn't sufficient, though. With the version pin aligned, `rv
-sync` on Windows still fails installing `pyro` from source, every time
-(reproduced twice in independent CI runs):
-
-```
-Failed to install pyro:
-    ...
-    ** byte-compile and prepare package for lazy loading
-    Error in loadNamespace(j <- i[[1L]], c(lib.loc, .libPaths()), versionCheck = vI[[j]]) :
-      there is no package called 'rlang'
-    ...
-    ERROR: lazy loading failed for package 'pyro'
-```
-
-`rlang` *is* correctly resolved as a dependency of `pyro` in the
-committed `rv.lock` -- this isn't a dependency-graph bug, it's rv's
-installer not guaranteeing `rlang` is actually installed and visible on
-the library path before starting `pyro`'s from-source build on Windows.
-The identical error/symptom was previously reported and closed as
-[A2-ai/rv#27](https://github.com/A2-ai/rv/issues/27) without a documented
-fix, so this looks like either a regression or an edge case (specifically
-around GitHub-sourced packages' from-source Windows builds) that wasn't
-actually resolved. There's no `rv sync` flag to force serial installs as
-a workaround. `A2-ai/reportifyr`'s own CI does pass `rv sync` on
-`windows-latest` and adds a PPM repository the same way this project
-tried, but that's not proof this specific failure is avoidable: its own
-`rproject.toml` (`use_lockfile = false`) pulls `pyro` from a private
-prebuilt-binary package repository, not from GitHub source like this
-project's `rproject.toml` does -- so it never exercises the
-build-pyro-from-git-source path that triggers this failure here.
-
-Because of this, CI doesn't verify the full Quarto+R+reportifyr pipeline
-on Windows (see `.github/workflows/ci.yml`); `styling/`'s pytest suite,
-which doesn't touch `rv`, is verified on Windows.
-
-### Using `renv` instead of `rv`
-
-`rv` was chosen here to match `reportifyr`/`pyro`'s own A2-ai ecosystem
-convention (both ship an `rproject.toml`, not a `renv.lock`), but nothing
-about quartifyr's own mechanics -- `quarto render`, `quartifyr-styling`,
-`render_report()` -- cares which R package manager put `reportifyr` on
-the library path. `renv` is a reasonable alternative, particularly on
-Windows: it's the more broadly-used, Posit-backed tool, and doesn't have
-the all-or-nothing R-version-mismatch gate that causes `rv`'s Windows
-problem above -- confirmed directly (not just by reputation): a real
-`renv` project with `reportifyr`/`pyro` installed from GitHub, given a
-deliberately mismatched R version in `renv.lock`, produced only an
-`renv::status()` warning ("out-of-sync... lockfile was generated with R
-4.5.0, but you're using R 4.6.1") -- `library(reportifyr)` still loaded
-fine, no refusal to activate. `rv` and `renv` can't both manage the same
-project at once (they each own `.Rprofile`-based library activation), so
-switching means replacing `rv` here entirely, not layering `renv` on top.
-What would differ:
-
-- **`renv.lock`** (JSON) instead of `rproject.toml`/`rv.lock` (TOML) as
-  the dependency manifest.
-- **`renv::restore()`** instead of `rv sync` to install from the lockfile;
-  **`renv::snapshot()`** instead of `rv` auto-updating `rv.lock` on
-  `rv add`/`rv sync`. Note `renv::snapshot()`'s default `type = "implicit"`
-  only records packages actually referenced via `library()`/`require()`
-  somewhere in the project's `.R`/`.qmd` files -- confirmed directly: a
-  freshly `renv::install()`-ed package didn't appear in `renv.lock` at
-  all until a script `library()`-referenced it. `rv`, by contrast, tracks
-  whatever's explicitly listed in `rproject.toml` regardless of whether
-  any script currently uses it. Worth knowing before assuming an
-  `renv::install()` alone is "done."
-- **GitHub-only packages** (`reportifyr`, `pyro` -- neither has a CRAN
-  release): install with `renv::install("a2-ai/reportifyr")` and
-  `renv::install("a2-ai/pyro")`; `renv::snapshot()` then records the
-  GitHub remote in `renv.lock` automatically (confirmed directly --
-  `"RemoteType": "github", "RemoteUsername": "a2-ai", "RemoteRepo":
-  "reportifyr", "RemoteRef": "main", "RemoteSha": "<commit>"`), playing
-  the same role as `rproject.toml`'s explicit `git =
-  "https://github.com/a2-ai/reportifyr.git"` dependency entries.
-- **Activation**: `renv`'s own bootstrap in `.Rprofile`
-  (`source("renv/activate.R")`, generated by `renv::init()` -- confirmed
-  directly) instead of `rv`'s (`source("rv/scripts/rvr.R")` /
-  `source("rv/scripts/activate.R")`).
-- **`.gitignore`**: `renv/library/` instead of `rv/library/` (both are
-  regenerable local package caches, not source).
+Fetching `reportifyr`/`pyro` from GitHub during `renv::restore()` goes
+through the GitHub REST API; on a machine that's already hit GitHub's
+60-requests/hour anonymous rate limit, set `GITHUB_PAT` (any personal
+access token, no special scopes needed) first.
 
 ## Usage
 

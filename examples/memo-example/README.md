@@ -85,9 +85,10 @@ the result.
 ## Running it
 
 For the full two-pass pipeline (the real budget-timeline figure filled
-in), this repo's toolchain needs to be set up: `rv sync` in both
-`../../r/` and this directory, and the `styling/` venv (`uv venv .venv &&
-uv pip install -e "./styling[dev]"` from the repo root).
+in), this repo's toolchain needs to be set up: `Rscript -e
+'renv::restore()'` in both `../../r/` and this directory, and the
+`styling/` venv (`uv venv .venv && uv pip install -e "./styling[dev]"`
+from the repo root).
 
 `.report_init.json` is gitignored (it embeds a username/timestamp), so a
 fresh clone needs one setup call before the first render:

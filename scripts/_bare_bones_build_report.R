@@ -14,7 +14,7 @@
 #' MUST be launched with the reportifyr project directory as the actual
 #' process working directory (e.g. subprocess.run(..., cwd=...) on the
 #' Python side), not just setwd() from within this script after the fact:
-#' rv-managed projects activate their local package library via an
+#' renv-managed projects activate their local package library via an
 #' .Rprofile that only runs at R startup, based on the directory R was
 #' launched from -- a setwd() partway through this script would be too
 #' late, and reportifyr wouldn't be found on the library path (confirmed

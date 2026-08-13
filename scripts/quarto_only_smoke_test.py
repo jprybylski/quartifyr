@@ -22,7 +22,7 @@ so nothing lands back in the tracked example directory.
 Deliberately stdlib-only (zipfile + re to pull text out of the rendered
 docx, no python-docx) so this needs nothing beyond `quarto` itself and a
 plain `python3` -- not even the styling/ venv -- letting it run as the
-very first check in CI, before any R/uv/rv setup, as real proof the
+very first check in CI, before any R/uv setup, as real proof the
 Quarto-only path has no Python or R dependency of its own.
 
 Run from anywhere:

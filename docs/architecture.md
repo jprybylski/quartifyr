@@ -49,7 +49,7 @@ directly](#using-the-pieces-directly) below.
 
 ## Using the pieces directly
 
-You don't need `r/`'s orchestration driver, its `rv`-managed R
+You don't need `r/`'s orchestration driver, its `renv`-managed R
 environment, or its `report/shell`/`report/draft`/`report/final`
 directory convention to use quartifyr. If you already have your own
 Quarto project and your own `reportifyr` project set up, the underlying
