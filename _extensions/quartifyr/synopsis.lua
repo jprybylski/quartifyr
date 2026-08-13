@@ -43,19 +43,22 @@
 --
 --   synopsis-style: definition-list  # default: label bold on its own
 --                                     # line, value indented beneath it
---   synopsis-style: inline           # "**Label:**  value" on one line
---                                     # (bold, one point larger than
---                                     # body -- see build_template.py's
---                                     # "Synopsis Inline Label" style);
---                                     # a row whose value is more than
---                                     # one line, or whose one line is an
---                                     # embedded image, falls back to
---                                     # definition-list's exact shape
---                                     # (label on its own line, value
---                                     # indented beneath -- not some
---                                     # third hybrid look) since
---                                     # "Label:  " can't run into an
---                                     # image the way it can into text
+--   synopsis-style: inline           # "**Label:**  " runs into the
+--                                     # row's first value line (bold,
+--                                     # one point larger than body -- see
+--                                     # build_template.py's "Synopsis
+--                                     # Inline Label" style); any further
+--                                     # lines (more text, an image) still
+--                                     # follow underneath, indented, same
+--                                     # as definition-list's value. Only
+--                                     # when the *first* line is itself
+--                                     # an embedded image (can't run
+--                                     # "Label:  " into a picture) does
+--                                     # the label fall back to standing
+--                                     # alone on its own line -- still
+--                                     # bold/larger/colon-suffixed, just
+--                                     # without anything following it on
+--                                     # the same line
 --   synopsis-style: table            # a real two-column Word table --
 --                                     # see the warning below
 --   synopsis-style: false            # parse synopsis: (so the data can
@@ -134,10 +137,9 @@ local synopsis_style = "definition-list"
 -- "SynopsisLabel"/"SynopsisValue" are the style *IDs* (no space) of the
 -- "Synopsis Label"/"Synopsis Value" paragraph styles build_template.py
 -- defines -- raw OOXML w:pStyle references the ID, not the display name
--- (see this repo's pStyle-vs-display-name gotcha docs). synopsis-style:
--- inline's block-layout fallback (see is_image_line/add_row below)
--- reuses these exact same two paragraphs, indent included -- it's meant
--- to read as "this row is definition-list-shaped," not a third look.
+-- (see this repo's pStyle-vs-display-name gotcha docs). value_paragraph
+-- is also what any line after a row's first (merged or not) renders as
+-- under synopsis-style: inline -- see add_row below.
 local function label_paragraph(label)
   return string.format(
     [[<w:p><w:pPr><w:pStyle w:val="SynopsisLabel"/></w:pPr><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>]],
@@ -166,12 +168,27 @@ end
 -- one-point-larger-than-body label; the colon and two spaces before the
 -- value are literal characters in the second (unstyled) run, not
 -- spacing/indent properties, since this is inline text, not a
--- paragraph-level layout choice.
+-- paragraph-level layout choice. Paragraph-level formatting still comes
+-- from "SynopsisLabel" (spacing before/after), same as
+-- inline_label_only_paragraph below, so a row that merges and a row
+-- that can't share the same rhythm.
 local function inline_paragraph(label, text)
   return string.format(
-    [[<w:p><w:r><w:rPr><w:rStyle w:val="SynopsisInlineLabel"/></w:rPr><w:t xml:space="preserve">%s:</w:t></w:r><w:r><w:t xml:space="preserve">  %s</w:t></w:r></w:p>]],
+    [[<w:p><w:pPr><w:pStyle w:val="SynopsisLabel"/></w:pPr><w:r><w:rPr><w:rStyle w:val="SynopsisInlineLabel"/></w:rPr><w:t xml:space="preserve">%s:</w:t></w:r><w:r><w:t xml:space="preserve">  %s</w:t></w:r></w:p>]],
     utils.escape_xml(label),
     utils.escape_xml(text)
+  )
+end
+
+-- synopsis-style: inline's fallback when the row's *first* value line is
+-- itself an embedded image -- "Label:  " can't run into a picture, so
+-- the label stands alone, but still bold/larger (rStyle
+-- "SynopsisInlineLabel", not plain "SynopsisLabel" text) and still
+-- colon-suffixed, so it doesn't read as a third, unstyled look.
+local function inline_label_only_paragraph(label)
+  return string.format(
+    [[<w:p><w:pPr><w:pStyle w:val="SynopsisLabel"/></w:pPr><w:r><w:rPr><w:rStyle w:val="SynopsisInlineLabel"/></w:rPr><w:t xml:space="preserve">%s:</w:t></w:r></w:p>]],
+    utils.escape_xml(label)
   )
 end
 
@@ -350,16 +367,27 @@ return {
       end
 
       -- definition-list: every row is label_paragraph + indented
-      -- value_paragraph(s). inline: a row whose value is a single
-      -- non-image line renders as one "**Label:**  value" paragraph;
-      -- anything else (multiple lines, or a lone image) falls back to
-      -- that exact same definition-list shape, not a third look.
+      -- value_paragraph(s). inline: the label runs into the row's first
+      -- value line whenever that line is plain text (any further lines
+      -- -- more text, an image -- still follow underneath, indented,
+      -- exactly like definition-list's value); only when the first line
+      -- is itself an image does the label stand alone instead (still
+      -- bold/larger/colon-suffixed via inline_label_only_paragraph, not
+      -- plain_label_paragraph's unstyled look).
       local paras = {}
       local function add_row(label, lines)
-        if synopsis_style == "inline" and #lines == 1 and not is_image_line(lines[1]) then
-          table.insert(paras, inline_paragraph(label, lines[1]))
+        if synopsis_style == "inline" then
+          if is_image_line(lines[1]) then
+            table.insert(paras, inline_label_only_paragraph(label))
+          else
+            table.insert(paras, inline_paragraph(label, lines[1]))
+          end
+          for i = 2, #lines do
+            table.insert(paras, value_paragraph(lines[i]))
+          end
           return
         end
+
         table.insert(paras, label_paragraph(label))
         for _, line in ipairs(lines) do
           table.insert(paras, value_paragraph(line))

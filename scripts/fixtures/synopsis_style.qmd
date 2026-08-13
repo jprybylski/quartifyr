@@ -8,6 +8,11 @@ synopsis:
       - "First line of results."
       - image: "placeholder.png"
         width: "2in"
+  - label: "Figure"
+    value:
+      - image: "placeholder.png"
+        width: "2in"
+      - "Caption after the image."
 filters:
   - quartifyr
 format: docx

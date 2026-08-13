@@ -309,22 +309,42 @@ def main() -> int:
         )
     )
 
-    # Results has more than one value line (and one of them's an image),
-    # so it can't run into "Label:  " the way Title/Objectives/Methods
-    # do -- it falls back to definition-list's exact shape (indented
-    # value), not some third hybrid look (see synopsis.lua's add_row).
-    results_label_idx = next((i for i, t in enumerate(body_paragraph_texts) if t == "Results"), None)
-    checks.append(("synopsis-style: inline falls back to block layout for a multi-line/image row (Results)", results_label_idx is not None))
+    # Results' first value line is plain text, so the label still merges
+    # into it even though two more lines (more text, then an embedded
+    # image) follow -- only the *first* line's shape decides
+    # mergeability (see synopsis.lua's add_row).
+    results_merge_idx = next(
+        (
+            i
+            for i, t in enumerate(body_paragraph_texts)
+            if t == "Results:  Peak concentrations and inter-participant variability are summarized in Table 1 and Figure 1."
+        ),
+        None,
+    )
+    checks.append(("synopsis-style: inline merges the label into Results' first line even though more lines follow", results_merge_idx is not None))
 
-    results_value_ind = None
-    if results_label_idx is not None:
-        value_ppr = body_paragraphs[results_label_idx + 1].find(qn("w:pPr"))
-        if value_ppr is not None:
-            results_value_ind = value_ppr.find(qn("w:ind"))
+    results_rstyle = None
+    if results_merge_idx is not None:
+        results_rstyle = body_paragraphs[results_merge_idx].find(".//" + qn("w:rStyle"))
     checks.append(
         (
-            "inline's block-layout fallback has no w:ind override (inherits the indented 'Synopsis Value' style, same as definition-list)",
-            results_value_ind is None,
+            "Results' merged label run uses the bold/larger 'Synopsis Inline Label' character style too",
+            results_rstyle is not None and results_rstyle.get(qn("w:val")) == "SynopsisInlineLabel",
+        )
+    )
+
+    # The row's second (continuation) line still follows underneath,
+    # indented the same as definition-list's value -- no repeated label,
+    # no w:ind override.
+    continuation_ind = None
+    if results_merge_idx is not None:
+        continuation_ppr = body_paragraphs[results_merge_idx + 1].find(qn("w:pPr"))
+        if continuation_ppr is not None:
+            continuation_ind = continuation_ppr.find(qn("w:ind"))
+    checks.append(
+        (
+            "Results' second value line follows underneath with no w:ind override (inherits the indented 'Synopsis Value' style)",
+            continuation_ind is None,
         )
     )
 

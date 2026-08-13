@@ -96,18 +96,30 @@ def _check_inline(work_dir: Path, checks: list[tuple[str, bool]]) -> None:
     rstyle = paragraphs[single_line_idx].find(".//" + qn("w:rStyle")) if single_line_idx is not None else None
     checks.append(("inline: label run uses the 'SynopsisInlineLabel' character style", rstyle is not None and rstyle.get(qn("w:val")) == "SynopsisInlineLabel"))
 
-    # Results has 2 value lines (one an embedded image) -- can't run into
-    # "Label:  ", so it falls back to definition-list's exact shape
-    # (indented value), not some third hybrid look.
-    results_label_idx = next((i for i, t in enumerate(texts) if t == "Results"), None)
-    checks.append(("inline: multi-line/image row falls back to a standalone label paragraph (Results)", results_label_idx is not None))
+    # Results' first value line is plain text ("First line of results."),
+    # so the label still merges into it even though a second (image) line
+    # follows -- only the *first* line's shape decides mergeability.
+    results_merge_idx = next((i for i, t in enumerate(texts) if t == "Results:  First line of results."), None)
+    checks.append(("inline: label merges into the first line even when more lines (an image) follow (Results)", results_merge_idx is not None))
 
-    fallback_ind = None
-    if results_label_idx is not None:
-        ppr = paragraphs[results_label_idx + 1].find(qn("w:pPr"))
+    # Figure's first value line IS an image -- can't run "Label:  " into
+    # a picture, so the label stands alone, but still bold/larger/colon
+    # via inline_label_only_paragraph, not plain_label_paragraph's
+    # unstyled look; its second line ("Caption after the image.") still
+    # follows underneath, indented, same as definition-list's value.
+    figure_label_idx = next((i for i, t in enumerate(texts) if t == "Figure:"), None)
+    checks.append(("inline: a row whose first line is an image falls back to a standalone label (Figure)", figure_label_idx is not None))
+
+    figure_rstyle = paragraphs[figure_label_idx].find(".//" + qn("w:rStyle")) if figure_label_idx is not None else None
+    checks.append(("inline: standalone fallback label still uses the bold/larger 'SynopsisInlineLabel' style", figure_rstyle is not None and figure_rstyle.get(qn("w:val")) == "SynopsisInlineLabel"))
+
+    caption_idx = next((i for i, t in enumerate(texts) if t == "Caption after the image."), None)
+    caption_ind = None
+    if caption_idx is not None:
+        ppr = paragraphs[caption_idx].find(qn("w:pPr"))
         if ppr is not None:
-            fallback_ind = ppr.find(qn("w:ind"))
-    checks.append(("inline: block-layout fallback has no w:ind override (inherits the indented style, same as definition-list)", fallback_ind is None))
+            caption_ind = ppr.find(qn("w:ind"))
+    checks.append(("inline: a line after the fallback label has no w:ind override (inherits the indented style)", caption_idx is not None and caption_ind is None))
 
 
 def _check_table(work_dir: Path, checks: list[tuple[str, bool]]) -> None:
