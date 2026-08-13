@@ -97,8 +97,8 @@ def _check_inline(work_dir: Path, checks: list[tuple[str, bool]]) -> None:
     checks.append(("inline: label run uses the 'SynopsisInlineLabel' character style", rstyle is not None and rstyle.get(qn("w:val")) == "SynopsisInlineLabel"))
 
     # Results has 2 value lines (one an embedded image) -- can't run into
-    # "Label:  ", so it falls back to definition-list's block shape minus
-    # the indent.
+    # "Label:  ", so it falls back to definition-list's exact shape
+    # (indented value), not some third hybrid look.
     results_label_idx = next((i for i, t in enumerate(texts) if t == "Results"), None)
     checks.append(("inline: multi-line/image row falls back to a standalone label paragraph (Results)", results_label_idx is not None))
 
@@ -107,7 +107,7 @@ def _check_inline(work_dir: Path, checks: list[tuple[str, bool]]) -> None:
         ppr = paragraphs[results_label_idx + 1].find(qn("w:pPr"))
         if ppr is not None:
             fallback_ind = ppr.find(qn("w:ind"))
-    checks.append(("inline: block-layout fallback value is flush (w:ind left=0 override present)", fallback_ind is not None and fallback_ind.get(qn("w:left")) == "0"))
+    checks.append(("inline: block-layout fallback has no w:ind override (inherits the indented style, same as definition-list)", fallback_ind is None))
 
 
 def _check_table(work_dir: Path, checks: list[tuple[str, bool]]) -> None:

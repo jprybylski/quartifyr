@@ -49,10 +49,11 @@
 --                                     # "Synopsis Inline Label" style);
 --                                     # a row whose value is more than
 --                                     # one line, or whose one line is an
---                                     # embedded image, falls back to the
---                                     # same shape as definition-list
---                                     # minus the indent (label on its
---                                     # own line, value flush beneath) --
+--                                     # embedded image, falls back to
+--                                     # definition-list's exact shape
+--                                     # (label on its own line, value
+--                                     # indented beneath -- not some
+--                                     # third hybrid look) since
 --                                     # "Label:  " can't run into an
 --                                     # image the way it can into text
 --   synopsis-style: table            # a real two-column Word table --
@@ -135,9 +136,8 @@ local synopsis_style = "definition-list"
 -- defines -- raw OOXML w:pStyle references the ID, not the display name
 -- (see this repo's pStyle-vs-display-name gotcha docs). synopsis-style:
 -- inline's block-layout fallback (see is_image_line/add_row below)
--- reuses them too; only the value paragraph's indent differs between it
--- and definition-list, added here as an inline w:ind override rather
--- than a second style, since that's the only thing that differs.
+-- reuses these exact same two paragraphs, indent included -- it's meant
+-- to read as "this row is definition-list-shaped," not a third look.
 local function label_paragraph(label)
   return string.format(
     [[<w:p><w:pPr><w:pStyle w:val="SynopsisLabel"/></w:pPr><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>]],
@@ -145,14 +145,9 @@ local function label_paragraph(label)
   )
 end
 
-local function value_paragraph(line, indent)
-  local ppr = '<w:pStyle w:val="SynopsisValue"/>'
-  if not indent then
-    ppr = ppr .. '<w:ind w:left="0"/>'
-  end
+local function value_paragraph(line)
   return string.format(
-    [[<w:p><w:pPr>%s</w:pPr><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>]],
-    ppr,
+    [[<w:p><w:pPr><w:pStyle w:val="SynopsisValue"/></w:pPr><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>]],
     utils.escape_xml(line)
   )
 end
@@ -358,7 +353,7 @@ return {
       -- value_paragraph(s). inline: a row whose value is a single
       -- non-image line renders as one "**Label:**  value" paragraph;
       -- anything else (multiple lines, or a lone image) falls back to
-      -- the same shape as definition-list minus the indent.
+      -- that exact same definition-list shape, not a third look.
       local paras = {}
       local function add_row(label, lines)
         if synopsis_style == "inline" and #lines == 1 and not is_image_line(lines[1]) then
@@ -367,7 +362,7 @@ return {
         end
         table.insert(paras, label_paragraph(label))
         for _, line in ipairs(lines) do
-          table.insert(paras, value_paragraph(line, synopsis_style == "definition-list"))
+          table.insert(paras, value_paragraph(line))
         end
       end
 

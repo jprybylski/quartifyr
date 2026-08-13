@@ -311,8 +311,8 @@ def main() -> int:
 
     # Results has more than one value line (and one of them's an image),
     # so it can't run into "Label:  " the way Title/Objectives/Methods
-    # do -- it falls back to the same block shape as synopsis-style:
-    # definition-list, minus the indent (see synopsis.lua's add_row).
+    # do -- it falls back to definition-list's exact shape (indented
+    # value), not some third hybrid look (see synopsis.lua's add_row).
     results_label_idx = next((i for i, t in enumerate(body_paragraph_texts) if t == "Results"), None)
     checks.append(("synopsis-style: inline falls back to block layout for a multi-line/image row (Results)", results_label_idx is not None))
 
@@ -323,8 +323,8 @@ def main() -> int:
             results_value_ind = value_ppr.find(qn("w:ind"))
     checks.append(
         (
-            "inline's block-layout fallback keeps the value flush (no left indent)",
-            results_value_ind is not None and results_value_ind.get(qn("w:left")) == "0",
+            "inline's block-layout fallback has no w:ind override (inherits the indented 'Synopsis Value' style, same as definition-list)",
+            results_value_ind is None,
         )
     )
 
