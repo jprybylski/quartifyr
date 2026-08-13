@@ -1,0 +1,54 @@
+#!/bin/sh
+# Reminder, not an enforcer: warns when a commit touches a file whose
+# visible CLI output feeds one of docs/assets/img/*.gif, but the commit
+# doesn't also touch that GIF (or its docs/assets/tapes/*.tape recipe).
+# Skip with SKIP_DOCS_ASSET_CHECK=1 or `git commit --no-verify` for
+# changes that don't actually alter what's on screen (e.g. a comment or
+# a refactor with identical printed output) -- this can't tell the
+# difference, it only knows the source file changed.
+#
+# Add a case here whenever a new tape is added, alongside a matching
+# "Regenerate whenever ..." line in that tape's own header comment --
+# this is the machine-checkable half of the same rule, kept next to it
+# so they're easy to update together.
+
+if [ -n "$SKIP_DOCS_ASSET_CHECK" ]; then
+  exit 0
+fi
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$staged" ] && exit 0
+
+assets_touched=$(printf '%s\n' "$staged" | grep -c '^docs/assets/\(img\|tapes\)/')
+found=0
+
+check_tape() {
+  tape="$1"
+  gif="$2"
+  pattern="$3"
+  [ "$assets_touched" -gt 0 ] && return
+  if printf '%s\n' "$staged" | grep -qE "$pattern"; then
+    echo "pre-commit reminder: staged changes touch a source for $tape" >&2
+    echo "  ($gif may now be stale -- see the tape's own header for the exact recipe)" >&2
+    found=1
+  fi
+}
+
+check_tape docs/assets/tapes/render-pipeline.tape docs/assets/img/render-pipeline.gif \
+  '^(r/(render\.R|R/render_report\.R|DESCRIPTION|renv\.lock)|examples/demo-report/(render\.R|DESCRIPTION|renv\.lock|report\.qmd|report/(standard_footnotes|config)\.yaml))$'
+
+check_tape docs/assets/tapes/quarto-only.tape docs/assets/img/quarto-only.gif \
+  '^(examples/demo-report/report\.qmd|templates/org-reference\.docx|_extensions/quartifyr/)'
+
+check_tape docs/assets/tapes/styling-build.tape docs/assets/img/styling-build.gif \
+  '^styling/(styles/default\.yaml|quartifyr_styling/(build_template|schema)\.py)$'
+
+if [ "$found" = "1" ]; then
+  echo "" >&2
+  echo "If the change is purely cosmetic (comments, refactors with identical" >&2
+  echo "output), commit anyway with SKIP_DOCS_ASSET_CHECK=1 git commit ..." >&2
+  echo "or git commit --no-verify." >&2
+  exit 1
+fi
+
+exit 0
