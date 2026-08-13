@@ -403,3 +403,11 @@ incomplete rather than papered over:
 | Output format | PDF | `.docx` — reviewers use Word's own track-changes/comments |
 | Learning curve | Steep (LaTeX syntax, package ecosystem) | A `.qmd` is Markdown + YAML frontmatter |
 | Report fill | Custom | `reportifyr` today — pass-2 is a pluggable fill step, not fixed to it |
+
+## License
+
+[GPL-3.0-or-later](LICENSE). `r/` (the orchestration driver) directly
+imports and calls [`reportifyr`](https://github.com/A2-ai/reportifyr)
+and [`pyro`](https://github.com/A2-ai/pyro), both GPL-3-licensed, so the
+whole repo is licensed GPL-3.0-or-later to match rather than splitting
+licenses across components.

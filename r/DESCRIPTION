@@ -19,4 +19,5 @@ Imports:
 Remotes:
     a2-ai/pyro,
     a2-ai/reportifyr
+License: GPL (>= 3)
 Encoding: UTF-8
