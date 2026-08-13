@@ -108,6 +108,21 @@ def test_synopsis_value_alignment_overridable(tmp_path):
     assert doc.styles["Synopsis Value"].paragraph_format.alignment == WD_ALIGN_PARAGRAPH.LEFT
 
 
+def test_synopsis_inline_label_is_bold_and_one_point_larger_than_body(tmp_path):
+    config = StyleConfig.load(DEFAULT_YAML)
+    _, doc = _build(tmp_path)
+    inline_label = doc.styles["Synopsis Inline Label"]
+    assert inline_label.font.bold is True
+    assert inline_label.font.size.pt == config.fonts.sizes.body + 1
+
+
+def test_synopsis_inline_label_size_tracks_body_size_override(tmp_path):
+    override_path = tmp_path / "org.yaml"
+    override_path.write_text("fonts:\n  sizes:\n    body: 13\n")
+    _, doc = _build(tmp_path, override_path)
+    assert doc.styles["Synopsis Inline Label"].font.size.pt == 14
+
+
 def test_page_size_and_margins_applied(tmp_path):
     _, doc = _build(tmp_path)
     section = doc.sections[0]

@@ -288,31 +288,43 @@ def main() -> int:
     body_paragraphs = list(document.element.body.iter(qn("w:p")))
     body_paragraph_texts = ["".join(t.text or "" for t in p.findall(".//" + qn("w:t"))) for p in body_paragraphs]
 
-    title_label_idx = next(
-        (
-            i
-            for i in range(len(body_paragraph_texts) - 1)
-            if body_paragraph_texts[i] == "Title" and body_paragraph_texts[i + 1] == "Population Pharmacokinetics of Theophylline"
-        ),
+    # report.qmd sets synopsis-style: inline -- a row with a single
+    # non-image value line (Title, Objectives, Methods) renders as one
+    # "Label:  value" paragraph, label and value in separate runs so the
+    # label alone can carry the bold/larger "Synopsis Inline Label"
+    # character style (see build_template.py).
+    title_row_idx = next(
+        (i for i, t in enumerate(body_paragraph_texts) if t == "Title:  Population Pharmacokinetics of Theophylline"),
         None,
     )
-    checks.append(("synopsis title row has the real report title", title_label_idx is not None))
+    checks.append(("synopsis title row has the real report title", title_row_idx is not None))
 
-    # report.qmd sets synopsis-style: label-list (the default) -- value
-    # paragraphs sit flush under their label, not indented, unlike
-    # synopsis-style: definition-list. synopsis.lua achieves this with an
-    # inline w:ind w:left="0" override on top of the shared "Synopsis
-    # Value" style (which otherwise carries a nonzero indent), so its
-    # absence here would mean that override silently stopped applying.
-    title_value_ind = None
-    if title_label_idx is not None:
-        value_ppr = body_paragraphs[title_label_idx + 1].find(qn("w:pPr"))
-        if value_ppr is not None:
-            title_value_ind = value_ppr.find(qn("w:ind"))
+    title_row_rstyle = None
+    if title_row_idx is not None:
+        title_row_rstyle = body_paragraphs[title_row_idx].find(".//" + qn("w:rStyle"))
     checks.append(
         (
-            "synopsis-style: label-list keeps the value flush (no left indent)",
-            title_value_ind is not None and title_value_ind.get(qn("w:left")) == "0",
+            "synopsis-style: inline's label run uses the bold, larger 'Synopsis Inline Label' character style",
+            title_row_rstyle is not None and title_row_rstyle.get(qn("w:val")) == "SynopsisInlineLabel",
+        )
+    )
+
+    # Results has more than one value line (and one of them's an image),
+    # so it can't run into "Label:  " the way Title/Objectives/Methods
+    # do -- it falls back to the same block shape as synopsis-style:
+    # definition-list, minus the indent (see synopsis.lua's add_row).
+    results_label_idx = next((i for i, t in enumerate(body_paragraph_texts) if t == "Results"), None)
+    checks.append(("synopsis-style: inline falls back to block layout for a multi-line/image row (Results)", results_label_idx is not None))
+
+    results_value_ind = None
+    if results_label_idx is not None:
+        value_ppr = body_paragraphs[results_label_idx + 1].find(qn("w:pPr"))
+        if value_ppr is not None:
+            results_value_ind = value_ppr.find(qn("w:ind"))
+    checks.append(
+        (
+            "inline's block-layout fallback keeps the value flush (no left indent)",
+            results_value_ind is not None and results_value_ind.get(qn("w:left")) == "0",
         )
     )
 

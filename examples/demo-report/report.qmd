@@ -44,7 +44,7 @@ contributors:
 approvers:
   - name: "Alice Lee, MD"
     title: "Medical Director"
-synopsis-style: label-list
+synopsis-style: inline
 synopsis:
   - label: "Objectives"
     value: "To characterize the pharmacokinetics of theophylline following oral administration."

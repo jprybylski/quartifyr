@@ -1,0 +1,21 @@
+---
+title: "Synopsis Style Test"
+synopsis:
+  - label: "Objectives"
+    value: "A single plain-text value line."
+  - label: "Results"
+    value:
+      - "First line of results."
+      - image: "placeholder.png"
+        width: "2in"
+filters:
+  - quartifyr
+format: docx
+---
+
+::: {custom-style="Heading 1"}
+Synopsis
+:::
+
+::: .synopsis
+:::

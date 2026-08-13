@@ -202,20 +202,30 @@ def _style_bibliography(doc: DocumentObject, config: StyleConfig) -> None:
 
 
 def _style_synopsis(doc: DocumentObject, config: StyleConfig) -> None:
-    """Create/configure the 'Synopsis Label'/'Synopsis Value' paragraph
-    styles synopsis.lua's raw OOXML rows reference by pStyle (style *ID*,
-    not display name -- see this repo's pStyle gotcha docs).
+    """Create/configure the paragraph/character styles synopsis.lua's raw
+    OOXML references by style *ID* (not display name -- see this repo's
+    pStyle gotcha docs) for its synopsis-style: options.
 
-    Gives the synopsis section a definition-list look -- bold label line,
-    indented value beneath it, a small gap between a label and its own
-    value but a full gap before the next label -- without a real Word
-    table (quartifyr issue #11: a table had the right "look" but put
-    reportifyr's per-figure footnote under the wrong column). Both are
-    based on "Normal" rather than hand-set fonts so they automatically
-    track fonts/colors/line_spacing changes there; "Synopsis Value"
-    leaves its own alignment unset unless config.synopsis.alignment is
-    given, so it inherits config.paragraph.alignment by default -- the
-    granular per-section override issue #10 asked for.
+    "Synopsis Label"/"Synopsis Value" give synopsis-style: definition-list
+    (the default) its look -- bold label line, indented value beneath it,
+    a small gap between a label and its own value but a full gap before
+    the next label -- without a real Word table (quartifyr issue #11: a
+    table had the right "look" but put reportifyr's per-figure footnote
+    under the wrong column). Both are based on "Normal" rather than
+    hand-set fonts so they automatically track fonts/colors/line_spacing
+    changes there; "Synopsis Value" leaves its own alignment unset unless
+    config.synopsis.alignment is given, so it inherits
+    config.paragraph.alignment by default -- the granular per-section
+    override issue #10 asked for.
+
+    "Synopsis Inline Label" is a character style (only a *character*
+    style can apply to part of a paragraph, unlike the two paragraph
+    styles above) for synopsis-style: inline's "**Label:**  value" runs
+    -- bold and one point larger than body text, config-driven so it
+    scales with fonts.sizes.body rather than a size hardcoded in
+    synopsis.lua (which has no access to this style YAML at all -- see
+    that filter's own comment on why its table-border color is
+    hardcoded for the same reason).
     """
     label = _get_or_add_style(doc, "Synopsis Label", WD_STYLE_TYPE.PARAGRAPH, base="Normal")
     _set_font(label, config.fonts.body, config.fonts.sizes.body, color=config.colors.text, bold=True)
@@ -232,6 +242,9 @@ def _style_synopsis(doc: DocumentObject, config: StyleConfig) -> None:
         space_after_pt=config.synopsis.value_space_after_pt,
         alignment=_ALIGNMENTS[config.synopsis.alignment] if config.synopsis.alignment else None,
     )
+
+    inline_label = _get_or_add_style(doc, "Synopsis Inline Label", WD_STYLE_TYPE.CHARACTER, base="Default Paragraph Font")
+    _set_font(inline_label, config.fonts.body, config.fonts.sizes.body + 1, color=config.colors.text, bold=True)
 
 
 def _style_hyperlink(doc: DocumentObject, config: StyleConfig) -> None:

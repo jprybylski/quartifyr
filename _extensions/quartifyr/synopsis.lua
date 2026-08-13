@@ -39,13 +39,22 @@
 -- list mixing strings with `{image: "path", width: "..."}` entries,
 -- interleaved in whatever order they're written.
 --
--- `synopsis-style:` picks the rendered layout -- default `"label-list"`:
+-- `synopsis-style:` picks the rendered layout -- default `"definition-list"`:
 --
---   synopsis-style: label-list       # default: plain paragraphs, label
---                                     # bold on its own line, value flush
---                                     # left on the line(s) below it
---   synopsis-style: definition-list  # value indented under its label,
---                                     # otherwise identical spacing
+--   synopsis-style: definition-list  # default: label bold on its own
+--                                     # line, value indented beneath it
+--   synopsis-style: inline           # "**Label:**  value" on one line
+--                                     # (bold, one point larger than
+--                                     # body -- see build_template.py's
+--                                     # "Synopsis Inline Label" style);
+--                                     # a row whose value is more than
+--                                     # one line, or whose one line is an
+--                                     # embedded image, falls back to the
+--                                     # same shape as definition-list
+--                                     # minus the indent (label on its
+--                                     # own line, value flush beneath) --
+--                                     # "Label:  " can't run into an
+--                                     # image the way it can into text
 --   synopsis-style: table            # a real two-column Word table --
 --                                     # see the warning below
 --   synopsis-style: false            # parse synopsis: (so the data can
@@ -53,7 +62,7 @@
 --                                     # nothing -- not even a blank
 --                                     # paragraph, just an empty div
 --
--- label-list/definition-list are deliberately NOT a table -- after two
+-- definition-list/inline are deliberately NOT a table -- after two
 -- earlier attempts that were: embedding a real `pandoc.Image` directly
 -- inside a table cell (which only works by building the table via
 -- pandoc's Table AST instead of raw OOXML, and that AST table's column
@@ -76,9 +85,9 @@
 -- figure, individually -- exactly the same mechanism a `{rpfy}:` figure
 -- in the qmd body already uses (confirmed: this is why the body's own
 -- Figure 1 has never had this problem). A synopsis figure is just
--- another body-level `{rpfy}:` magic string under label-list/
--- definition-list, so it inherits that already-correct positioning for
--- free, with no table-splitting bookkeeping needed at all.
+-- another body-level `{rpfy}:` magic string under definition-list/
+-- inline, so it inherits that already-correct positioning for free, with
+-- no table-splitting bookkeeping needed at all.
 --
 -- `synopsis-style: table` still works -- reportifyr does support magic
 -- strings inside table cells -- but reintroduces exactly the footnote
@@ -104,7 +113,7 @@ local utils = require("quartifyr_utils")
 
 local DEFAULT_FIGURE_WIDTH = "3in"
 
-local VALID_STYLES = { ["definition-list"] = true, ["label-list"] = true, ["table"] = true }
+local VALID_STYLES = { ["definition-list"] = true, ["inline"] = true, ["table"] = true }
 
 local function stringify_or_nil(meta_val)
   if meta_val == nil then
@@ -119,16 +128,16 @@ end
 
 local doc_title = nil
 local rows = {} -- list of {label=, lines={...}}
-local synopsis_style = "label-list"
+local synopsis_style = "definition-list"
 
 -- "SynopsisLabel"/"SynopsisValue" are the style *IDs* (no space) of the
 -- "Synopsis Label"/"Synopsis Value" paragraph styles build_template.py
 -- defines -- raw OOXML w:pStyle references the ID, not the display name
--- (see this repo's pStyle-vs-display-name gotcha docs). Both label-list
--- and definition-list reuse them for font/spacing; only the value
--- paragraph's indent differs between the two, added here as an inline
--- w:ind override (definition-list) rather than a second style, since
--- that's the only thing that differs.
+-- (see this repo's pStyle-vs-display-name gotcha docs). synopsis-style:
+-- inline's block-layout fallback (see is_image_line/add_row below)
+-- reuses them too; only the value paragraph's indent differs between it
+-- and definition-list, added here as an inline w:ind override rather
+-- than a second style, since that's the only thing that differs.
 local function label_paragraph(label)
   return string.format(
     [[<w:p><w:pPr><w:pStyle w:val="SynopsisLabel"/></w:pPr><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>]],
@@ -145,6 +154,29 @@ local function value_paragraph(line, indent)
     [[<w:p><w:pPr>%s</w:pPr><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>]],
     ppr,
     utils.escape_xml(line)
+  )
+end
+
+-- A line is "an image" once parse_value has turned it into a `{rpfy}:`
+-- magic string (see magic_string_for_image below) -- checked by prefix
+-- rather than carrying a separate is_image flag through `rows`, since
+-- that's the one thing that distinguishes an image line from plain text
+-- by the time it's just a string.
+local function is_image_line(line)
+  return line:sub(1, 7) == "{rpfy}:"
+end
+
+-- synopsis-style: inline's "**Label:**  value" run -- "SynopsisInlineLabel"
+-- is the character style ID (see build_template.py) for the bold,
+-- one-point-larger-than-body label; the colon and two spaces before the
+-- value are literal characters in the second (unstyled) run, not
+-- spacing/indent properties, since this is inline text, not a
+-- paragraph-level layout choice.
+local function inline_paragraph(label, text)
+  return string.format(
+    [[<w:p><w:r><w:rPr><w:rStyle w:val="SynopsisInlineLabel"/></w:rPr><w:t xml:space="preserve">%s:</w:t></w:r><w:r><w:t xml:space="preserve">  %s</w:t></w:r></w:p>]],
+    utils.escape_xml(label),
+    utils.escape_xml(text)
   )
 end
 
@@ -260,7 +292,7 @@ return {
       if raw_style == false then
         synopsis_style = false
       elseif raw_style == nil then
-        synopsis_style = "label-list"
+        synopsis_style = "definition-list"
       else
         local s = stringify_or_nil(raw_style)
         if s == "false" then
@@ -270,11 +302,11 @@ return {
         else
           quarto.log.warning(
             "synopsis.lua: synopsis-style must be false, 'definition-list', "
-              .. "'label-list', or 'table' (got '"
+              .. "'inline', or 'table' (got '"
               .. tostring(s)
-              .. "'); defaulting to 'label-list'"
+              .. "'); defaulting to 'definition-list'"
           )
-          synopsis_style = "label-list"
+          synopsis_style = "definition-list"
         end
       end
 
@@ -311,7 +343,7 @@ return {
             .. "synopsis figure inside a table cell lands after the whole "
             .. "table, not tucked directly under that figure (reportifyr "
             .. "groups cell footnotes per table element). Use "
-            .. "'label-list' or 'definition-list' if a synopsis row embeds "
+            .. "'definition-list' or 'inline' if a synopsis row embeds "
             .. "an image."
         )
         local field_rows = { { label = "Title", value_lines = { doc_title or "" } } }
@@ -322,13 +354,26 @@ return {
         return div
       end
 
-      local indent = synopsis_style == "definition-list"
-      local paras = { label_paragraph("Title"), value_paragraph(doc_title or "", indent) }
-      for _, r in ipairs(rows) do
-        table.insert(paras, label_paragraph(r.label))
-        for _, line in ipairs(r.lines) do
-          table.insert(paras, value_paragraph(line, indent))
+      -- definition-list: every row is label_paragraph + indented
+      -- value_paragraph(s). inline: a row whose value is a single
+      -- non-image line renders as one "**Label:**  value" paragraph;
+      -- anything else (multiple lines, or a lone image) falls back to
+      -- the same shape as definition-list minus the indent.
+      local paras = {}
+      local function add_row(label, lines)
+        if synopsis_style == "inline" and #lines == 1 and not is_image_line(lines[1]) then
+          table.insert(paras, inline_paragraph(label, lines[1]))
+          return
         end
+        table.insert(paras, label_paragraph(label))
+        for _, line in ipairs(lines) do
+          table.insert(paras, value_paragraph(line, synopsis_style == "definition-list"))
+        end
+      end
+
+      add_row("Title", { doc_title or "" })
+      for _, r in ipairs(rows) do
+        add_row(r.label, r.lines)
       end
 
       table.insert(div.content, pandoc.RawBlock("openxml", table.concat(paras, "\n")))

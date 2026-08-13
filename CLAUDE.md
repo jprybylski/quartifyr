@@ -99,15 +99,24 @@ python3 scripts/check_template_freshness.py   # rebuild if it has drifted
 # Quarto-render-only path (no R, no reportifyr, no styling venv) for both
 # examples, against the committed reference-doc -- only needs `quarto`
 python3 scripts/quarto_only_smoke_test.py
+
+# Unit-style check of synopsis.lua's synopsis-style: options (definition-list/
+# inline/table/false) against a small standalone fixture -- needs `quarto`
+# and python-docx (the styling/ venv), but not R/reportifyr
+python3 scripts/test_synopsis_styles.py
 ```
 
 Both integration tests require the full toolchain on `PATH` (Quarto, R
 with `renv`-restored packages, the `styling/` venv) and skip (exit 0) if
 `Rscript`/`quarto` aren't available. These are the tests that actually
 prove correctness: the `styling/` pytest suite covers unit-level Python
-logic only, and there is no Lua unit test suite, so changes to
-`_extensions/quartifyr/*.lua` are only verified by running the smoke
-test.
+logic only, and there is no *native* Lua unit test suite (no busted/
+similar harness) -- `scripts/test_synopsis_styles.py` is the closest
+thing, a Python-driven test that renders a small fixture per
+`synopsis-style:` option and asserts on the resulting docx's raw XML
+structure, isolating synopsis.lua's own logic from the full pipeline.
+Everything else in `_extensions/quartifyr/*.lua` is only verified by
+running the smoke test.
 
 ### CI
 
