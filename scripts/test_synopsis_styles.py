@@ -96,6 +96,20 @@ def _check_inline(work_dir: Path, checks: list[tuple[str, bool]]) -> None:
     rstyle = paragraphs[single_line_idx].find(".//" + qn("w:rStyle")) if single_line_idx is not None else None
     checks.append(("inline: label run uses the 'SynopsisInlineLabel' character style", rstyle is not None and rstyle.get(qn("w:val")) == "SynopsisInlineLabel"))
 
+    # Regression check: LibreOffice does not reliably give a run's
+    # referenced character style priority over its paragraph style's own
+    # bold (confirmed by rendering -- the label came out plain and the
+    # value came out bold, backwards from both styles' definitions, even
+    # though "SynopsisInlineLabel" should win per the OOXML spec). Direct
+    # run-level <w:b/> is unambiguous in both Word and LibreOffice, so
+    # both runs must carry an explicit one rather than relying on either
+    # style's own rPr cascading correctly.
+    runs = paragraphs[single_line_idx].findall(qn("w:r")) if single_line_idx is not None else []
+    label_run_b = runs[0].find(qn("w:rPr") + "/" + qn("w:b")) if len(runs) > 0 else None
+    value_run_b = runs[1].find(qn("w:rPr") + "/" + qn("w:b")) if len(runs) > 1 else None
+    checks.append(("inline: label run has an explicit direct <w:b/>, not just the rStyle reference", label_run_b is not None and label_run_b.get(qn("w:val")) != "0"))
+    checks.append(("inline: value run has an explicit direct <w:b w:val=\"0\"/> overriding the paragraph style's bold", value_run_b is not None and value_run_b.get(qn("w:val")) == "0"))
+
     # Results' first value line is plain text ("First line of results."),
     # so the label still merges into it even though a second (image) line
     # follows -- only the *first* line's shape decides mergeability.

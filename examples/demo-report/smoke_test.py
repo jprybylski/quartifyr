@@ -309,6 +309,18 @@ def main() -> int:
         )
     )
 
+    # Regression check: LibreOffice doesn't reliably give a run's
+    # referenced character style priority over its paragraph style's own
+    # bold -- confirmed by rendering this exact row and finding the label
+    # plain, the value bold (backwards from both styles' definitions).
+    # Both runs need an explicit direct <w:b/>/<w:b w:val="0"/>, not just
+    # style references, to render correctly regardless of that cascade.
+    title_row_runs = body_paragraphs[title_row_idx].findall(qn("w:r")) if title_row_idx is not None else []
+    title_label_run_b = title_row_runs[0].find(qn("w:rPr") + "/" + qn("w:b")) if len(title_row_runs) > 0 else None
+    title_value_run_b = title_row_runs[1].find(qn("w:rPr") + "/" + qn("w:b")) if len(title_row_runs) > 1 else None
+    checks.append(("inline's label run has an explicit direct <w:b/>, not just the rStyle reference", title_label_run_b is not None and title_label_run_b.get(qn("w:val")) != "0"))
+    checks.append(("inline's value run has an explicit direct <w:b w:val=\"0\"/> overriding the paragraph style's bold", title_value_run_b is not None and title_value_run_b.get(qn("w:val")) == "0"))
+
     # Results' first value line is plain text, so the label still merges
     # into it even though two more lines (more text, then an embedded
     # image) follow -- only the *first* line's shape decides

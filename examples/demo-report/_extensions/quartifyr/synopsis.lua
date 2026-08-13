@@ -172,9 +172,20 @@ end
 -- from "SynopsisLabel" (spacing before/after), same as
 -- inline_label_only_paragraph below, so a row that merges and a row
 -- that can't share the same rhythm.
+--
+-- Both runs also carry an explicit direct <w:b/>/<w:b w:val="0"/> on top
+-- of the style references, deliberately redundant with what
+-- "SynopsisInlineLabel"'s/"SynopsisLabel"'s own rPr already says --
+-- confirmed by rendering that LibreOffice does NOT reliably give a
+-- run's referenced character style priority over its paragraph style's
+-- own rPr for run-level bold (the label rendered plain and the value
+-- rendered bold, backwards from both styles' definitions), even though
+-- that ordering is what OOXML's spec calls for. Direct run formatting
+-- is unambiguously top priority in both Word and LibreOffice, so it's
+-- the only reliable way to pin bold down here.
 local function inline_paragraph(label, text)
   return string.format(
-    [[<w:p><w:pPr><w:pStyle w:val="SynopsisLabel"/></w:pPr><w:r><w:rPr><w:rStyle w:val="SynopsisInlineLabel"/></w:rPr><w:t xml:space="preserve">%s:</w:t></w:r><w:r><w:t xml:space="preserve">  %s</w:t></w:r></w:p>]],
+    [[<w:p><w:pPr><w:pStyle w:val="SynopsisLabel"/></w:pPr><w:r><w:rPr><w:rStyle w:val="SynopsisInlineLabel"/><w:b/></w:rPr><w:t xml:space="preserve">%s:</w:t></w:r><w:r><w:rPr><w:b w:val="0"/></w:rPr><w:t xml:space="preserve">  %s</w:t></w:r></w:p>]],
     utils.escape_xml(label),
     utils.escape_xml(text)
   )
@@ -184,10 +195,11 @@ end
 -- itself an embedded image -- "Label:  " can't run into a picture, so
 -- the label stands alone, but still bold/larger (rStyle
 -- "SynopsisInlineLabel", not plain "SynopsisLabel" text) and still
--- colon-suffixed, so it doesn't read as a third, unstyled look.
+-- colon-suffixed, so it doesn't read as a third, unstyled look. See
+-- inline_paragraph's comment on the explicit <w:b/>.
 local function inline_label_only_paragraph(label)
   return string.format(
-    [[<w:p><w:pPr><w:pStyle w:val="SynopsisLabel"/></w:pPr><w:r><w:rPr><w:rStyle w:val="SynopsisInlineLabel"/></w:rPr><w:t xml:space="preserve">%s:</w:t></w:r></w:p>]],
+    [[<w:p><w:pPr><w:pStyle w:val="SynopsisLabel"/></w:pPr><w:r><w:rPr><w:rStyle w:val="SynopsisInlineLabel"/><w:b/></w:rPr><w:t xml:space="preserve">%s:</w:t></w:r></w:p>]],
     utils.escape_xml(label)
   )
 end
