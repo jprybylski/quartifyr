@@ -2,9 +2,10 @@
 # render, then a final render, showing real reportifyr fill-pass output (add tables,
 # add plots, add footnotes, finalize) and the resulting docx paths.
 #
-# Run from examples/demo-report/, with the r/ and demo-report rv environments synced
-# (`rv sync` in both) and `reportifyr::initialize_report_project(project_dir = getwd())`
-# already run at least once:
+# Run from examples/demo-report/, with the r/ and demo-report renv environments
+# restored (`Rscript -e 'renv::restore()'` in both) and
+# `reportifyr::initialize_report_project(project_dir = getwd())` already run at
+# least once:
 #   cd examples/demo-report
 #   rm -rf report/draft report/final
 #   Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'
