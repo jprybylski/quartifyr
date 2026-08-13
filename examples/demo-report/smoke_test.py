@@ -64,6 +64,21 @@ def main() -> int:
         print(sync_check.stderr, file=sys.stderr)
         return 1
 
+    # templates/org-reference.docx is committed (see scripts/
+    # check_template_freshness.py's docstring for why) -- fail fast if it's
+    # drifted from styling/styles/default.yaml, before wasting time on a
+    # render that would only prove the *old* styling still works.
+    template_check = subprocess.run(
+        ["python3", str(REPO_ROOT / "scripts" / "check_template_freshness.py"), "--check"],
+        capture_output=True,
+        text=True,
+    )
+    if template_check.returncode != 0:
+        print("FAIL: templates/org-reference.docx has drifted from styling/styles/default.yaml", file=sys.stderr)
+        print(template_check.stdout, file=sys.stderr)
+        print(template_check.stderr, file=sys.stderr)
+        return 1
+
     print("Running Rscript render.R --final ...")
     result = subprocess.run(
         ["Rscript", "render.R", "--final"],

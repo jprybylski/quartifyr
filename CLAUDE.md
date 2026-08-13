@@ -51,7 +51,9 @@ cd styling && python -m pytest tests/test_layout.py -v
 # or, without an activated venv:
 cd styling && uv run --extra dev pytest tests -v
 
-# Build an org's reference-doc
+# Build an org's reference-doc (templates/org-reference.docx itself is
+# committed to the repo already -- only rebuild after editing
+# styling/styles/default.yaml; see check_template_freshness.py below)
 quartifyr-styling build --style styling/styles/default.yaml --out templates/org-reference.docx
 # with an org override
 quartifyr-styling build --style styling/styles/default.yaml --override styling/styles/acme-pharma.yaml --out templates/acme-pharma-reference.docx
@@ -86,6 +88,15 @@ python3 scripts/bare_bones_integration_test.py
 # repo-root canonical one (Quarto doesn't follow symlinks for extensions)
 python3 scripts/sync_demo_extension.py --check
 python3 scripts/sync_demo_extension.py   # re-sync if it has drifted
+
+# Check the committed templates/org-reference.docx hasn't drifted from
+# styling/styles/default.yaml
+python3 scripts/check_template_freshness.py --check
+python3 scripts/check_template_freshness.py   # rebuild if it has drifted
+
+# Quarto-render-only path (no R, no reportifyr, no styling venv) for both
+# examples, against the committed reference-doc -- only needs `quarto`
+python3 scripts/quarto_only_smoke_test.py
 ```
 
 Both integration tests require the full toolchain on `PATH` (Quarto, R
@@ -103,6 +114,10 @@ OSes) and `full-pipeline` (Quarto+R+reportifyr, Linux/macOS only — `rv`
 doesn't reliably support R 4.6 on Windows, see `r/README.md`). The
 full-pipeline job runs the repo-root Quick Start commands verbatim, so it
 also doubles as a check that the README itself stays accurate.
+`full-pipeline`'s very first step after the Quarto setup action is
+`scripts/quarto_only_smoke_test.py`, deliberately before any R/uv/rv
+setup — proof the Quarto-only render path has no R or Python dependency
+of its own.
 
 ## Architecture notes that span files
 
@@ -174,6 +189,20 @@ silent no-op, or genuine success), reproduced both sandboxed and in a
 plain macOS terminal. Off by default (`render_report(..., recalculate_fields = FALSE)`).
 Don't treat a clean exit as proof it worked; see `r/README.md`'s "Word
 field recalculation" section before changing this code path.
+
+**`templates/org-reference.docx` is committed, not just a build
+artifact** — every other `templates/*.docx` is gitignored ("regenerate
+with `quartifyr-styling build`"), but this specific file is the one
+`--out` path this repo's own docs/CI/`render_report()` default point at,
+committed on purpose so the two bundled examples (and `scripts/
+quarto_only_smoke_test.py`'s Quarto-only render path) work straight out
+of a clone without needing the `styling/` Python venv set up first.
+`quartifyr-styling build`'s docx output isn't byte-reproducible across
+runs (zipfile embeds a per-run timestamp in each entry), so `scripts/
+check_template_freshness.py` compares unzipped content, not raw bytes —
+run with `--check` (as both examples' `smoke_test.py` already do) to
+catch drift from `styling/styles/default.yaml`, same pattern as `scripts/
+sync_demo_extension.py` for the Lua extension copies.
 
 **YAML lists, not maps, for `synopsis:`/`title-page-extra:`/`address:`**
 — deliberate: pandoc's Lua metadata tables don't preserve map key order

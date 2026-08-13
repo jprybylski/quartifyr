@@ -42,13 +42,31 @@ a real `reportifyr` fill pass.
   `render_report()` (see `../../r/README.md`).
 - `smoke_test.py` -- automated end-to-end check (see below).
 
+## Quick look: shell only, Quarto alone (no R, no Python)
+
+`../../templates/org-reference.docx` is committed to the repo (see the
+repo-root README's "Style YAML and reference-doc" section), so the shell
+alone -- title page, signature pages, synopsis, everything pass 1
+produces -- renders with nothing but Quarto installed:
+
+```bash
+cd examples/demo-report
+quarto render report.qmd --to docx --reference-doc ../../templates/org-reference.docx \
+  -M document-status:DRAFT
+```
+
+`{rpfy}:` placeholders and `\gls{PK}` stay unresolved in the output --
+expected, not a bug: pass 2 (`reportifyr`) and the abbreviations bridge
+(`quartifyr-styling abbrevs`) never ran. `scripts/
+quarto_only_smoke_test.py` (repo root) runs exactly this and asserts on
+the result.
+
 ## Running it
 
-Requires this repo's toolchain to already be set up: `rv sync` in both
+For the full two-pass pipeline (real tables/figures/abbreviations filled
+in), this repo's toolchain needs to be set up: `rv sync` in both
 `../../r/` and this directory, and the `styling/` venv (`uv venv .venv &&
-uv pip install -e "./styling[dev]"` from the repo root, plus
-`quartifyr-styling build` to produce `templates/org-reference.docx` if you
-haven't already).
+uv pip install -e "./styling[dev]"` from the repo root).
 
 `.report_init.json` is gitignored (it embeds a username/timestamp), so a
 fresh clone needs one setup call before the first render -- this is safe

@@ -64,6 +64,20 @@ def main() -> int:
         print(sync_check.stderr, file=sys.stderr)
         return 1
 
+    # Same drift check examples/demo-report/smoke_test.py runs -- templates/
+    # org-reference.docx is shared, committed toolkit source, not something
+    # this example owns a copy of.
+    template_check = subprocess.run(
+        ["python3", str(REPO_ROOT / "scripts" / "check_template_freshness.py"), "--check"],
+        capture_output=True,
+        text=True,
+    )
+    if template_check.returncode != 0:
+        print("FAIL: templates/org-reference.docx has drifted from styling/styles/default.yaml", file=sys.stderr)
+        print(template_check.stdout, file=sys.stderr)
+        print(template_check.stderr, file=sys.stderr)
+        return 1
+
     print("Running Rscript render.R --final ...")
     result = subprocess.run(
         ["Rscript", "render.R", "--final"],

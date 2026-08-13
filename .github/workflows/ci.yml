@@ -52,6 +52,15 @@ jobs:
 
       - uses: quarto-dev/quarto-actions/setup@v2
 
+      # Runs before any R/uv/rv setup below, on purpose: it needs nothing
+      # but `quarto` itself (plus templates/org-reference.docx, committed
+      # to the repo -- see scripts/check_template_freshness.py) and plain
+      # stdlib Python, so this placement is itself proof that the
+      # Quarto-only shell-render path has no R or Python dependency of
+      # its own.
+      - name: Run Quarto-only shell-render check (no R, no Python venv)
+        run: python3 scripts/quarto_only_smoke_test.py
+
       - uses: r-lib/actions/setup-r@v2
         with:
           r-version: "4.6"
@@ -127,13 +136,15 @@ jobs:
 
       # This is the repo-root Quick Start, run exactly as documented, so
       # this job also stands in as a check that the README instructions
-      # themselves are correct and current.
+      # themselves are correct and current. Building templates/
+      # org-reference.docx isn't part of that anymore -- it's committed to
+      # the repo now (see scripts/check_template_freshness.py); each
+      # example's smoke_test.py already verifies it hasn't gone stale.
       - name: Set up styling/ venv
         run: |
           uv venv .venv --python 3.12
           source .venv/bin/activate
           uv pip install -e "./styling[dev]"
-          quartifyr-styling build --style styling/styles/default.yaml --out templates/org-reference.docx
 
       - name: rv sync (r/)
         working-directory: r
@@ -141,9 +152,9 @@ jobs:
 
       # Looped rather than a second matrix axis (os x example): only these
       # two steps and the smoke-test step below are per-example -- the
-      # rest of this job (rv install, apt deps, git identity, venv+
-      # template build) is shared setup that a second matrix dimension
-      # would needlessly double for no benefit.
+      # rest of this job (rv install, apt deps, git identity, venv setup)
+      # is shared setup that a second matrix dimension would needlessly
+      # double for no benefit.
       - name: rv sync (examples/*)
         run: |
           for example in demo-report memo-example; do

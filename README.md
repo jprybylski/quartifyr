@@ -169,7 +169,26 @@ round of clicking through Word's style pane.
 
 ## Quick start
 
-Requires, once each (platform-specific instructions at each link):
+Want to see the shell before installing anything but Quarto? Both bundled
+examples ship a pre-built `templates/org-reference.docx` (committed to
+the repo — see [Style YAML and reference-doc](#style-yaml-and-reference-doc-generating-locating-sharing)
+below), so this alone renders a real, styled shell — title page,
+signature pages, synopsis — with `{rpfy}:` placeholders still literal
+(pass 2 hasn't run):
+
+```bash
+cd examples/demo-report
+quarto render report.qmd --to docx --reference-doc ../../templates/org-reference.docx \
+  -M document-status:DRAFT
+```
+
+`scripts/quarto_only_smoke_test.py` runs exactly this for both examples
+and asserts on the output — the first CI check to run, before any R or
+Python setup, as proof this path has no dependency on either.
+
+For the full two-pass pipeline (real tables/figures/footnotes filled in,
+not just the shell), you need the rest of the toolchain, once each
+(platform-specific instructions at each link):
 
 - [Quarto](https://quarto.org/docs/get-started/)
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python tooling)
@@ -181,13 +200,10 @@ uv venv .venv --python 3.12
 source .venv/bin/activate
 uv pip install -e "./styling[dev]"
 
-# 2. Org docx styling
-quartifyr-styling build --style styling/styles/default.yaml --out templates/org-reference.docx
-
-# 3. R tooling
+# 2. R tooling
 cd r && rv sync && cd ..
 
-# 4. Run the demo end to end
+# 3. Run the demo end to end
 cd examples/demo-report
 rv sync
 Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'   # first clone only
@@ -195,7 +211,7 @@ Rscript render.R --final
 # -> report/draft/report-draft.docx, report/final/report-final.docx
 ```
 
-Or just run the demo's own smoke test, which does step 4 for you and
+Or just run the demo's own smoke test, which does step 3 for you and
 asserts the output is actually correct: `python3
 examples/demo-report/smoke_test.py`.
 
@@ -239,7 +255,15 @@ shared config.
 
 **Where the built reference-doc lives**: likewise, wherever `--out`
 points. `templates/org-reference.docx` (relative to this checkout) is
-what this repo's own docs default to because `render_report()`'s
+what this repo's own docs default to, and — unlike everything else
+`quartifyr-styling build` produces — this repo commits that specific
+file rather than gitignoring it, precisely so the two bundled examples
+(and the Quarto-only path above) work straight out of a clone with no
+`quartifyr-styling build` step required. `scripts/
+check_template_freshness.py` (run by both examples' `smoke_test.py`, and
+safe to run yourself) guards against it drifting from `styling/styles/
+default.yaml` — rebuild it (`python3 scripts/check_template_freshness.py`)
+after changing that file. `render_report()`'s
 `reference_doc` parameter defaults to `file.path(toolkit_root,
 "templates", "org-reference.docx")`, and `toolkit_root` itself defaults
 to `here::here()`. For `examples/demo-report/`, that resolves correctly
