@@ -32,19 +32,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Windows isn't included here: rv doesn't yet reliably support R
-        # 4.6 there -- it refuses to activate its managed library
-        # ("R version specified in config (4.5) does not match session
-        # version (4.6.1)... entering safe mode"), which then cascades
-        # into missing-package errors for everything rv would otherwise
-        # provide. Confirmed as a live, currently-unresolved upstream
-        # issue (not a quartifyr/CI-script bug): A2-ai/rv#493, where a
-        # maintainer notes Windows currently only works reliably with a
-        # PPM repository, not plain CRAN. Windows/rv/R-4.6 compatibility
-        # is tracked there, not something to work around here by
-        # changing real dependency-resolution behavior for a CI job.
-        # Windows is still covered by styling-tests above (pure Python,
-        # no rv involved).
+        # Windows isn't included here -- see r/README.md's Windows section
+        # for what was actually tried (r_version alignment, a2-ai/setup-rv,
+        # a PPM repository) and the specific, reproduced-twice failure that
+        # remains: rv deterministically fails installing pyro from source
+        # on Windows with "no package called 'rlang'", even though rlang is
+        # correctly present in r/rv.lock. Windows is still covered by
+        # styling-tests above (pure Python, no rv involved).
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
@@ -61,9 +55,12 @@ jobs:
       - name: Run Quarto-only shell-render check (no R, no Python venv)
         run: python3 scripts/quarto_only_smoke_test.py
 
+      # Matches r_version in r/rproject.toml and both examples' -- see
+      # those files' comments on why it's pinned to 4.5, not the latest
+      # release.
       - uses: r-lib/actions/setup-r@v2
         with:
-          r-version: "4.6"
+          r-version: "4.5"
 
       - uses: astral-sh/setup-uv@v5
         with:
@@ -83,34 +80,14 @@ jobs:
             libfontconfig1-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev \
             libharfbuzz-dev libfribidi-dev libcairo2-dev
 
-      # Not using rv's own install.sh: its GitHub API call is
-      # unauthenticated, which hit GitHub's 60/req-hour unauthenticated
-      # limit (shared across the whole runner IP pool) in a real CI run
-      # -- confirmed by a run where all 3 retry attempts failed
-      # identically within seconds of each other. Querying the release
-      # API ourselves with the workflow's own GITHUB_TOKEN (5000
-      # req/hour, not shared) sidesteps that.
-      - name: Install rv
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
-          arch="$(uname -m)"
-          if [ "$arch" = "arm64" ]; then arch="aarch64"; fi
-          if [ "$os" = "darwin" ]; then os_pattern="apple-darwin"; else os_pattern="unknown-linux-gnu"; fi
-          target="${arch}-${os_pattern}"
-          asset_url=$(curl -sSL -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-            https://api.github.com/repos/A2-ai/rv/releases/latest \
-            | grep -o "https://github.com/A2-ai/rv/releases/download/[^\"]*${target}\.tar\.gz" | head -1)
-          if [ -z "$asset_url" ]; then
-            echo "Could not find an rv release asset for target $target" >&2
-            exit 1
-          fi
-          mkdir -p "$HOME/.local/bin"
-          curl -sSL -o /tmp/rv.tar.gz "$asset_url"
-          tar -xzf /tmp/rv.tar.gz -C "$HOME/.local/bin"
-          chmod +x "$HOME/.local/bin/rv"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      # Uses the maintained a2-ai/setup-rv action (also what reportifyr's
+      # own CI uses) rather than a hand-rolled release download: its
+      # `github-token` input (defaulted to `github.token`) already avoids
+      # the unauthenticated-GitHub-API rate limiting a hand-rolled
+      # install.sh call hits (60 req/hour, shared across the whole runner
+      # IP pool) -- previously worked around here with a bespoke
+      # authenticated curl call; that workaround is now upstream instead.
+      - uses: a2-ai/setup-rv@main
 
       # reportifyr's context resolution (embedded in report/figure/table
       # metadata) shells out to `git config` and errors if no identity is

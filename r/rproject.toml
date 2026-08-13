@@ -1,6 +1,15 @@
 [project]
 name = "quartifyr-r"
-r_version = "4.6"
+# Matches pyro's and reportifyr's own r_version pin (both are GitHub-only,
+# always built from source regardless of platform/repository -- see
+# r/README.md's Windows section). rv activates its managed library by
+# walking up from an R subprocess's cwd looking for an rproject.toml,
+# which during `rv sync` picks up pyro's/reportifyr's own bundled
+# rproject.toml, not just this one; a mismatched r_version there makes rv
+# enter "safe mode" (managed library not activated) partway through their
+# from-source build, which then fails outright once nothing on the
+# library path can supply their build-time deps.
+r_version = "4.5"
 
 # A list of repositories to fetch packages from. Order matters: we will try to get a package from each repository in order.
 # The alias is only used in this file if you want to specifically require a dependency to come from a certain repository.
