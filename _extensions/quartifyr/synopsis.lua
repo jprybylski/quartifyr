@@ -223,10 +223,30 @@ end
 -- earlier table-based synopsis as having "the right look" before the
 -- footnote-placement problem above, which read as a bordered table, not
 -- a borderless one.
+--
+-- Each value line gets its *own* <w:p>, deliberately not joined into one
+-- paragraph via <w:br/> the way utils.multiline_runs (used for the
+-- title page's Address/etc. cells, which never contain a magic string)
+-- does: confirmed by rendering a row with an embedded image through the
+-- full pipeline that br-joining is actively destructive here.
+-- reportifyr's cell-aware add_figure() inserts the resolved image as a
+-- *new*, separate paragraph, then its final remove_magic_strings() pass
+-- deletes the *original* magic-string paragraph outright once it finds
+-- that paragraph itself has no picture in it. With every line sharing
+-- one br-joined paragraph, that deletion took every sentence in the row
+-- with it -- not just the magic string -- and dumped the whole lot into
+-- the image's alt text as an unreadable blob in the process. With each
+-- line in its own paragraph, only the (now-empty) magic-string
+-- paragraph is ever a deletion target; the row's real text, each in its
+-- own untouched paragraph, survives.
 local TABLE_LABEL_PCT = 1500 -- 30%
 local TABLE_VALUE_PCT = 3500 -- 70%
 
 local function synopsis_table_row(label, value_lines)
+  local value_paras = {}
+  for _, line in ipairs(value_lines) do
+    table.insert(value_paras, string.format([[<w:p><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>]], utils.escape_xml(line)))
+  end
   return string.format(
     [[
     <w:tr>
@@ -236,14 +256,14 @@ local function synopsis_table_row(label, value_lines)
       </w:tc>
       <w:tc>
         <w:tcPr><w:tcW w:w="%d" w:type="pct"/></w:tcPr>
-        <w:p><w:r>%s</w:r></w:p>
+        %s
       </w:tc>
     </w:tr>
   ]],
     TABLE_LABEL_PCT,
     utils.escape_xml(label),
     TABLE_VALUE_PCT,
-    utils.multiline_runs(table.concat(value_lines, "\n"))
+    table.concat(value_paras, "\n")
   )
 end
 

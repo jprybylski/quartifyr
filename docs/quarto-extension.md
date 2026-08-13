@@ -142,11 +142,9 @@ Synopsis
 :::
 ```
 
-Renders a bordered, full-width summary table from a `synopsis:`
-frontmatter block: any number of rows, any labels, in whatever order
-you write them. A "Title" row is prepended automatically. Omit
-`synopsis:` entirely to turn the section off; the div then renders
-nothing.
+Renders a label/value summary from a `synopsis:` frontmatter block: any
+number of rows, any labels, in whatever order you write them. A "Title"
+row is prepended automatically.
 
 `value:` also accepts a YAML list instead of a plain string, letting a
 row mix paragraphs and an inline figure:
@@ -163,6 +161,34 @@ synopsis:
 `image:` is a bare filename within `OUTPUTS/figures/`; it emits a
 `{rpfy}:` magic string, so the figure only actually appears after pass 2
 fills it in.
+
+`synopsis-style:` picks the rendered layout -- default `definition-list`:
+
+```yaml
+synopsis-style: definition-list   # default
+```
+
+| Style | Look |
+| --- | --- |
+| `definition-list` | Label bold on its own line, value indented beneath it. |
+| `inline` | `**Label:**  ` runs into the row's first value line. A row with more than one line, or whose one line is an image, falls back to standing the label alone (still bold/one point larger/colon-suffixed) with the rest following flush -- indentation is a `definition-list` trait only, `inline` never indents. |
+| `table` | A real two-column, bordered Word table. Reintroduces the problem `definition-list`/`inline` exist to avoid: `reportifyr`'s auto-generated footnote for a figure embedded in a table cell lands after the *whole table*, not tucked under that specific figure (`reportifyr` groups cell footnotes per table element). A `quarto.log.warning()` fires whenever this style is selected, not just when a row currently has an image. |
+| `false` | `synopsis:` is still parsed (so the data can stay written in frontmatter) but nothing renders -- not even a blank paragraph, just an empty div. |
+
+All four rendered from the same `synopsis:` data (the demo report's
+actual content, including a multi-line `Results` row with an embedded
+figure) for direct comparison:
+
+<div style="display:flex; flex-wrap:wrap; gap:1rem; margin: 1rem 0;">
+<div><img src="{{ '/assets/img/synopsis-style-definition-list.png' | relative_url }}" alt="synopsis-style: definition-list -- every label bold on its own line, every value indented beneath it" width="330" loading="lazy"><p style="text-align:center; font-size:0.85em;">definition-list</p></div>
+<div><img src="{{ '/assets/img/synopsis-style-inline.png' | relative_url }}" alt="synopsis-style: inline -- label runs into the first value line on the same line, continuation lines flush, not indented" width="330" loading="lazy"><p style="text-align:center; font-size:0.85em;">inline</p></div>
+<div><img src="{{ '/assets/img/synopsis-style-table.png' | relative_url }}" alt="synopsis-style: table -- a real bordered two-column Word table, with the Results row's embedded figure inside its cell" width="330" loading="lazy"><p style="text-align:center; font-size:0.85em;">table</p></div>
+</div>
+
+Omit `synopsis:` entirely (or set `synopsis-style: false`) to turn the
+section off; the div then renders nothing, so a shared shell template
+can leave the `::: .synopsis :::` marker in unconditionally and let
+each project's frontmatter decide.
 
 ## Bibliography / references
 

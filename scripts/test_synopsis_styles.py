@@ -173,6 +173,30 @@ def _check_table(work_dir: Path, checks: list[tuple[str, bool]]) -> None:
     checks.append(("table: uses the bordered 'TableGrid' style, not the borderless title-page one", table_style is not None and table_style.get(qn("w:val")) == "TableGrid"))
     checks.append(("table: Objectives row present with its value in the second cell", ("Objectives", "A single plain-text value line.") in row_texts))
 
+    # Regression check: each value line must be its own <w:p> in the
+    # cell, not joined into one paragraph via <w:br/>. Confirmed by
+    # rendering a row with an embedded image through the full pipeline
+    # that br-joining is destructive here -- reportifyr's
+    # remove_magic_strings() deletes a cell paragraph outright once it
+    # contains the magic string but not the (separately inserted)
+    # picture, taking every other br-joined line in that same paragraph
+    # down with it. This check can't exercise reportifyr itself (this
+    # script deliberately has no R dependency), but it can confirm the
+    # per-line-paragraph shape that keeps that deletion scoped to just
+    # the magic-string line.
+    results_value_cell = None
+    for row in doc.tables[0].rows if doc.tables else []:
+        if row.cells[0].text == "Results":
+            results_value_cell = row.cells[1]
+            break
+    results_value_paragraph_count = len(results_value_cell._tc.findall(qn("w:p"))) if results_value_cell is not None else 0
+    checks.append(
+        (
+            "table: a multi-line row's value cell has one <w:p> per line, not one <w:br/>-joined paragraph",
+            results_value_paragraph_count >= 2,  # Results has 1 text line + 1 image line in the fixture
+        )
+    )
+
 
 def _check_false(work_dir: Path, checks: list[tuple[str, bool]]) -> None:
     import docx

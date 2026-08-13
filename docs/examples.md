@@ -44,10 +44,14 @@ Rendered output from a real `report/final/report-final.docx`:
 
 <div style="display:flex; flex-wrap:wrap; gap:1rem; margin: 1rem 0;">
 <div><img src="{{ '/assets/img/demo-report-title.png' | relative_url }}" alt="demo-report title page, showing dynamic title, draft/final status stamp, and info table" width="330" loading="lazy"><p style="text-align:center; font-size:0.85em;">Title page</p></div>
-<div><img src="{{ '/assets/img/demo-report-synopsis.png' | relative_url }}" alt="demo-report synopsis page, a bordered summary table with Title/Objectives/Methods/Results rows, including an inline embedded figure in the Results row" width="330" loading="lazy"><p style="text-align:center; font-size:0.85em;">Synopsis</p></div>
+<div><img src="{{ '/assets/img/demo-report-synopsis.png' | relative_url }}" alt="demo-report synopsis page, showing synopsis-style: inline -- Title/Objectives/Methods/Results labels running into their first value line, with an inline embedded figure in the Results row" width="330" loading="lazy"><p style="text-align:center; font-size:0.85em;">Synopsis</p></div>
 <div><img src="{{ '/assets/img/demo-report-body.png' | relative_url }}" alt="demo-report body page showing the filled per-participant PK summary table with a live caption, source footnote, and abbreviations line" width="330" loading="lazy"><p style="text-align:center; font-size:0.85em;">Filled body (PK summary table)</p></div>
 <div><img src="{{ '/assets/img/demo-report-appendix.png' | relative_url }}" alt="demo-report numbered appendix page, Appendix A, generated via a Word SEQ field" width="330" loading="lazy"><p style="text-align:center; font-size:0.85em;">Numbered appendix</p></div>
 </div>
+
+The synopsis above uses `synopsis-style: inline`; see [Quarto
+extension](quarto-extension.html#synopsis) for a side-by-side comparison
+of all four layout options.
 
 Verify it worked with the bundled smoke test, which asserts on the
 actual rendered content (no leftover `{rpfy}:` strings, tables/figures
