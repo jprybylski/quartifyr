@@ -288,15 +288,15 @@ def main() -> int:
     body_paragraphs = list(document.element.body.iter(qn("w:p")))
     body_paragraph_texts = ["".join(t.text or "" for t in p.findall(".//" + qn("w:t"))) for p in body_paragraphs]
 
-    checks.append(
+    title_label_idx = next(
         (
-            "synopsis title row has the real report title",
-            any(
-                body_paragraph_texts[i] == "Title" and body_paragraph_texts[i + 1] == "Population Pharmacokinetics of Theophylline"
-                for i in range(len(body_paragraph_texts) - 1)
-            ),
-        )
+            i
+            for i in range(len(body_paragraph_texts) - 1)
+            if body_paragraph_texts[i] == "Title" and body_paragraph_texts[i + 1] == "Population Pharmacokinetics of Theophylline"
+        ),
+        None,
     )
+    checks.append(("synopsis title row has the real report title", title_label_idx is not None))
 
     checks.append(("logo image embedded on title page", any("png" in n.lower() for n in images)))
     checks.append(("address rendered on title page", "Raleigh, NC" in joined))
@@ -350,6 +350,55 @@ def main() -> int:
         (
             "synopsis figure excluded from the List of Figures (only Figure 1's own SEQ Figure field exists)",
             seq_figure_count == 1,
+        )
+    )
+
+    # report.qmd sets synopsis-border: true -- a single seamless box drawn
+    # via per-paragraph w:pBdr (see synopsis.lua's file-header comment),
+    # not a real table. The very first synopsis paragraph ("Title") opens
+    # the box (has a w:top edge); the last text paragraph before the
+    # embedded figure closes it (has a w:bottom edge); paragraphs strictly
+    # between them are bordered but carry neither (so the box reads as one
+    # continuous border, not a stack of separate per-paragraph boxes); and
+    # the figure + its footnote -- both inserted fresh by reportifyr in
+    # pass 2, after this filter already ran -- carry no border at all.
+    def _pbdr(p):
+        ppr = p.find(qn("w:pPr"))
+        return None if ppr is None else ppr.find(qn("w:pBdr"))
+
+    title_label_pbdr = _pbdr(body_paragraphs[title_label_idx]) if title_label_idx is not None else None
+    checks.append(
+        (
+            "synopsis box opens at the Title label (w:top edge present)",
+            title_label_pbdr is not None and title_label_pbdr.find(qn("w:top")) is not None,
+        )
+    )
+
+    objectives_idx = body_paragraph_texts.index("Objectives") if "Objectives" in body_paragraph_texts else None
+    objectives_pbdr = _pbdr(body_paragraphs[objectives_idx]) if objectives_idx is not None else None
+    checks.append(
+        (
+            "synopsis box has no internal edge at an interior label (bordered, but no top/bottom)",
+            objectives_pbdr is not None
+            and objectives_pbdr.find(qn("w:top")) is None
+            and objectives_pbdr.find(qn("w:bottom")) is None,
+        )
+    )
+
+    last_text_before_figure_pbdr = _pbdr(body_paragraphs[synopsis_fig_idx - 1]) if synopsis_fig_idx is not None else None
+    checks.append(
+        (
+            "synopsis box closes on the last text paragraph before the figure (w:bottom edge present)",
+            last_text_before_figure_pbdr is not None and last_text_before_figure_pbdr.find(qn("w:bottom")) is not None,
+        )
+    )
+
+    checks.append(
+        (
+            "synopsis figure and its footnote sit outside the box (no w:pBdr at all)",
+            synopsis_fig_idx is not None
+            and _pbdr(body_paragraphs[synopsis_fig_idx]) is None
+            and _pbdr(body_paragraphs[synopsis_fig_idx + 1]) is None,
         )
     )
 
