@@ -351,8 +351,8 @@ def main() -> int:
     )
 
     # The row's second (continuation) line still follows underneath,
-    # indented the same as definition-list's value -- no repeated label,
-    # no w:ind override.
+    # flush -- no repeated label, no indent (indentation is a
+    # definition-list trait only; inline never indents).
     continuation_ind = None
     if results_merge_idx is not None:
         continuation_ppr = body_paragraphs[results_merge_idx + 1].find(qn("w:pPr"))
@@ -360,8 +360,8 @@ def main() -> int:
             continuation_ind = continuation_ppr.find(qn("w:ind"))
     checks.append(
         (
-            "Results' second value line follows underneath with no w:ind override (inherits the indented 'Synopsis Value' style)",
-            continuation_ind is None,
+            "Results' second value line follows underneath flush (w:ind left=0 override present, not inherited indent)",
+            continuation_ind is not None and continuation_ind.get(qn("w:left")) == "0",
         )
     )
 

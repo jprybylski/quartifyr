@@ -120,7 +120,8 @@ def _check_inline(work_dir: Path, checks: list[tuple[str, bool]]) -> None:
     # a picture, so the label stands alone, but still bold/larger/colon
     # via inline_label_only_paragraph, not plain_label_paragraph's
     # unstyled look; its second line ("Caption after the image.") still
-    # follows underneath, indented, same as definition-list's value.
+    # follows underneath, flush -- indentation is a definition-list
+    # trait only, inline never indents.
     figure_label_idx = next((i for i, t in enumerate(texts) if t == "Figure:"), None)
     checks.append(("inline: a row whose first line is an image falls back to a standalone label (Figure)", figure_label_idx is not None))
 
@@ -133,7 +134,12 @@ def _check_inline(work_dir: Path, checks: list[tuple[str, bool]]) -> None:
         ppr = paragraphs[caption_idx].find(qn("w:pPr"))
         if ppr is not None:
             caption_ind = ppr.find(qn("w:ind"))
-    checks.append(("inline: a line after the fallback label has no w:ind override (inherits the indented style)", caption_idx is not None and caption_ind is None))
+    checks.append(
+        (
+            "inline: a line after the fallback label is flush (w:ind left=0 override present, not inherited indent)",
+            caption_ind is not None and caption_ind.get(qn("w:left")) == "0",
+        )
+    )
 
 
 def _check_table(work_dir: Path, checks: list[tuple[str, bool]]) -> None:

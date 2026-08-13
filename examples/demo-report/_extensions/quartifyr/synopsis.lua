@@ -49,16 +49,17 @@
 --                                     # build_template.py's "Synopsis
 --                                     # Inline Label" style); any further
 --                                     # lines (more text, an image) still
---                                     # follow underneath, indented, same
---                                     # as definition-list's value. Only
---                                     # when the *first* line is itself
---                                     # an embedded image (can't run
---                                     # "Label:  " into a picture) does
---                                     # the label fall back to standing
---                                     # alone on its own line -- still
---                                     # bold/larger/colon-suffixed, just
---                                     # without anything following it on
---                                     # the same line
+--                                     # follow underneath, flush -- NOT
+--                                     # indented, unlike definition-list;
+--                                     # indentation is a definition-list
+--                                     # trait only. Only when the *first*
+--                                     # line is itself an embedded image
+--                                     # (can't run "Label:  " into a
+--                                     # picture) does the label fall back
+--                                     # to standing alone on its own line
+--                                     # -- still bold/larger/colon-
+--                                     # suffixed, just without anything
+--                                     # following it on the same line
 --   synopsis-style: table            # a real two-column Word table --
 --                                     # see the warning below
 --   synopsis-style: false            # parse synopsis: (so the data can
@@ -137,9 +138,15 @@ local synopsis_style = "definition-list"
 -- "SynopsisLabel"/"SynopsisValue" are the style *IDs* (no space) of the
 -- "Synopsis Label"/"Synopsis Value" paragraph styles build_template.py
 -- defines -- raw OOXML w:pStyle references the ID, not the display name
--- (see this repo's pStyle-vs-display-name gotcha docs). value_paragraph
--- is also what any line after a row's first (merged or not) renders as
--- under synopsis-style: inline -- see add_row below.
+-- (see this repo's pStyle-vs-display-name gotcha docs).
+--
+-- Indentation is a definition-list trait only: value_paragraph's
+-- `indent` decides whether "Synopsis Value"'s own (nonzero) left indent
+-- actually applies, or gets zeroed back out via an inline w:ind
+-- override. definition-list always passes true; synopsis-style:
+-- inline always passes false for every line after a row's first (see
+-- add_row below), whether that first line merged into "Label:  " or
+-- (being an image) forced the label to stand alone.
 local function label_paragraph(label)
   return string.format(
     [[<w:p><w:pPr><w:pStyle w:val="SynopsisLabel"/></w:pPr><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>]],
@@ -147,9 +154,14 @@ local function label_paragraph(label)
   )
 end
 
-local function value_paragraph(line)
+local function value_paragraph(line, indent)
+  local ppr = '<w:pStyle w:val="SynopsisValue"/>'
+  if not indent then
+    ppr = ppr .. '<w:ind w:left="0"/>'
+  end
   return string.format(
-    [[<w:p><w:pPr><w:pStyle w:val="SynopsisValue"/></w:pPr><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>]],
+    [[<w:p><w:pPr>%s</w:pPr><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>]],
+    ppr,
     utils.escape_xml(line)
   )
 end
@@ -381,11 +393,12 @@ return {
       -- definition-list: every row is label_paragraph + indented
       -- value_paragraph(s). inline: the label runs into the row's first
       -- value line whenever that line is plain text (any further lines
-      -- -- more text, an image -- still follow underneath, indented,
-      -- exactly like definition-list's value); only when the first line
-      -- is itself an image does the label stand alone instead (still
-      -- bold/larger/colon-suffixed via inline_label_only_paragraph, not
-      -- plain_label_paragraph's unstyled look).
+      -- -- more text, an image -- still follow underneath, flush, NOT
+      -- indented: indentation is a definition-list trait only); only
+      -- when the first line is itself an image does the label stand
+      -- alone instead (still bold/larger/colon-suffixed via
+      -- inline_label_only_paragraph, not plain_label_paragraph's
+      -- unstyled look).
       local paras = {}
       local function add_row(label, lines)
         if synopsis_style == "inline" then
@@ -395,14 +408,14 @@ return {
             table.insert(paras, inline_paragraph(label, lines[1]))
           end
           for i = 2, #lines do
-            table.insert(paras, value_paragraph(lines[i]))
+            table.insert(paras, value_paragraph(lines[i], false))
           end
           return
         end
 
         table.insert(paras, label_paragraph(label))
         for _, line in ipairs(lines) do
-          table.insert(paras, value_paragraph(line))
+          table.insert(paras, value_paragraph(line, true))
         end
       end
 
