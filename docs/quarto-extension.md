@@ -79,11 +79,17 @@ order (confirmed by testing), so a list is what keeps row order reliable
 across renders.
 
 A value that's also used elsewhere (like `report_number` above, reused
-by `header-format:`) doesn't need to be written out twice: anchor it
-once (`&report_number`) and alias it (`*report_number`) into the
-`title-page-extra` row, plain YAML resolved before Quarto/pandoc/Lua see
-the data. This is *not* the `{{< meta ... >}}` shortcode — that only
-substitutes inside document body content, not frontmatter itself.
+by `header-format:`) doesn't need to be written out twice: declare it
+once with a YAML anchor (`&report_number`) and reuse it with an alias
+(`*report_number`) in the `title-page-extra` row below — plain YAML,
+resolved before Quarto/pandoc/Lua ever see the data. The anchor must be
+declared *before* any alias that references it — a YAML alias can only
+resolve to an anchor already seen earlier in the same document (confirmed:
+PyYAML raises `found undefined alias` if the order is reversed), so
+`report_number: &report_number ...` has to come before `value:
+*report_number` below it, not after. This is a plain YAML mechanism, not
+the `{{< meta ... >}}` shortcode — that one only substitutes inside
+document body content, never frontmatter itself.
 
 ## Memo cover page
 
@@ -98,10 +104,19 @@ memo:
   date: "2026-08-12"
   re: "Q3 Budget Review"
   cc: "Finance Committee"    # optional
+memo_number: &memo_number "MEMO-2026-014"   # feeds header-format below
+header-format: "{project} - {memo_number}"   # optional
+title-page-extra:
+  - label: "Memo Number"
+    value: *memo_number            # reuses memo_number above, not retyped
 ```
 
 Activates only when `memo:` is present — never set `title:` on a memo
-project. See [`examples/memo-example/`](https://github.com/jprybylski/quartifyr/tree/main/examples/memo-example)
+project. `title-page-extra:` is the same field the title page reads (see
+above) — the memo cover appends its rows after the fixed To/From/Date/
+Re/Cc grid, so a value like a memo number can show up on the cover
+without a second, cover-specific frontmatter key. See
+[`examples/memo-example/`](https://github.com/jprybylski/quartifyr/tree/main/examples/memo-example)
 for a complete, minimal reference project built this way, and its
 rendered output on the [Examples](examples.html) page.
 

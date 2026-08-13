@@ -19,6 +19,9 @@
 --   memo-heading: "MEMORANDUM"        # optional, default "MEMORANDUM"
 --   document-status: "DRAFT"          # optional, default "DRAFT" -- same
 --                                      # convention as title_page.lua
+--   title-page-extra:                 # optional, same key as
+--     - label: "Memo Number"          # title_page.lua -- see below
+--       value: "MEMO-2026-014"
 --
 -- Activates only when `memo:` is present in frontmatter -- the same "own
 -- your own frontmatter key, no-op if absent" convention every other
@@ -52,6 +55,16 @@
 -- bookmark collision (this filter doesn't emit one), but because
 -- rendering both a title page and a memo banner in the same document
 -- would just produce two conflicting, stacked cover pages.
+--
+-- `title-page-extra:` -- same frontmatter key title_page.lua reads, not
+-- a separate `memo-extra:` -- appends any number of additional
+-- label/value rows to the To/From/Date/Re/Cc grid, in whatever order
+-- they're written (see title_page.lua's file-header comment for why
+-- this is a YAML list, not a map). Reusing the identical key lets an
+-- author write one open-ended-fields block regardless of which cover
+-- type a project ends up using -- e.g. a memo number that also feeds
+-- `header-format:` (see examples/memo-example/report.qmd) doesn't need
+-- a second, cover-specific mechanism to also show up on the page.
 
 local utils = require("quartifyr_utils")
 
@@ -66,9 +79,10 @@ local function stringify_or_nil(meta_val)
   return s
 end
 
--- Fixed display order -- a YAML list isn't needed here (unlike
--- title-page-extra/synopsis) since these five fields are always the
--- same fixed set, not open-ended.
+-- Fixed display order for the memo's own five fields -- a YAML list
+-- isn't needed for *these*, since they're always the same fixed set.
+-- `title-page-extra:` (open-ended, see file-header comment) is appended
+-- after them into the same field_rows list/table, not a separate one.
 local MEMO_FIELD_ORDER = {
   { key = "to", label = "To" },
   { key = "from", label = "From" },
@@ -132,6 +146,20 @@ return {
         local value = stringify_or_nil(meta.memo[f.key])
         if value then
           table.insert(field_rows, { label = f.label, value = value })
+        end
+      end
+
+      -- Same title-page-extra: key title_page.lua reads -- see
+      -- file-header comment for why this isn't a separate memo-specific
+      -- key. Appended after the fixed To/From/Date/Re/Cc rows, in
+      -- whatever order they're written.
+      if meta["title-page-extra"] then
+        for _, entry in ipairs(meta["title-page-extra"]) do
+          local label = stringify_or_nil(entry.label)
+          local value = stringify_or_nil(entry.value)
+          if label and value then
+            table.insert(field_rows, { label = label, value = value })
+          end
         end
       end
 

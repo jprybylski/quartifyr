@@ -13,9 +13,21 @@ logo-width: "1.5in"
 # difference: this cover deliberately does NOT get its own
 # quartifyr-front-matter-start section -- see _extensions/quartifyr/
 # README.md's "Memo cover page" section for why).
+# memo_number is anchored (&memo_number) and aliased (*memo_number) into
+# title-page-extra below, rather than written out twice, so the cover and
+# the header can't drift apart -- same pattern examples/demo-report uses
+# for report_number (see docs/quarto-extension.md's "Frontmatter"
+# section for how the YAML anchor/alias mechanism works and why it's not
+# the {{< meta ... >}} shortcode). title-page-extra itself is the same
+# frontmatter key title_page.lua reads -- memo_cover.lua reuses it rather
+# than defining a separate memo-specific key (see its file-header
+# comment).
 project: "ACME-001"
-memo_number: "MEMO-2026-014"
+memo_number: &memo_number "MEMO-2026-014"
 header-format: "{project} - {memo_number}"
+title-page-extra:
+  - label: "Memo Number"
+    value: *memo_number
 confidentiality: "Internal Use Only"
 format: docx
 filters:

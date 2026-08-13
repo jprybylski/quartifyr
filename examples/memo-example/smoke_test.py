@@ -147,13 +147,18 @@ def main() -> int:
         return [[cell.text for cell in row.cells] for row in table.rows]
 
     all_rows = [row for table in document.tables for row in _table_row_texts(table)]
-    checks.append(("exactly one table present (the To/From/Date/Re/Cc grid)", len(document.tables) == 1))
-    checks.append(("To/From/Date/Re/Cc grid has the expected labels and values", all_rows == [
+    # Still exactly one table: title-page-extra's "Memo Number" row (see
+    # report.qmd's comment -- memo_number reused via YAML anchor/alias,
+    # not retyped) is appended into the same To/From/Date/Re/Cc grid by
+    # memo_cover.lua, not a second table.
+    checks.append(("exactly one table present (the To/From/Date/Re/Cc + title-page-extra grid)", len(document.tables) == 1))
+    checks.append(("grid has the expected labels and values, including the title-page-extra row", all_rows == [
         ["To", "Jane Doe, CFO"],
         ["From", "John Smith, Controller"],
         ["Date", "2026-08-12"],
         ["Re", "Q3 Budget Review Timeline"],
         ["Cc", "Finance Committee"],
+        ["Memo Number", "MEMO-2026-014"],
     ]))
 
     # The budget-timeline figure (scripts/01_analysis.R -> OUTPUTS/figures/
