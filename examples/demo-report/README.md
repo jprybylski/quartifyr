@@ -67,7 +67,10 @@ For the full two-pass pipeline (real tables/figures/abbreviations filled
 in), this repo's toolchain needs to be set up: `Rscript -e
 'renv::restore()'` in both `../../r/` and this directory, and the
 `styling/` venv (`uv venv .venv && uv pip install -e "./styling[dev]"`
-from the repo root).
+from the repo root). If `restore()` here unexpectedly tries to reach
+GitHub or recurrently times out against `a2-ai.r-universe.dev`, see
+`../../r/README.md`'s "If `renv::restore()` tries to reach GitHub"
+section -- same lockfile/`.Rprofile` setup, same fix.
 
 `.report_init.json` is gitignored (it embeds a username/timestamp), so a
 fresh clone needs one setup call before the first render -- this is safe

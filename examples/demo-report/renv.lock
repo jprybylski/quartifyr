@@ -1898,11 +1898,7 @@
       "Repository": "https://a2-ai.r-universe.dev",
       "NeedsCompilation": "no",
       "Author": "Jacob Dumbleton [aut, cre], Matthew Smith [aut]",
-      "Maintainer": "Jacob Dumbleton <jacob@a2-ai.com>",
-      "RemoteType": "repository",
-      "RemoteUrl": "https://github.com/a2-ai/pyro",
-      "RemoteRef": "HEAD",
-      "RemoteSha": "66065c19a9aad1cf2cc4718aee9da013e6a3209f"
+      "Maintainer": "Jacob Dumbleton <jacob@a2-ai.com>"
     },
     "ragg": {
       "Package": "ragg",
@@ -2075,11 +2071,7 @@
       "Repository": "https://a2-ai.r-universe.dev",
       "NeedsCompilation": "no",
       "Author": "Jacob Dumbleton [aut, cre], Matthew Smith [aut], Theodoros Papathanasiou [aut], Tarjinder Sahota [aut], Devin Pastoor [aut], Agnes Kim [aut], Anne Zheng [aut], Jenna Johnson [aut], Fernando Carreno [aut], Kashyap Patel [ctb], Maxwell Chirehwa [ctb], Wesley Cummings [ctb], Elizabeth LeBeau [ctb]",
-      "Maintainer": "Jacob Dumbleton <jacob@a2-ai.com>",
-      "RemoteType": "repository",
-      "RemoteUrl": "https://github.com/a2-ai/reportifyr",
-      "RemoteRef": "HEAD",
-      "RemoteSha": "6761ebe2339d5db13886647cff04857a2050d198"
+      "Maintainer": "Jacob Dumbleton <jacob@a2-ai.com>"
     },
     "rlang": {
       "Package": "rlang",

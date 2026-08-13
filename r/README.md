@@ -39,6 +39,25 @@ project's direct dependencies (`snapshot.type: explicit` in
 `renv/settings.json`) -- add a new direct dependency there before running
 `renv::install()`/`renv::snapshot()` for it.
 
+### If `renv::restore()` tries to reach GitHub
+
+r-universe stamps GitHub provenance (`RemoteType`/`RemoteUrl`/`RemoteSha`,
+with a full-length SHA) into `reportifyr`/`pyro`'s `DESCRIPTION`, and
+`renv::snapshot()` only strips `Remote*` fields when the SHA is
+short/absent -- so a naive snapshot carries them into `renv.lock`. `renv`
+then treats `RemoteUrl`+`RemoteSha` as license to fall back to a raw `git
+clone` of `RemoteUrl` if retrieval from the declared repos doesn't succeed
+on the first try, which is what surfaces as `restore()` reaching
+`github.com` on a GitHub-blocked network. Fixed by stripping those four
+fields from both entries in `renv.lock` (`"Source": "Repository"` is
+sufficient on its own) -- re-strip them if you ever regenerate the lockfile
+via `renv::snapshot()`, or the fallback comes back.
+
+If `restore()` still recurrently hits curl error 28 (timeout) against
+`a2-ai.r-universe.dev`, `.Rprofile` raises R's default 60s download timeout
+to 600s before activating `renv`. Persisting past that is a network-path
+issue outside quartifyr's control.
+
 ## Usage
 
 As an R function (e.g. from an R console, or a project's own analysis
