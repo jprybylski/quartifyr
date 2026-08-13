@@ -3,6 +3,10 @@
     "Version": "4.6.1",
     "Repositories": [
       {
+        "Name": "a2-ai",
+        "URL": "https://a2-ai.r-universe.dev"
+      },
+      {
         "Name": "CRAN",
         "URL": "https://cloud.r-project.org"
       }
@@ -1865,7 +1869,7 @@
     "pyro": {
       "Package": "pyro",
       "Version": "0.1.1",
-      "Source": "GitHub",
+      "Source": "Repository",
       "Title": "Manage Python Environments in R with uv",
       "Authors@R": "c( person(\"Jacob\", \"Dumbleton\", , \"jacob@a2-ai.com\", role = c(\"aut\", \"cre\")), person(\"Matthew\", \"Smith\", , \"matthews@a2-ai.com\", role = \"aut\") )",
       "Description": "Provides uv-backed Python virtual-environment management for the fyr ecosystem (reportifyr, presentifyr R packages).",
@@ -1891,13 +1895,13 @@
       ],
       "VignetteBuilder": "knitr",
       "Config/testthat/edition": "3",
+      "Repository": "https://a2-ai.r-universe.dev",
+      "NeedsCompilation": "no",
       "Author": "Jacob Dumbleton [aut, cre], Matthew Smith [aut]",
       "Maintainer": "Jacob Dumbleton <jacob@a2-ai.com>",
-      "RemoteType": "github",
-      "RemoteHost": "api.github.com",
-      "RemoteUsername": "a2-ai",
-      "RemoteRepo": "pyro",
-      "RemoteRef": "main",
+      "RemoteType": "repository",
+      "RemoteUrl": "https://github.com/a2-ai/pyro",
+      "RemoteRef": "HEAD",
       "RemoteSha": "66065c19a9aad1cf2cc4718aee9da013e6a3209f"
     },
     "ragg": {
@@ -2026,7 +2030,7 @@
     "reportifyr": {
       "Package": "reportifyr",
       "Version": "0.4.0",
-      "Source": "GitHub",
+      "Source": "Repository",
       "Title": "Reproducible Reporting Made Simple with R",
       "Authors@R": "c( person(\"Jacob\", \"Dumbleton\", , \"jacob@a2-ai.com\", role = c(\"aut\", \"cre\")), person(\"Matthew\", \"Smith\", , \"matthews@a2-ai.com\", role = \"aut\"), person(\"Theodoros\", \"Papathanasiou\", , \"theo.x.papathanasiou@gsk.com\", role = \"aut\"), person(\"Tarjinder\", \"Sahota\", , \"tarjinder.z.sahota@gsk.com\", role = \"aut\"), person(\"Devin\", \"Pastoor\", , \"devin@a2-ai.com\", role = \"aut\"), person(\"Agnes\", \"Kim\", , \"agnes@a2-ai.com\", role = \"aut\"), person(\"Anne\", \"Zheng\", , \"anne@a2-ai.com\", role = \"aut\"), person(\"Jenna\", \"Johnson\", , \"jenna@a2-ai.com\", role = \"aut\"), person(\"Fernando\", \"Carreno\", , \"fernando.o.carreno@gsk.com\", role = \"aut\"), person(\"Kashyap\", \"Patel\", , \"kashyap.x.patel@gsk.com\", role = \"ctb\"), person(\"Maxwell\", \"Chirehwa\", , \"maxwell.t.chirehwa@gsk.com\", role = \"ctb\"), person(\"Wesley\", \"Cummings\", , \"wes@a2-ai.com\", role = \"ctb\"), person(\"Elizabeth\", \"LeBeau\", ,\"elizabeth@a2-ai.com\", role = \"ctb\") )",
       "Description": "Create reproducible reports with Microsoft Word and R.",
@@ -2067,15 +2071,14 @@
         "withr"
       ],
       "Config/testthat/edition": "3",
-      "LazyData": "true",
       "URL": "https://a2-ai.github.io/reportifyr/",
+      "Repository": "https://a2-ai.r-universe.dev",
+      "NeedsCompilation": "no",
       "Author": "Jacob Dumbleton [aut, cre], Matthew Smith [aut], Theodoros Papathanasiou [aut], Tarjinder Sahota [aut], Devin Pastoor [aut], Agnes Kim [aut], Anne Zheng [aut], Jenna Johnson [aut], Fernando Carreno [aut], Kashyap Patel [ctb], Maxwell Chirehwa [ctb], Wesley Cummings [ctb], Elizabeth LeBeau [ctb]",
       "Maintainer": "Jacob Dumbleton <jacob@a2-ai.com>",
-      "RemoteType": "github",
-      "RemoteHost": "api.github.com",
-      "RemoteUsername": "a2-ai",
-      "RemoteRepo": "reportifyr",
-      "RemoteRef": "main",
+      "RemoteType": "repository",
+      "RemoteUrl": "https://github.com/a2-ai/reportifyr",
+      "RemoteRef": "HEAD",
       "RemoteSha": "6761ebe2339d5db13886647cff04857a2050d198"
     },
     "rlang": {

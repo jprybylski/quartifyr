@@ -12,7 +12,4 @@ Imports:
     withr,
     pyro,
     reportifyr
-Remotes:
-    a2-ai/pyro,
-    a2-ai/reportifyr
 Encoding: UTF-8

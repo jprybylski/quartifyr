@@ -34,15 +34,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    # renv resolves GitHub-sourced packages (pyro, reportifyr -- see
-    # r/DESCRIPTION) via the GitHub REST API, not `git clone`, so this is
-    # the renv equivalent of the old anonymous-git-over-https workaround:
-    # without it, the shared GitHub Actions runner IP pool trips the
-    # unauthenticated API rate limit (60 req/hour) partway through
-    # resolving dependencies. Scoped to the whole job since three separate
-    # `renv::restore()` calls below all need it.
-    env:
-      GITHUB_PAT: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
 

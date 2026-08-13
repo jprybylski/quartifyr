@@ -3,8 +3,10 @@
 `renv`-managed R environment providing the pass-2 orchestration driver:
 `R/render_report.R`'s `render_report()` runs the full two-pass pipeline
 (Quarto shell render → `reportifyr` fill) in one call, plus a thin CLI
-(`render.R`) around it. `reportifyr` and `pyro` are pulled straight from
-GitHub (see `DESCRIPTION`) since neither has a CRAN release.
+(`render.R`) around it. `reportifyr` and `pyro` are pulled from
+[A2-ai's r-universe](https://a2-ai.r-universe.dev) (see `.Rprofile`'s
+`repos` option and `renv.lock`'s `Repositories`) since neither has a
+CRAN release.
 
 This is a convenience wrapper, not a requirement — it chains `quarto
 render`, `quartifyr-styling apply-layout`, and `reportifyr::build_report()`
@@ -24,23 +26,18 @@ cd r && Rscript -e 'renv::restore()'
 ```
 
 This installs every package pinned in `renv.lock` -- including
-`reportifyr`/`pyro`, pulled straight from GitHub (`DESCRIPTION`'s
-`Remotes:` field tells `renv` where to fetch them from) -- into a
-project-local `renv/library/`, isolated from any other R project's
-library. `.Rprofile` (`source("renv/activate.R")`) activates that library
-automatically the moment R starts in this directory, so no further setup
-is needed once `restore()` finishes.
+`reportifyr`/`pyro`, resolved as ordinary package-repository installs
+against `a2-ai.r-universe.dev` -- into a project-local `renv/library/`,
+isolated from any other R project's library. `.Rprofile`
+(`source("renv/activate.R")`) activates that library automatically the
+moment R starts in this directory, so no further setup is needed once
+`restore()` finishes.
 
 `DESCRIPTION`'s `Imports:` list, not what any individual `.R` file happens
 to `library()`/`::`-reference, is what `renv::snapshot()` treats as this
 project's direct dependencies (`snapshot.type: explicit` in
 `renv/settings.json`) -- add a new direct dependency there before running
 `renv::install()`/`renv::snapshot()` for it.
-
-Fetching `reportifyr`/`pyro` from GitHub during `renv::restore()` goes
-through the GitHub REST API; on a machine that's already hit GitHub's
-60-requests/hour anonymous rate limit, set `GITHUB_PAT` (any personal
-access token, no special scopes needed) first.
 
 ## Usage
 

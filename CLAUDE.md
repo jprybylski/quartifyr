@@ -10,8 +10,10 @@ meant to follow later) with Quarto. It only does **pass 1** of a two-pass
 pipeline: rendering a styled, structurally-complete `.docx` "shell" (title
 page, signature pages, ToC, synopsis, numbered appendices — but no real
 content, just `{rpfy}:filename.ext` magic-string placeholders). A separate
-**pass 2** fill tool (`reportifyr`, an external R/Python package pulled
-from GitHub) fills those placeholders with real tables/figures/footnotes.
+**pass 2** fill tool (`reportifyr`, an external R/Python package sourced
+from [A2-ai's GitHub org](https://github.com/A2-ai), built and served via
+`a2-ai.r-universe.dev`) fills those placeholders with real
+tables/figures/footnotes.
 The two passes are independent — quartifyr doesn't know about
 `reportifyr`'s internals beyond emitting the magic strings it expects, and
 `reportifyr` doesn't know or care that a shell came from quartifyr rather
