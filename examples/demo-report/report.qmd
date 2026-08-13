@@ -52,7 +52,7 @@ synopsis:
     value: "Individual concentration-time profiles were summarized descriptively from the built-in Theoph dataset; no model-based estimation was performed for this demonstration report."
   - label: "Results"
     value:
-      - "Peak concentrations and inter-participant variability are summarized in Table 1 and Figure 1."
+      - "Peak concentrations and inter-participant variability are summarized in Table 1 and Figure 1. Individual profiles show wide variability in both peak concentration and time to peak across participants, consistent with typical oral absorption variability for this compound."
       - "The synopsis figure below is a duplicate rendering of that same concentration-time profile -- demonstrating multi-line values with an embedded figure, not a numbered figure of its own (it's excluded from the List of Figures, unlike Figure 1 in the body). It's a separate saved copy (conc-time-synopsis.png) rather than a second reference to conc-time.png, since reportifyr dedupes figure metadata footnotes by filename document-wide and Figure 1's own footnote should win that dedup, not the synopsis preview's."
       - image: "conc-time-synopsis.png"
         width: "4in"

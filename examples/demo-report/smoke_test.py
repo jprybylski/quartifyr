@@ -321,19 +321,24 @@ def main() -> int:
     checks.append(("inline's label run has an explicit direct <w:b/>, not just the rStyle reference", title_label_run_b is not None and title_label_run_b.get(qn("w:val")) != "0"))
     checks.append(("inline's value run has an explicit direct <w:b w:val=\"0\"/> overriding the paragraph style's bold", title_value_run_b is not None and title_value_run_b.get(qn("w:val")) == "0"))
 
-    # Results' first value line is plain text, so the label still merges
-    # into it even though two more lines (more text, then an embedded
-    # image) follow -- only the *first* line's shape decides
-    # mergeability (see synopsis.lua's add_row).
+    # Results' first value line is plain text (and more than one
+    # sentence, to prove the merge isn't sentence-limited -- it's just
+    # whatever the first YAML list item contains, verbatim), so the
+    # label still merges into it even though two more lines (more text,
+    # then an embedded image) follow -- only the *first* line's shape
+    # decides mergeability (see synopsis.lua's add_row).
     results_merge_idx = next(
         (
             i
             for i, t in enumerate(body_paragraph_texts)
-            if t == "Results:  Peak concentrations and inter-participant variability are summarized in Table 1 and Figure 1."
+            if t
+            == "Results:  Peak concentrations and inter-participant variability are summarized in Table 1 and Figure 1. "
+            "Individual profiles show wide variability in both peak concentration and time to peak across "
+            "participants, consistent with typical oral absorption variability for this compound."
         ),
         None,
     )
-    checks.append(("synopsis-style: inline merges the label into Results' first line even though more lines follow", results_merge_idx is not None))
+    checks.append(("synopsis-style: inline merges the label into Results' full (multi-sentence) first line", results_merge_idx is not None))
 
     results_rstyle = None
     if results_merge_idx is not None:
