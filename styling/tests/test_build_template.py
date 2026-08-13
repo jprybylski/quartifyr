@@ -70,6 +70,44 @@ def test_logo_alignment_styles_present(tmp_path):
     assert doc.styles["Subtitle"].paragraph_format.alignment == WD_ALIGN_PARAGRAPH.CENTER
 
 
+def test_normal_alignment_follows_config(tmp_path):
+    _, doc = _build(tmp_path)
+    # default.yaml sets paragraph.alignment: left.
+    assert doc.styles["Normal"].paragraph_format.alignment == WD_ALIGN_PARAGRAPH.LEFT
+
+
+def test_normal_alignment_overridable(tmp_path):
+    override_path = tmp_path / "org.yaml"
+    override_path.write_text("paragraph:\n  alignment: 'justify'\n")
+    _, doc = _build(tmp_path, override_path)
+    assert doc.styles["Normal"].paragraph_format.alignment == WD_ALIGN_PARAGRAPH.JUSTIFY
+
+
+def test_synopsis_label_is_bold_with_space_before_and_after(tmp_path):
+    _, doc = _build(tmp_path)
+    label = doc.styles["Synopsis Label"]
+    assert label.font.bold is True
+    assert label.paragraph_format.space_before.pt == 12
+    assert label.paragraph_format.space_after.pt == 2
+
+
+def test_synopsis_value_is_indented_and_tight(tmp_path):
+    _, doc = _build(tmp_path)
+    value = doc.styles["Synopsis Value"]
+    assert value.paragraph_format.left_indent.inches == 0.25
+    assert value.paragraph_format.space_after.pt == 2
+    # No alignment override in default.yaml -- inherits Normal's (left)
+    # through the style's base_style chain rather than setting its own.
+    assert value.paragraph_format.alignment is None
+
+
+def test_synopsis_value_alignment_overridable(tmp_path):
+    override_path = tmp_path / "org.yaml"
+    override_path.write_text("synopsis:\n  alignment: 'left'\n")
+    _, doc = _build(tmp_path, override_path)
+    assert doc.styles["Synopsis Value"].paragraph_format.alignment == WD_ALIGN_PARAGRAPH.LEFT
+
+
 def test_page_size_and_margins_applied(tmp_path):
     _, doc = _build(tmp_path)
     section = doc.sections[0]

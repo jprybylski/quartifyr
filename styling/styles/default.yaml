@@ -43,6 +43,16 @@ page:
 paragraph:
   line_spacing: 1.15
   space_after_pt: 8
+  # "left" is the safe default -- reportifyr's own auto-generated
+  # Source/Notes/Abbreviations footnote paragraphs (external, pass 2) have
+  # no named style of their own and always inherit whatever alignment
+  # "Normal" carries here, with no hook for quartifyr to override just
+  # those paragraphs (see quartifyr issue #10's discussion). "justify"
+  # reads well for flowing body/synopsis prose but stretches those
+  # short, w:br-separated footnote lines into uneven "rivers" of
+  # whitespace, so it's opt-in via an org's own style YAML rather than
+  # the shipped default.
+  alignment: "left"
 
 heading:
   bold: true
@@ -54,6 +64,18 @@ table:
   style: "Table Grid"
   header_bold: true
   banding: false
+
+# "Synopsis Label"/"Synopsis Value" paragraph styles (see build_template.py):
+# a definition-list look -- bold label line, indented value line(s) beneath
+# it, small gap between a label and its own value but a full gap before the
+# next label -- for the synopsis section without a real Word table. Omit
+# `alignment` (as here) to inherit paragraph.alignment instead of overriding
+# it just for synopsis values.
+synopsis:
+  label_space_before_pt: 12
+  label_space_after_pt: 2
+  value_space_after_pt: 2
+  value_indent_in: 0.25
 
 title_page:
   show_rule_under_title: true

@@ -67,3 +67,44 @@ def test_invalid_page_size_rejected(tmp_path):
 def test_missing_required_key_reports_clear_error():
     with pytest.raises(StyleConfigError):
         StyleConfig.from_dict({"fonts": {}})
+
+
+def test_default_paragraph_alignment_is_left():
+    config = StyleConfig.load(DEFAULT_YAML)
+    assert config.paragraph.alignment == "left"
+
+
+def test_invalid_paragraph_alignment_rejected(tmp_path):
+    override_path = tmp_path / "bad.yaml"
+    override_path.write_text("paragraph:\n  alignment: 'diagonal'\n")
+    with pytest.raises(StyleConfigError):
+        StyleConfig.load(DEFAULT_YAML, override_path)
+
+
+def test_synopsis_alignment_defaults_to_none_and_can_be_overridden(tmp_path):
+    config = StyleConfig.load(DEFAULT_YAML)
+    # Unset in default.yaml so "Synopsis Value" inherits paragraph.alignment
+    # rather than pinning its own -- see synopsis.alignment's comment in
+    # default.yaml.
+    assert config.synopsis.alignment is None
+
+    override_path = tmp_path / "org.yaml"
+    override_path.write_text("synopsis:\n  alignment: 'left'\n")
+    overridden = StyleConfig.load(DEFAULT_YAML, override_path)
+    assert overridden.synopsis.alignment == "left"
+    # Untouched synopsis fields keep the base default.
+    assert overridden.synopsis.value_indent_in == config.synopsis.value_indent_in
+
+
+def test_invalid_synopsis_alignment_rejected(tmp_path):
+    override_path = tmp_path / "bad.yaml"
+    override_path.write_text("synopsis:\n  alignment: 'diagonal'\n")
+    with pytest.raises(StyleConfigError):
+        StyleConfig.load(DEFAULT_YAML, override_path)
+
+
+def test_negative_synopsis_indent_rejected(tmp_path):
+    override_path = tmp_path / "bad.yaml"
+    override_path.write_text("synopsis:\n  value_indent_in: -0.1\n")
+    with pytest.raises(StyleConfigError):
+        StyleConfig.load(DEFAULT_YAML, override_path)

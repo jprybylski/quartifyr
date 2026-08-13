@@ -29,6 +29,13 @@ _PAGE_SIZES_IN = {
     "a4": (8.27, 11.69),
 }
 
+_ALIGNMENTS = {
+    "left": WD_ALIGN_PARAGRAPH.LEFT,
+    "justify": WD_ALIGN_PARAGRAPH.JUSTIFY,
+    "center": WD_ALIGN_PARAGRAPH.CENTER,
+    "right": WD_ALIGN_PARAGRAPH.RIGHT,
+}
+
 
 def _rgb(hex_color: str) -> RGBColor:
     return RGBColor.from_string(hex_color.lstrip("#").upper())
@@ -194,6 +201,39 @@ def _style_bibliography(doc: DocumentObject, config: StyleConfig) -> None:
     _set_paragraph_format(style, space_after_pt=config.paragraph.space_after_pt)
 
 
+def _style_synopsis(doc: DocumentObject, config: StyleConfig) -> None:
+    """Create/configure the 'Synopsis Label'/'Synopsis Value' paragraph
+    styles synopsis.lua's raw OOXML rows reference by pStyle (style *ID*,
+    not display name -- see this repo's pStyle gotcha docs).
+
+    Gives the synopsis section a definition-list look -- bold label line,
+    indented value beneath it, a small gap between a label and its own
+    value but a full gap before the next label -- without a real Word
+    table (quartifyr issue #11: a table had the right "look" but put
+    reportifyr's per-figure footnote under the wrong column). Both are
+    based on "Normal" rather than hand-set fonts so they automatically
+    track fonts/colors/line_spacing changes there; "Synopsis Value"
+    leaves its own alignment unset unless config.synopsis.alignment is
+    given, so it inherits config.paragraph.alignment by default -- the
+    granular per-section override issue #10 asked for.
+    """
+    label = _get_or_add_style(doc, "Synopsis Label", WD_STYLE_TYPE.PARAGRAPH, base="Normal")
+    _set_font(label, config.fonts.body, config.fonts.sizes.body, color=config.colors.text, bold=True)
+    _set_paragraph_format(
+        label,
+        space_before_pt=config.synopsis.label_space_before_pt,
+        space_after_pt=config.synopsis.label_space_after_pt,
+    )
+
+    value = _get_or_add_style(doc, "Synopsis Value", WD_STYLE_TYPE.PARAGRAPH, base="Normal")
+    value.paragraph_format.left_indent = Inches(config.synopsis.value_indent_in)
+    _set_paragraph_format(
+        value,
+        space_after_pt=config.synopsis.value_space_after_pt,
+        alignment=_ALIGNMENTS[config.synopsis.alignment] if config.synopsis.alignment else None,
+    )
+
+
 def _style_hyperlink(doc: DocumentObject, config: StyleConfig) -> None:
     """Create/configure the 'Hyperlink' character style pandoc's citeproc
     output applies (via rStyle) to each in-text citation when
@@ -350,6 +390,7 @@ def build_reference_docx(config: StyleConfig, output_path: str | Path) -> Path:
         doc.styles["Normal"],
         line_spacing=config.paragraph.line_spacing,
         space_after_pt=config.paragraph.space_after_pt,
+        alignment=_ALIGNMENTS[config.paragraph.alignment],
     )
 
     _set_font(doc.styles["Title"], config.fonts.heading, config.fonts.sizes.title, color=config.colors.title, bold=True)
@@ -396,6 +437,7 @@ def build_reference_docx(config: StyleConfig, output_path: str | Path) -> Path:
         _configure_toc_style(doc, level, config, page_width_in, config.page.margins_in.left)
 
     _style_table_grid(doc, config)
+    _style_synopsis(doc, config)
     _style_bibliography(doc, config)
     _style_hyperlink(doc, config)
     _style_header(doc, config)

@@ -16,6 +16,7 @@ import yaml
 
 _HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 _PAGE_SIZES = {"letter", "a4"}
+_ALIGNMENTS = {"left", "justify", "center", "right"}
 
 
 class StyleConfigError(ValueError):
@@ -53,6 +54,22 @@ def _require_positive(value: Any, field_name: str) -> float:
     if number <= 0:
         raise StyleConfigError(f"{field_name} must be positive, got: {value!r}")
     return number
+
+
+def _require_nonnegative(value: Any, field_name: str) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise StyleConfigError(f"{field_name} must be a number, got: {value!r}") from exc
+    if number < 0:
+        raise StyleConfigError(f"{field_name} must not be negative, got: {value!r}")
+    return number
+
+
+def _require_alignment(value: Any, field_name: str) -> str:
+    if value not in _ALIGNMENTS:
+        raise StyleConfigError(f"{field_name} must be one of {_ALIGNMENTS}, got: {value!r}")
+    return value
 
 
 @dataclass
@@ -155,12 +172,14 @@ class Page:
 class ParagraphStyle:
     line_spacing: float
     space_after_pt: float
+    alignment: str
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "ParagraphStyle":
         return cls(
             line_spacing=_require_positive(d["line_spacing"], "paragraph.line_spacing"),
             space_after_pt=_require_positive(d["space_after_pt"], "paragraph.space_after_pt"),
+            alignment=_require_alignment(d["alignment"], "paragraph.alignment"),
         )
 
 
@@ -190,6 +209,34 @@ class TableStyle:
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "TableStyle":
         return cls(style=d["style"], header_bold=bool(d["header_bold"]), banding=bool(d["banding"]))
+
+
+@dataclass
+class SynopsisStyle:
+    """Governs the "Synopsis Label"/"Synopsis Value" paragraph styles that
+    give the synopsis section a definition-list look (bold label line,
+    indented value beneath it) without a real Word table -- see quartifyr
+    issue #11 for why a table was rejected.
+    """
+
+    label_space_before_pt: float
+    label_space_after_pt: float
+    value_space_after_pt: float
+    value_indent_in: float
+    alignment: str | None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "SynopsisStyle":
+        alignment = d.get("alignment")
+        if alignment is not None:
+            _require_alignment(alignment, "synopsis.alignment")
+        return cls(
+            label_space_before_pt=_require_positive(d["label_space_before_pt"], "synopsis.label_space_before_pt"),
+            label_space_after_pt=_require_positive(d["label_space_after_pt"], "synopsis.label_space_after_pt"),
+            value_space_after_pt=_require_positive(d["value_space_after_pt"], "synopsis.value_space_after_pt"),
+            value_indent_in=_require_nonnegative(d["value_indent_in"], "synopsis.value_indent_in"),
+            alignment=alignment,
+        )
 
 
 @dataclass
@@ -230,6 +277,7 @@ class StyleConfig:
     paragraph: ParagraphStyle
     heading: HeadingStyle
     table: TableStyle
+    synopsis: SynopsisStyle
     title_page: TitlePageStyle
     footer: FooterStyle
     identity: Identity
@@ -244,6 +292,7 @@ class StyleConfig:
                 paragraph=ParagraphStyle.from_dict(d["paragraph"]),
                 heading=HeadingStyle.from_dict(d["heading"]),
                 table=TableStyle.from_dict(d["table"]),
+                synopsis=SynopsisStyle.from_dict(d["synopsis"]),
                 title_page=TitlePageStyle.from_dict(d["title_page"]),
                 footer=FooterStyle.from_dict(d["footer"]),
                 identity=Identity.from_dict(d.get("identity", {})),

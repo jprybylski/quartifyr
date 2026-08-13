@@ -96,15 +96,24 @@ end
 local doc_title = nil
 local rows = {} -- list of {label=, lines={...}}
 
+-- "SynopsisLabel"/"SynopsisValue" are the style *IDs* (no space) of the
+-- "Synopsis Label"/"Synopsis Value" paragraph styles build_template.py
+-- defines -- raw OOXML w:pStyle references the ID, not the display name
+-- (see this repo's pStyle-vs-display-name gotcha docs); that pair is what
+-- gives the definition-list look (bold label line, indented value beneath)
+-- quartifyr issue #11 asked for, without a real Word table.
 local function label_paragraph(label)
   return string.format(
-    [[<w:p><w:pPr><w:spacing w:before="240"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">%s</w:t></w:r></w:p>]],
+    [[<w:p><w:pPr><w:pStyle w:val="SynopsisLabel"/></w:pPr><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>]],
     utils.escape_xml(label)
   )
 end
 
 local function value_paragraph(line)
-  return string.format([[<w:p><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>]], utils.escape_xml(line))
+  return string.format(
+    [[<w:p><w:pPr><w:pStyle w:val="SynopsisValue"/></w:pPr><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>]],
+    utils.escape_xml(line)
+  )
 end
 
 -- reportifyr's magic-string width arg is a bare number of inches (see

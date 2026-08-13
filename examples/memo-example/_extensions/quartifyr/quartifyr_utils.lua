@@ -80,17 +80,23 @@ end
 local LABEL_PCT = 1500 -- 30%
 local VALUE_PCT = 3500 -- 70%
 
+-- Explicit <w:jc w:val="left"/> on both cells regardless of
+-- paragraph.alignment: a narrow table column stretches short/wrapped
+-- lines into uneven gaps under "justify" (confirmed by rendering the
+-- Address row here with a "justify" style override) -- title/signature
+-- field tables should stay left-aligned even for orgs that opt into
+-- justified body prose.
 function M.table_row(label, value)
   return string.format(
     [[
     <w:tr>
       <w:tc>
         <w:tcPr><w:tcW w:w="%d" w:type="pct"/></w:tcPr>
-        <w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">%s</w:t></w:r></w:p>
+        <w:p><w:pPr><w:jc w:val="left"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">%s</w:t></w:r></w:p>
       </w:tc>
       <w:tc>
         <w:tcPr><w:tcW w:w="%d" w:type="pct"/></w:tcPr>
-        <w:p><w:r>%s</w:r></w:p>
+        <w:p><w:pPr><w:jc w:val="left"/></w:pPr><w:r>%s</w:r></w:p>
       </w:tc>
     </w:tr>
   ]],
