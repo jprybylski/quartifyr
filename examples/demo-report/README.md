@@ -32,10 +32,19 @@ a real `reportifyr` fill pass.
   automatically by `smoke_test.py` (see below) -- if you edit the
   repo-root extension, re-run that script before trusting this demo's
   output.
-- `scripts/01_analysis.R` -- generates `OUTPUTS/tables/pk-summary.csv` and
+- `scripts/01_analysis.R` -- generates `OUTPUTS/tables/pk-summary.csv`,
+  `OUTPUTS/tables/participant-demographics.rds`, and
   `OUTPUTS/figures/conc-time.png` (with reportifyr metadata sidecars) from
   `Theoph`. Already run; outputs are committed so the demo works
-  immediately after a clone. Re-run it if you want to regenerate them.
+  immediately after a clone. Re-run it if you want to regenerate them. The
+  two tables deliberately demonstrate reportifyr's two ways of filling a
+  `{rpfy}:` table magic string: `pk-summary.csv` is a plain data frame,
+  which `reportifyr::add_tables()` always reformats with its own hardcoded
+  Arial Narrow 10pt styling regardless of this report's actual body font;
+  `participant-demographics.rds` is a pre-built, hand-styled `flextable`
+  object (matching this report's Times New Roman body font), which
+  `add_tables()` inserts completely as-is instead. See that script's
+  comment for the full "style bleed" explanation.
 - `report/standard_footnotes.yaml`, `report/config.yaml` -- reportifyr's
   own defaults (via `reportifyr::initialize_report_project()`).
 - `render.R` -- runs the full pipeline via the toolkit's
@@ -96,12 +105,15 @@ python3 smoke_test.py
 First checks `_extensions/quartifyr/` hasn't drifted from the repo-root
 copy (see Layout above), then runs `Rscript render.R --final` for real and
 asserts on the resulting docx: no leftover `{rpfy}:` magic strings, the PK
-summary table and concentration-time figure are actually filled in (not
-placeholders), the title page/status stamp/appendix lettering all
-rendered, `\gls{PK}` resolved through the abbreviations bridge, and the
-bibliography renders (in-text citations resolved, entries present, and
-populated before the appendices rather than after). Skips (exit 0) if
-`Rscript` or `quarto` aren't on `PATH`.
+summary table, participant demographics table, and concentration-time
+figure are actually filled in (not placeholders), the two tables' body
+text renders in their respective fonts (Arial Narrow for the plain-data-
+frame table, Times New Roman for the pre-built flextable -- see Layout
+above), the title page/status stamp/appendix lettering all rendered,
+`\gls{PK}` resolved through the abbreviations bridge, and the bibliography
+renders (in-text citations resolved, entries present, and populated
+before the appendices rather than after). Skips (exit 0) if `Rscript` or
+`quarto` aren't on `PATH`.
 
 ## Why this project has its own `.here` file
 

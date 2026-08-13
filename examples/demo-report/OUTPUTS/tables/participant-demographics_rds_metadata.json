@@ -76,20 +76,18 @@
   },
   "object_meta": {
     "author": "John Prybylski <jprybylski@gmail.com>",
-    "path": "OUTPUTS/tables/pk-summary.csv",
+    "path": "OUTPUTS/tables/participant-demographics.rds",
     "creation_time": "2026-08-13 17:22:06",
-    "file_type": "csv",
+    "file_type": "rds",
     "meta_type": "NA",
-    "hash": "61294773c8f4ce56a73ed8502a8a778667c877e21ce4f36e76415e22bb2aadc4",
+    "hash": "d51cb7686202041f01cec77c560e34426706250ca5406ffa6e118b31f7593884",
     "table1": false,
     "footnotes": {
       "equations": [],
       "notes": [
-        "Values are per-participant summary statistics computed directly from observed concentrations; no imputation or model-based estimation was performed. This table is filled from a plain data frame, so reportifyr renders it in its own default table styling (Arial Narrow) rather than this report's own body font -- contrast with the participant demographics table below, filled from a pre-styled flextable object."
+        "Body weight and weight-normalized dose for each participant. Unlike the PK summary table above, this table is filled from a pre-built, hand-styled flextable object rather than a plain data frame, so it renders in this report's own reference-doc font (Times New Roman) instead of reportifyr's default table styling."
       ],
-      "abbreviations": [
-        "PK"
-      ]
+      "abbreviations": []
     }
   },
   "addl_meta": []

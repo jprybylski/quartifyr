@@ -11,5 +11,7 @@ Imports:
     ggplot2,
     withr,
     pyro,
-    reportifyr
+    reportifyr,
+    flextable,
+    officer
 Encoding: UTF-8

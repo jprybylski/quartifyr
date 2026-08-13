@@ -135,7 +135,7 @@ def main() -> int:
     )
 
     checks.append(("no leftover {rpfy}: magic strings", "{rpfy}:" not in joined))
-    checks.append(("at least 6 tables present (title info + signatures + PK summary + abbreviations; synopsis is plain paragraphs, not a table)", len(document.tables) >= 6))
+    checks.append(("at least 7 tables present (title info + signatures + PK summary + demographics + abbreviations; synopsis is plain paragraphs, not a table)", len(document.tables) >= 7))
 
     # build_template.py's reference-doc sets <w:updateFields w:val="true"/>
     # in settings.xml so Word auto-recalculates every field (TOC, SEQ, REF,
@@ -257,6 +257,48 @@ def main() -> int:
     checks.append(
         ("PK summary table header present", any({"Cmax", "Cmin"}.issubset(set(row)) for row in all_rows))
     )
+    checks.append(
+        (
+            "participant demographics table header present",
+            any({"Weight (kg)", "Dose (mg/kg)"}.issubset(set(row)) for row in all_rows),
+        )
+    )
+
+    # The "style bleed" contrast scripts/01_analysis.R's comment describes:
+    # pk_summary started life as a plain data frame (.csv), so reportifyr's
+    # add_tables() ran its own format_flextable() on it, which hardcodes
+    # Arial Narrow regardless of this doc's actual body font (Times New
+    # Roman, per styling/styles/default.yaml). The demographics table
+    # started life as an already-built `flextable` object (.rds), which
+    # add_tables() inserts as-is instead of reformatting it. Checked here
+    # against the real rendered docx, not just asserted by construction.
+    def _table_with_header_cell(needle: str):
+        for t in document.tables:
+            if t.rows and any(needle in cell.text for cell in t.rows[0].cells):
+                return t
+        return None
+
+    def _first_body_run_font(table) -> str | None:
+        if table is None or len(table.rows) < 2:
+            return None
+        run = table.rows[1].cells[0].paragraphs[0].runs[0]
+        return run.font.name
+
+    pk_table_font = _first_body_run_font(_table_with_header_cell("Cmax"))
+    demographics_table_font = _first_body_run_font(_table_with_header_cell("Weight (kg)"))
+    checks.append(
+        (
+            "PK summary table body renders in reportifyr's own hardcoded Arial Narrow (plain-data-frame table always gets reformatted, regardless of this doc's Times New Roman body font)",
+            pk_table_font == "Arial Narrow",
+        )
+    )
+    checks.append(
+        (
+            "demographics table body renders in its own hand-styled Times New Roman (pre-built flextable .rds is inserted as-is, matching this doc's body font)",
+            demographics_table_font == "Times New Roman",
+        )
+    )
+
     checks.append(("synopsis section rendered", "Synopsis" in joined))
 
     # Front-matter section labels (Synopsis, Table of Contents, List of

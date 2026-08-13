@@ -1,12 +1,14 @@
-# Generates the demo report's artifacts: a PK parameter summary table and a
-# concentration-time figure, using base R's built-in Theoph dataset (the
-# same one reportifyr's own README/examples use). Run from this project's
-# root (examples/demo-report/), e.g.:
+# Generates the demo report's artifacts: a PK parameter summary table, a
+# participant demographics table, and a concentration-time figure, using
+# base R's built-in Theoph dataset (the same one reportifyr's own README/
+# examples use). Run from this project's root (examples/demo-report/), e.g.:
 #
 #   cd examples/demo-report && Rscript scripts/01_analysis.R
 
 library(reportifyr)
 library(ggplot2)
+library(flextable)
+library(officer)
 
 stopifnot(basename(getwd()) == "demo-report")
 
@@ -37,9 +39,49 @@ write_csv_with_metadata(
   object = pk_summary,
   file = file.path("OUTPUTS", "tables", "pk-summary.csv"),
   config_yaml = config_yaml,
-  meta_notes = "Values are per-participant summary statistics computed directly from observed concentrations; no imputation or model-based estimation was performed.",
+  meta_notes = "Values are per-participant summary statistics computed directly from observed concentrations; no imputation or model-based estimation was performed. This table is filled from a plain data frame, so reportifyr renders it in its own default table styling (Arial Narrow) rather than this report's own body font -- contrast with the participant demographics table below, filled from a pre-styled flextable object.",
   meta_abbrevs = "PK",
   row.names = FALSE
+)
+
+# A second table, complementing pk_summary above to show reportifyr's two
+# ways of filling a {rpfy}: table magic string: a plain data frame (.csv,
+# above) vs. a pre-built `flextable` object (.rds, here). This matters
+# because reportifyr::add_tables() (process_table_file(), R/add_tables.R)
+# only runs its own formatting -- format_flextable(), which hardcodes
+# Arial Narrow 10pt borders/spacing regardless of the reference-doc's
+# actual body font -- on objects that AREN'T already `flextable`s; an
+# .rds that already `inherits(data_in, "flextable")` when read back is
+# inserted completely as-is, untouched. So pk_summary above (a plain data
+# frame) always renders in reportifyr's hardcoded Arial Narrow 10pt no
+# matter what this doc's reference-doc sets fonts.body to (Times New
+# Roman here, per styling/styles/default.yaml -- see report/config.yaml's
+# footnotes_font comment for the same clash affecting table *footnotes*,
+# fixed there but not fixable for a plain data frame's own table body).
+# Building a flextable by hand, styled to match those same values, is the
+# only way to escape that -- demonstrated below.
+theoph_demographics <- unique(theoph[, c("Participant", "Wt", "Dose")])
+theoph_demographics <- theoph_demographics[
+  order(as.numeric(as.character(theoph_demographics$Participant))),
+]
+names(theoph_demographics) <- c("Participant", "Weight (kg)", "Dose (mg/kg)")
+
+demographics_ft <- flextable(theoph_demographics) |>
+  set_table_properties(layout = "autofit", width = 1) |>
+  align(align = "left", part = "all") |>
+  bold(bold = TRUE, part = "header") |>
+  bg(bg = "#D9D9D9", part = "header") |>
+  border(border = fp_border(color = "#000000"), part = "all") |>
+  font(fontname = "Times New Roman", part = "all") |>
+  fontsize(size = 11, part = "all") |>
+  line_spacing(space = 1.15, part = "all") |>
+  padding(padding.bottom = 2, padding.top = 2, part = "all")
+
+save_rds_with_metadata(
+  object = demographics_ft,
+  file = file.path("OUTPUTS", "tables", "participant-demographics.rds"),
+  config_yaml = config_yaml,
+  meta_notes = "Body weight and weight-normalized dose for each participant. Unlike the PK summary table above, this table is filled from a pre-built, hand-styled flextable object rather than a plain data frame, so it renders in this report's own reference-doc font (Times New Roman) instead of reportifyr's default table styling."
 )
 
 figures_path <- file.path("OUTPUTS", "figures")
@@ -89,5 +131,6 @@ ggsave_with_metadata(
 
 cat("Wrote:\n")
 cat(" -", file.path("OUTPUTS", "tables", "pk-summary.csv"), "\n")
+cat(" -", file.path("OUTPUTS", "tables", "participant-demographics.rds"), "\n")
 cat(" -", plot_file, "\n")
 cat(" -", synopsis_plot_file, "\n")

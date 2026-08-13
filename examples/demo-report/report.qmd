@@ -167,6 +167,23 @@ Individual concentration-time trajectories for all participants in the study,
 plotted on the same axes, summarized numerically in
 {{< crossref "TblPkSummary" >}}.
 
+## Participant Demographics
+
+<!-- Complements {{< crossref "TblPkSummary" >}} above, which fills from a
+     plain data frame (.csv): this table's magic string points at a .rds
+     holding a genuine `flextable` object, built and hand-styled to match
+     this report's own reference-doc font/colors in
+     scripts/01_analysis.R -- reportifyr's add_tables() only reformats
+     objects that AREN'T already a `flextable` (see that script's comment
+     for the full "style bleed" story: the PK summary table above always
+     renders in reportifyr's own hardcoded Arial Narrow 10pt regardless of
+     this doc's actual body font, since it started as a plain data frame). -->
+{{< tbl_caption "TblDemographics" "Participant demographic and dosing summary" >}}
+
+{rpfy}:participant-demographics.rds
+
+Body weight and weight-normalized dose for each participant in the study.
+
 {{< pagebreak >}}
 
 <!-- Same `custom-style="Heading 1"` idiom as Synopsis/Abbreviations above

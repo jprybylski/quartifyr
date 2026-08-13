@@ -26,7 +26,7 @@ JOBS = [
     ("examples/demo-report/report/final/report-final.docx", 0, "demo-report-title.png"),
     ("examples/demo-report/report/final/report-final.docx", 2, "demo-report-synopsis.png"),
     ("examples/demo-report/report/final/report-final.docx", 8, "demo-report-body.png"),
-    ("examples/demo-report/report/final/report-final.docx", 11, "demo-report-appendix.png"),
+    ("examples/demo-report/report/final/report-final.docx", 12, "demo-report-appendix.png"),
     ("examples/memo-example/report/final/report-final.docx", 0, "memo-example-cover.png"),
     ("examples/memo-example/report/final/report-final.docx", 1, "memo-example-body.png"),
 ]
