@@ -50,6 +50,11 @@ examples/*/.rpfy-logs/
 # OS
 .DS_Store
 
+# Jekyll build artifacts (docs/ site), only present after a local `jekyll build`/`bundle exec jekyll serve`
+docs/_site/
+docs/.jekyll-cache/
+docs/.jekyll-metadata
+
 # Personal Claude Code permissions/settings, not project source
 .claude/
 
