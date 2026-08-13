@@ -288,13 +288,31 @@ def main() -> int:
     body_paragraphs = list(document.element.body.iter(qn("w:p")))
     body_paragraph_texts = ["".join(t.text or "" for t in p.findall(".//" + qn("w:t"))) for p in body_paragraphs]
 
+    title_label_idx = next(
+        (
+            i
+            for i in range(len(body_paragraph_texts) - 1)
+            if body_paragraph_texts[i] == "Title" and body_paragraph_texts[i + 1] == "Population Pharmacokinetics of Theophylline"
+        ),
+        None,
+    )
+    checks.append(("synopsis title row has the real report title", title_label_idx is not None))
+
+    # report.qmd sets synopsis-style: label-list (the default) -- value
+    # paragraphs sit flush under their label, not indented, unlike
+    # synopsis-style: definition-list. synopsis.lua achieves this with an
+    # inline w:ind w:left="0" override on top of the shared "Synopsis
+    # Value" style (which otherwise carries a nonzero indent), so its
+    # absence here would mean that override silently stopped applying.
+    title_value_ind = None
+    if title_label_idx is not None:
+        value_ppr = body_paragraphs[title_label_idx + 1].find(qn("w:pPr"))
+        if value_ppr is not None:
+            title_value_ind = value_ppr.find(qn("w:ind"))
     checks.append(
         (
-            "synopsis title row has the real report title",
-            any(
-                body_paragraph_texts[i] == "Title" and body_paragraph_texts[i + 1] == "Population Pharmacokinetics of Theophylline"
-                for i in range(len(body_paragraph_texts) - 1)
-            ),
+            "synopsis-style: label-list keeps the value flush (no left indent)",
+            title_value_ind is not None and title_value_ind.get(qn("w:left")) == "0",
         )
     )
 

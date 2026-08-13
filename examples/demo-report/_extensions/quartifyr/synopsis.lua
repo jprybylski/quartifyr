@@ -1,9 +1,9 @@
 -- ::: .synopsis :::
 --
--- Renders a Synopsis summary -- label/value pairs flowing as plain
--- paragraphs, not a table -- from a `synopsis:` frontmatter block, a
--- standard CSR front-matter convention. Fully dynamic: any number of
--- rows, any labels, in whatever order they're written --
+-- Renders a Synopsis summary -- label/value pairs -- from a `synopsis:`
+-- frontmatter block, a standard CSR front-matter convention. Fully
+-- dynamic: any number of rows, any labels, in whatever order they're
+-- written --
 --
 --   synopsis:
 --     - label: "Objectives"
@@ -39,31 +39,53 @@
 -- list mixing strings with `{image: "path", width: "..."}` entries,
 -- interleaved in whatever order they're written.
 --
--- Not a table -- deliberately, after two earlier attempts that were:
--- embedding a real `pandoc.Image` directly inside a table cell (which
--- only works by building the table via pandoc's Table AST instead of
--- raw OOXML, and that AST table's column widths come out as fixed twips
--- computed once against whatever reference-doc exists at render time --
--- confirmed by testing: identical gridCol values when rendered against
--- reference-docs with different page margins, a real regression); and
--- routing figures through reportifyr's own cell-aware `{rpfy}:` handling
--- (reportipyr's `add_figure()` does support magic strings inside table
--- cells, confirmed by reading its source), which does land the figure
--- correctly inside the cell, but `reportifyr::build_report()`'s
--- auto-generated Source/Notes/Abbreviations footnote for a cell figure
--- groups *per Word table element* and inserts immediately after the
--- whole table (`tbl_el.addnext(...)`, confirmed by reading
--- reportipyr/footnotes.py) -- so the footnote always spans the full
--- table width, underneath the row's label column too, not tucked
--- directly beneath the figure itself. Plain body-level paragraphs
--- sidestep this entirely: reportifyr's *body-level* (non-cell) figure
--- and footnote handling inserts each figure's footnote as the very next
--- paragraph after that specific figure, individually -- exactly the
--- same mechanism a `{rpfy}:` figure in the qmd body already uses
--- (confirmed: this is why the body's own Figure 1 has never had this
--- problem). A synopsis figure is just another body-level `{rpfy}:`
--- magic string, so it inherits that already-correct positioning for
+-- `synopsis-style:` picks the rendered layout -- default `"label-list"`:
+--
+--   synopsis-style: label-list       # default: plain paragraphs, label
+--                                     # bold on its own line, value flush
+--                                     # left on the line(s) below it
+--   synopsis-style: definition-list  # value indented under its label,
+--                                     # otherwise identical spacing
+--   synopsis-style: table            # a real two-column Word table --
+--                                     # see the warning below
+--   synopsis-style: false            # parse synopsis: (so the data can
+--                                     # stay in frontmatter) but render
+--                                     # nothing -- not even a blank
+--                                     # paragraph, just an empty div
+--
+-- label-list/definition-list are deliberately NOT a table -- after two
+-- earlier attempts that were: embedding a real `pandoc.Image` directly
+-- inside a table cell (which only works by building the table via
+-- pandoc's Table AST instead of raw OOXML, and that AST table's column
+-- widths come out as fixed twips computed once against whatever
+-- reference-doc exists at render time -- confirmed by testing: identical
+-- gridCol values when rendered against reference-docs with different
+-- page margins, a real regression); and routing figures through
+-- reportifyr's own cell-aware `{rpfy}:` handling (reportipyr's
+-- `add_figure()` does support magic strings inside table cells,
+-- confirmed by reading its source), which does land the figure correctly
+-- inside the cell, but `reportifyr::build_report()`'s auto-generated
+-- Source/Notes/Abbreviations footnote for a cell figure groups *per Word
+-- table element* and inserts immediately after the whole table
+-- (`tbl_el.addnext(...)`, confirmed by reading reportipyr/footnotes.py)
+-- -- so the footnote always spans the full table width, underneath the
+-- row's label column too, not tucked directly beneath the figure itself.
+-- Plain body-level paragraphs sidestep this entirely: reportifyr's
+-- *body-level* (non-cell) figure and footnote handling inserts each
+-- figure's footnote as the very next paragraph after that specific
+-- figure, individually -- exactly the same mechanism a `{rpfy}:` figure
+-- in the qmd body already uses (confirmed: this is why the body's own
+-- Figure 1 has never had this problem). A synopsis figure is just
+-- another body-level `{rpfy}:` magic string under label-list/
+-- definition-list, so it inherits that already-correct positioning for
 -- free, with no table-splitting bookkeeping needed at all.
+--
+-- `synopsis-style: table` still works -- reportifyr does support magic
+-- strings inside table cells -- but reintroduces exactly the footnote
+-- misplacement above for any row embedding an image, which is why it
+-- logs a quarto.log.warning() whenever it's selected rather than only
+-- when an image is actually present (a document without one today might
+-- gain one later without anyone re-reading this comment).
 --
 -- One consequence of going through reportifyr rather than embedding a
 -- picture directly: the picture doesn't exist yet after a plain `quarto
@@ -73,14 +95,16 @@
 --
 -- A "Title" row (from the top-level `title:` field) is always prepended
 -- automatically when synopsis rows are present. Omit `synopsis:` from
--- frontmatter entirely to disable the whole section -- the div then
--- renders nothing, so a shared shell template can leave the `:::
--- .synopsis :::` marker in unconditionally and let each project's
--- frontmatter decide.
+-- frontmatter entirely (or set synopsis-style: false) to disable the
+-- whole section -- the div then renders nothing, so a shared shell
+-- template can leave the `::: .synopsis :::` marker in unconditionally
+-- and let each project's frontmatter decide.
 
 local utils = require("quartifyr_utils")
 
 local DEFAULT_FIGURE_WIDTH = "3in"
+
+local VALID_STYLES = { ["definition-list"] = true, ["label-list"] = true, ["table"] = true }
 
 local function stringify_or_nil(meta_val)
   if meta_val == nil then
@@ -95,13 +119,16 @@ end
 
 local doc_title = nil
 local rows = {} -- list of {label=, lines={...}}
+local synopsis_style = "label-list"
 
 -- "SynopsisLabel"/"SynopsisValue" are the style *IDs* (no space) of the
 -- "Synopsis Label"/"Synopsis Value" paragraph styles build_template.py
 -- defines -- raw OOXML w:pStyle references the ID, not the display name
--- (see this repo's pStyle-vs-display-name gotcha docs); that pair is what
--- gives the definition-list look (bold label line, indented value beneath)
--- quartifyr issue #11 asked for, without a real Word table.
+-- (see this repo's pStyle-vs-display-name gotcha docs). Both label-list
+-- and definition-list reuse them for font/spacing; only the value
+-- paragraph's indent differs between the two, added here as an inline
+-- w:ind override (definition-list) rather than a second style, since
+-- that's the only thing that differs.
 local function label_paragraph(label)
   return string.format(
     [[<w:p><w:pPr><w:pStyle w:val="SynopsisLabel"/></w:pPr><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>]],
@@ -109,10 +136,70 @@ local function label_paragraph(label)
   )
 end
 
-local function value_paragraph(line)
+local function value_paragraph(line, indent)
+  local ppr = '<w:pStyle w:val="SynopsisValue"/>'
+  if not indent then
+    ppr = ppr .. '<w:ind w:left="0"/>'
+  end
   return string.format(
-    [[<w:p><w:pPr><w:pStyle w:val="SynopsisValue"/></w:pPr><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>]],
+    [[<w:p><w:pPr>%s</w:pPr><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>]],
+    ppr,
     utils.escape_xml(line)
+  )
+end
+
+-- synopsis-style: table reuses the same borderless-vs-bordered choice as
+-- utils.field_table (title page's Address/Sponsor/etc. rows) except with
+-- visible borders ("TableGrid", matching e.g. the body's PK summary
+-- table) rather than "TableNormal" -- quartifyr issue #11 described the
+-- earlier table-based synopsis as having "the right look" before the
+-- footnote-placement problem above, which read as a bordered table, not
+-- a borderless one.
+local TABLE_LABEL_PCT = 1500 -- 30%
+local TABLE_VALUE_PCT = 3500 -- 70%
+
+local function synopsis_table_row(label, value_lines)
+  return string.format(
+    [[
+    <w:tr>
+      <w:tc>
+        <w:tcPr><w:tcW w:w="%d" w:type="pct"/></w:tcPr>
+        <w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">%s</w:t></w:r></w:p>
+      </w:tc>
+      <w:tc>
+        <w:tcPr><w:tcW w:w="%d" w:type="pct"/></w:tcPr>
+        <w:p><w:r>%s</w:r></w:p>
+      </w:tc>
+    </w:tr>
+  ]],
+    TABLE_LABEL_PCT,
+    utils.escape_xml(label),
+    TABLE_VALUE_PCT,
+    utils.multiline_runs(table.concat(value_lines, "\n"))
+  )
+end
+
+local function synopsis_table_xml(field_rows)
+  local row_xml = {}
+  for _, r in ipairs(field_rows) do
+    table.insert(row_xml, synopsis_table_row(r.label, r.value_lines))
+  end
+  return string.format(
+    [[
+  <w:tbl>
+    <w:tblPr>
+      <w:tblStyle w:val="TableGrid"/>
+      <w:tblW w:w="5000" w:type="pct"/>
+      <w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>
+    </w:tblPr>
+    <w:tblGrid>
+      <w:gridCol/>
+      <w:gridCol/>
+    </w:tblGrid>
+    %s
+  </w:tbl>
+  ]],
+    table.concat(row_xml, "\n")
   )
 end
 
@@ -169,6 +256,28 @@ return {
     Meta = function(meta)
       doc_title = stringify_or_nil(meta.title)
 
+      local raw_style = meta["synopsis-style"]
+      if raw_style == false then
+        synopsis_style = false
+      elseif raw_style == nil then
+        synopsis_style = "label-list"
+      else
+        local s = stringify_or_nil(raw_style)
+        if s == "false" then
+          synopsis_style = false
+        elseif s ~= nil and VALID_STYLES[s] then
+          synopsis_style = s
+        else
+          quarto.log.warning(
+            "synopsis.lua: synopsis-style must be false, 'definition-list', "
+              .. "'label-list', or 'table' (got '"
+              .. tostring(s)
+              .. "'); defaulting to 'label-list'"
+          )
+          synopsis_style = "label-list"
+        end
+      end
+
       local synopsis = meta["synopsis"]
       if synopsis then
         for _, entry in ipairs(synopsis) do
@@ -188,16 +297,37 @@ return {
       if not div.classes:includes(".synopsis") then
         return nil
       end
-      if #rows == 0 then
-        -- No synopsis: block in frontmatter -- this is the "toggle off".
+      if #rows == 0 or synopsis_style == false then
+        -- No synopsis: block in frontmatter, or synopsis-style: false --
+        -- either way, this is the "toggle off": parse the data (if any)
+        -- but render nothing, not even an empty paragraph.
         return div
       end
 
-      local paras = { label_paragraph("Title"), value_paragraph(doc_title or "") }
+      if synopsis_style == "table" then
+        quarto.log.warning(
+          "synopsis.lua: synopsis-style: table -- reportifyr's "
+            .. "auto-generated Source/Notes/Abbreviations footnote for a "
+            .. "synopsis figure inside a table cell lands after the whole "
+            .. "table, not tucked directly under that figure (reportifyr "
+            .. "groups cell footnotes per table element). Use "
+            .. "'label-list' or 'definition-list' if a synopsis row embeds "
+            .. "an image."
+        )
+        local field_rows = { { label = "Title", value_lines = { doc_title or "" } } }
+        for _, r in ipairs(rows) do
+          table.insert(field_rows, { label = r.label, value_lines = r.lines })
+        end
+        table.insert(div.content, pandoc.RawBlock("openxml", synopsis_table_xml(field_rows)))
+        return div
+      end
+
+      local indent = synopsis_style == "definition-list"
+      local paras = { label_paragraph("Title"), value_paragraph(doc_title or "", indent) }
       for _, r in ipairs(rows) do
         table.insert(paras, label_paragraph(r.label))
         for _, line in ipairs(r.lines) do
-          table.insert(paras, value_paragraph(line))
+          table.insert(paras, value_paragraph(line, indent))
         end
       end
 
