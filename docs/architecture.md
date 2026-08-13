@@ -117,8 +117,9 @@ overflowing or falling short.
 The core pipeline — styling, title/signature pages, ToC/LOF/LOT,
 abbreviations, appendices, bibliography/citations, and the `reportifyr`
 fill pass — is built and verified end to end (see
-`examples/demo-report/smoke_test.py`, which runs the real pipeline and
-checks the actual output on every run). Two things are deliberately
+[`examples/demo-report/smoke_test.py`](https://github.com/jprybylski/quartifyr/blob/main/examples/demo-report/smoke_test.py),
+which runs the real pipeline and checks the actual output on every run).
+Two things are deliberately
 incomplete rather than papered over:
 
 - **Word field recalculation** (`quartifyr-styling recalculate-fields`,

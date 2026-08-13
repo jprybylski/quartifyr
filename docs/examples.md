@@ -13,7 +13,7 @@ built from base R's built-in datasets, so no external data is needed,
 and both ship pre-generated `OUTPUTS/` so they work immediately after a
 clone even before you've set up the full toolchain.
 
-## `demo-report` — the full pipeline
+## [`demo-report`](https://github.com/jprybylski/quartifyr/tree/main/examples/demo-report) — the full pipeline
 
 A small PK-style report built from `Theoph`, exercising every piece of
 the toolkit: dynamic title page, draft/final status stamp,
@@ -57,7 +57,7 @@ really filled in, bibliography populated before the appendices, ...):
 python3 examples/demo-report/smoke_test.py
 ```
 
-## `memo-example` — the minimal end
+## [`memo-example`](https://github.com/jprybylski/quartifyr/tree/main/examples/memo-example) — the minimal end
 
 The same pipeline's other extreme: a fax-cover-sheet-style memo cover
 page (logo, left-aligned `MEMORANDUM` banner, To/From/Date/Re/Cc grid)

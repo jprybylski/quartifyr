@@ -41,11 +41,13 @@ version: "1.0"
 confidentiality: "Confidential — Do Not Distribute"
 logo: "assets/logo.png"          # optional
 project: "ACME-001"               # feeds header-format, not shown on its own
-report_number: "RPT-2026-014"     # feeds header-format, not shown on its own
+report_number: &report_number "RPT-2026-014"   # feeds header-format below
 header-format: "{project} - {report_number}"   # optional
 title-page-extra:
   - label: "Sponsor"
     value: "Acme Pharma"
+  - label: "Report Number"
+    value: *report_number            # reuses report_number above, not retyped
 contributors:
   authors:
     - name: "Jane Doe, PharmD"
@@ -75,6 +77,13 @@ defaulting to `DRAFT` if omitted.
 — deliberate, since pandoc's Lua metadata tables don't preserve map key
 order (confirmed by testing), so a list is what keeps row order reliable
 across renders.
+
+A value that's also used elsewhere (like `report_number` above, reused
+by `header-format:`) doesn't need to be written out twice: anchor it
+once (`&report_number`) and alias it (`*report_number`) into the
+`title-page-extra` row, plain YAML resolved before Quarto/pandoc/Lua see
+the data. This is *not* the `{{< meta ... >}}` shortcode — that only
+substitutes inside document body content, not frontmatter itself.
 
 ## Memo cover page
 

@@ -301,6 +301,14 @@ def main() -> int:
     checks.append(("logo image embedded on title page", any("png" in n.lower() for n in images)))
     checks.append(("address rendered on title page", "Raleigh, NC" in joined))
 
+    # report_number is a plain YAML anchor (&report_number), aliased
+    # (*report_number) into this title-page-extra row rather than
+    # written out a second time -- see report.qmd's comment. Both
+    # occurrences below prove the *same* written value reached the title
+    # page's title-page-extra row and the header's header-format
+    # placeholder (checked separately by header_expected further down).
+    checks.append(("title-page-extra 'Report Number' row rendered from the anchored report_number", "Report Number | RPT-2026-014" in joined))
+
     checks.append(("synopsis value supports multi-line text", "demonstrating multi-line values with an embedded figure" in joined))
     checks.append(("synopsis figure embedded as a real image", len(images) >= 2))
 

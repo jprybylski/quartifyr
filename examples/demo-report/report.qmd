@@ -15,12 +15,25 @@ address:
   - "Raleigh, NC 27609"
 # {project}/{report_number} feed header-format: below; report-type/
 # lead-scientist/etc. above are separate, title-page-only fields.
+#
+# report_number is anchored (&report_number) and aliased (*report_number)
+# into title-page-extra below, rather than written out twice, so the
+# title page and the header can never drift apart. This is plain YAML,
+# resolved by the parser before Quarto/pandoc/Lua ever see the data --
+# NOT the {{< meta ... >}} shortcode, which can't substitute inside
+# frontmatter itself (only in document body content); confirmed against
+# both consumers here: pandoc's own frontmatter parser (title_page.lua's
+# Meta table) and quartifyr_styling.layout's independent yaml.safe_load()
+# (header-format) each resolve the alias identically from the one
+# written value.
 project: "ACME-001"
-report_number: "RPT-2026-014"
+report_number: &report_number "RPT-2026-014"
 header-format: "{project} - {report_number}"
 title-page-extra:
   - label: "Sponsor"
     value: "quartifyr Demo Sponsor"
+  - label: "Report Number"
+    value: *report_number
 contributors:
   authors:
     - name: "Jane Doe, PharmD"
