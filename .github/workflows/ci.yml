@@ -91,6 +91,17 @@ jobs:
             libfontconfig1-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev \
             libharfbuzz-dev libfribidi-dev libcairo2-dev
 
+      # CRAN/PPM's macOS gdtools binary (a ggplot2/flextable dependency, via
+      # reportifyr) links against /opt/X11/lib/libXrender.1.dylib and friends
+      # -- confirmed present even in older dated PPM snapshots, so this isn't
+      # a gdtools regression. GitHub's macos-latest image stopped providing
+      # that shim (observed switching between two otherwise-identical CI runs
+      # a few hours apart), so provide it explicitly rather than depend on
+      # the runner image continuing to bundle it.
+      - name: Install XQuartz (macOS)
+        if: runner.os == 'macOS'
+        run: brew install --cask xquartz
+
       # reportifyr's context resolution (embedded in report/figure/table
       # metadata) shells out to `git config` and errors if no identity is
       # set -- CI runners have none by default.
