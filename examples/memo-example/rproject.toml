@@ -1,6 +1,8 @@
 [project]
 name = "memo-example"
-r_version = "4.6"
+# See ../../r/rproject.toml's comment: matches pyro's/reportifyr's own
+# r_version pin to avoid rv's cross-project version-mismatch safe mode.
+r_version = "4.5"
 
 # A list of repositories to fetch packages from. Order matters: we will try to get a package from each repository in order.
 # The alias is only used in this file if you want to specifically require a dependency to come from a certain repository.
