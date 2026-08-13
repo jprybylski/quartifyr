@@ -60,6 +60,17 @@ jobs:
         with:
           r-version: "release"
 
+      # setup-r's use-public-rspm default points RENV_CONFIG_REPOS_OVERRIDE
+      # at Posit Package Manager only. renv::restore() prioritizes that env
+      # var over renv.lock's own Repositories, so left alone it silently
+      # drops a2-ai.r-universe.dev -- reportifyr/pyro's actual source --
+      # from every repos-based lookup for the rest of this job. Re-add it
+      # so restore resolves reportifyr/pyro from r-universe the same way
+      # local dev does.
+      - name: Restore a2-ai.r-universe.dev to the effective repos list
+        shell: bash
+        run: echo "RENV_CONFIG_REPOS_OVERRIDE=a2-ai=https://a2-ai.r-universe.dev;CRAN=https://packagemanager.posit.co/cran/latest" >> "$GITHUB_ENV"
+
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
