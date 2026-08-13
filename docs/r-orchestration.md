@@ -6,7 +6,7 @@ nav_order: 6
 
 # R orchestration
 
-`r/` is an `rv`-managed R environment providing the pass-2 orchestration
+`r/` is an `renv`-managed R environment providing the pass-2 orchestration
 driver: `render_report()` runs the full two-pass pipeline (Quarto shell
 render → `reportifyr` fill) in one call, plus a thin CLI (`render.R`)
 around it. `reportifyr` and `pyro` are pulled straight from GitHub since
@@ -22,10 +22,10 @@ the three pieces directly instead.
 ## Setup
 
 ```bash
-cd r && rv sync
+cd r && Rscript -e 'renv::restore()'
 ```
 
-See [Installation](installation.html) for the Windows caveat.
+See [Installation](installation.html).
 
 ## Usage
 

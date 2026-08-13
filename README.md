@@ -94,7 +94,7 @@ three plain tool calls underneath it.
 
 ## Using the pieces directly
 
-You don't need this repo's `r/` orchestration driver, its `rv`-managed R
+You don't need this repo's `r/` orchestration driver, its `renv`-managed R
 environment, or its `report/shell`/`report/draft`/`report/final`
 directory convention to use quartifyr — that's all just what
 `render_report()` happens to do. If you already have your own Quarto
@@ -158,7 +158,7 @@ resolution" section.
 | --- | --- |
 | [`styling/`](styling/README.md) | Python package: turns a style YAML (fonts, colors, page setup) into a docx `reference-doc`; the `standard_footnotes.yaml` → `abbreviations.tex` bridge; headless Word field recalculation via LibreOffice (experimental). `uv`-managed venv. |
 | [`_extensions/quartifyr/`](_extensions/quartifyr/README.md) | Quarto extension: dynamic title page + status stamp, a fax-cover-sheet-style memo cover page, contributor/approver signature pages, synopsis, numbered appendices, page header/footer with roman/arabic page numbering. Composes with [A2-ai's `quarto-plus`](https://github.com/A2-ai/quarto-plus) (ToC/List of Figures/List of Tables/abbreviations/captions) rather than duplicating it. |
-| [`r/`](r/README.md) | `rv`-managed R environment providing `render_report()`, the pass-1+pass-2 orchestration driver. Pulls `reportifyr` and `pyro` straight from GitHub (no CRAN release exists for either) as today's fill backend. |
+| [`r/`](r/README.md) | `renv`-managed R environment providing `render_report()`, the pass-1+pass-2 orchestration driver. Pulls `reportifyr` and `pyro` straight from GitHub (no CRAN release exists for either) as today's fill backend. |
 | [`examples/demo-report/`](examples/demo-report/README.md) | Complete, working example exercising every piece above, with an automated end-to-end smoke test — a reference to compare against, not the only way to start a project (see [Standing up a new project](#standing-up-a-new-project)). |
 | [`examples/memo-example/`](examples/memo-example/README.md) | The minimal end of the same pipeline: a memo cover page and a loose structure with no ToC/List of Figures/List of Tables/abbreviations/signature pages, also with its own smoke test. |
 
@@ -192,7 +192,7 @@ not just the shell), you need the rest of the toolchain, once each
 
 - [Quarto](https://quarto.org/docs/get-started/)
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python tooling)
-- [rv](https://a2-ai.github.io/rv-docs/) (R package management)
+- [renv](https://rstudio.github.io/renv/) (R package management; `install.packages("renv")`)
 
 ```bash
 # 1. Python tooling
@@ -201,11 +201,11 @@ source .venv/bin/activate
 uv pip install -e "./styling[dev]"
 
 # 2. R tooling
-cd r && rv sync && cd ..
+cd r && Rscript -e 'renv::restore()' && cd ..
 
 # 3. Run the demo end to end
 cd examples/demo-report
-rv sync
+Rscript -e 'renv::restore()'
 Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'   # first clone only
 Rscript render.R --final
 # -> report/draft/report-draft.docx, report/final/report-final.docx

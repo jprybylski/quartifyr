@@ -37,7 +37,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 STYLE_YAML = REPO_ROOT / "styling" / "styles" / "default.yaml"
 COMMITTED_DOCX = REPO_ROOT / "templates" / "org-reference.docx"
-QUARTIFYR_STYLING_BIN = REPO_ROOT / ".venv" / "bin" / "quartifyr-styling"
+_VENV_SUBDIR = "Scripts" if sys.platform == "win32" else "bin"
+_EXE_SUFFIX = ".exe" if sys.platform == "win32" else ""
+QUARTIFYR_STYLING_BIN = REPO_ROOT / ".venv" / _VENV_SUBDIR / f"quartifyr-styling{_EXE_SUFFIX}"
 
 
 def _docx_contents(path: Path) -> dict[str, bytes]:

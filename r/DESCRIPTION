@@ -1,0 +1,22 @@
+Type: Project
+Package: quartifyr.r
+Title: quartifyr R Orchestration Environment
+Version: 0.1.0
+Description: renv-managed R environment providing render_report(), the
+    pass-1+pass-2 orchestration driver chaining a Quarto shell render
+    with reportifyr's fill step. Not an installable package -- this
+    DESCRIPTION exists so renv has an explicit dependency manifest,
+    independent of what any individual .R file happens to reference via
+    library()/::.
+Imports:
+    here,
+    yaml,
+    jsonlite,
+    withr,
+    processx,
+    pyro,
+    reportifyr
+Remotes:
+    a2-ai/pyro,
+    a2-ai/reportifyr
+Encoding: UTF-8

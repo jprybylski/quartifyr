@@ -1,0 +1,18 @@
+Type: Project
+Package: quartifyr.memo.example
+Title: quartifyr Memo Example
+Version: 0.0.1
+Description: renv-managed R environment for this example project. Not an
+    installable package -- this DESCRIPTION exists so renv has an
+    explicit dependency manifest, independent of what any individual .R
+    file happens to reference via library()/::.
+Imports:
+    here,
+    ggplot2,
+    withr,
+    pyro,
+    reportifyr
+Remotes:
+    a2-ai/pyro,
+    a2-ai/reportifyr
+Encoding: UTF-8

@@ -32,46 +32,53 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Windows isn't included here -- see r/README.md's Windows section
-        # for what was actually tried (r_version alignment, a2-ai/setup-rv,
-        # a PPM repository) and the specific, reproduced-twice failure that
-        # remains: rv deterministically fails installing pyro from source
-        # on Windows with "no package called 'rlang'", even though rlang is
-        # correctly present in r/rv.lock. Windows is still covered by
-        # styling-tests above (pure Python, no rv involved).
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    # renv resolves GitHub-sourced packages (pyro, reportifyr -- see
+    # r/DESCRIPTION) via the GitHub REST API, not `git clone`, so this is
+    # the renv equivalent of the old anonymous-git-over-https workaround:
+    # without it, the shared GitHub Actions runner IP pool trips the
+    # unauthenticated API rate limit (60 req/hour) partway through
+    # resolving dependencies. Scoped to the whole job since three separate
+    # `renv::restore()` calls below all need it.
+    env:
+      GITHUB_PAT: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
 
+      # Guarantees a `python3` on PATH before any venv exists (needed by
+      # the Quarto-only check right below) -- Linux/macOS runner images
+      # already have one, but Windows' hosted image doesn't reliably
+      # provide `python3` (only `python`) without this.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - uses: quarto-dev/quarto-actions/setup@v2
 
-      # Runs before any R/uv/rv setup below, on purpose: it needs nothing
-      # but `quarto` itself (plus templates/org-reference.docx, committed
-      # to the repo -- see scripts/check_template_freshness.py) and plain
+      # Runs before any R/uv setup below, on purpose: it needs nothing but
+      # `quarto` itself (plus templates/org-reference.docx, committed to
+      # the repo -- see scripts/check_template_freshness.py) and plain
       # stdlib Python, so this placement is itself proof that the
       # Quarto-only shell-render path has no R or Python dependency of
       # its own.
       - name: Run Quarto-only shell-render check (no R, no Python venv)
         run: python3 scripts/quarto_only_smoke_test.py
 
-      # Matches r_version in r/rproject.toml and both examples' -- see
-      # those files' comments on why it's pinned to 4.5, not the latest
-      # release.
       - uses: r-lib/actions/setup-r@v2
         with:
-          r-version: "4.5"
+          r-version: "release"
 
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
-      # System headers rv-managed R packages need to compile from source
-      # on a fresh Linux runner (no pre-built binaries the way CRAN's
-      # macOS/Windows repos provide) -- libuv for `fs` (a pyro/reportifyr
-      # transitive dependency), the rest for ggplot2's own dependency
-      # chain (ragg/systemfonts/textshaping/gdtools), which
-      # examples/demo-report also needs.
+      # System headers R packages need to compile from source on a fresh
+      # Linux runner (no pre-built binaries the way CRAN's macOS/Windows
+      # repos provide) -- libuv for `fs` (a pyro/reportifyr transitive
+      # dependency), the rest for ggplot2's own dependency chain
+      # (ragg/systemfonts/textshaping/gdtools), which examples/demo-report
+      # also needs.
       - name: Install R package system dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -79,15 +86,6 @@ jobs:
           sudo apt-get install -y libuv1-dev libcurl4-openssl-dev libssl-dev libxml2-dev \
             libfontconfig1-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev \
             libharfbuzz-dev libfribidi-dev libcairo2-dev
-
-      # Uses the maintained a2-ai/setup-rv action (also what reportifyr's
-      # own CI uses) rather than a hand-rolled release download: its
-      # `github-token` input (defaulted to `github.token`) already avoids
-      # the unauthenticated-GitHub-API rate limiting a hand-rolled
-      # install.sh call hits (60 req/hour, shared across the whole runner
-      # IP pool) -- previously worked around here with a bespoke
-      # authenticated curl call; that workaround is now upstream instead.
-      - uses: a2-ai/setup-rv@main
 
       # reportifyr's context resolution (embedded in report/figure/table
       # metadata) shells out to `git config` and errors if no identity is
@@ -97,64 +95,54 @@ jobs:
           git config --global user.name "quartifyr CI"
           git config --global user.email "quartifyr-ci@users.noreply.github.com"
 
-      # rv sync below git-clones pyro/reportifyr (both public, no CRAN
-      # release -- see r/rproject.toml) anonymously over https. GitHub
-      # throttles anonymous git-over-https from the shared GitHub Actions
-      # runner IP pool and starts returning 401 ("could not read Username
-      # for 'https://github.com': terminal prompts disabled") once that's
-      # hit -- the same class of shared-IP rate limiting already worked
-      # around above for rv's own release-API call. Authenticating with
-      # the workflow's own GITHUB_TOKEN (not shared) avoids it.
-      - name: Authenticate anonymous git-over-https to github.com
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
-
       # This is the repo-root Quick Start, run exactly as documented, so
       # this job also stands in as a check that the README instructions
       # themselves are correct and current. Building templates/
       # org-reference.docx isn't part of that anymore -- it's committed to
       # the repo now (see scripts/check_template_freshness.py); each
       # example's smoke_test.py already verifies it hasn't gone stale.
+      #
+      # `--python .venv` targets the venv directly instead of activating
+      # it -- avoids the bin/ vs Scripts/ split between platforms.
       - name: Set up styling/ venv
         run: |
           uv venv .venv --python 3.12
-          source .venv/bin/activate
-          uv pip install -e "./styling[dev]"
+          uv pip install --python .venv -e "./styling[dev]"
 
-      - name: rv sync (r/)
+      - name: renv restore (r/)
         working-directory: r
-        run: rv sync
+        run: Rscript -e 'renv::restore()'
 
-      # Looped rather than a second matrix axis (os x example): only these
-      # two steps and the smoke-test step below are per-example -- the
-      # rest of this job (rv install, apt deps, git identity, venv setup)
-      # is shared setup that a second matrix dimension would needlessly
-      # double for no benefit.
-      - name: rv sync (examples/*)
-        run: |
-          for example in demo-report memo-example; do
-            (cd "examples/$example" && rv sync)
-          done
+      # Two explicit steps rather than a loop over both examples: a shell
+      # loop's syntax isn't portable across bash (Linux/macOS default) and
+      # PowerShell (Windows default), and there's little to gain from a
+      # loop over just two entries.
+      - name: renv restore (examples/demo-report)
+        working-directory: examples/demo-report
+        run: Rscript -e 'renv::restore()'
 
-      - name: Initialize reportifyr projects (fresh clone -- .report_init.json is gitignored)
-        run: |
-          for example in demo-report memo-example; do
-            (cd "examples/$example" && Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())')
-          done
+      - name: renv restore (examples/memo-example)
+        working-directory: examples/memo-example
+        run: Rscript -e 'renv::restore()'
 
-      # The render_report()/r/ convenience-wrapper path.
+      - name: Initialize reportifyr project (demo-report, fresh clone -- .report_init.json is gitignored)
+        working-directory: examples/demo-report
+        run: Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'
+
+      - name: Initialize reportifyr project (memo-example, fresh clone -- .report_init.json is gitignored)
+        working-directory: examples/memo-example
+        run: Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'
+
+      # The render_report()/r/ convenience-wrapper path. `uv run` resolves
+      # the repo-root .venv set up above regardless of platform, same as
+      # the styling-tests job above -- no manual activation needed.
       - name: Run example smoke tests
         run: |
-          source .venv/bin/activate
-          python3 examples/demo-report/smoke_test.py
-          python3 examples/memo-example/smoke_test.py
+          uv run python3 examples/demo-report/smoke_test.py
+          uv run python3 examples/memo-example/smoke_test.py
 
       # The decomposed "Using the pieces directly" path from the
       # repo-root README -- proves that documentation is actually true,
       # not just written down.
       - name: Run bare-bones pieces-only integration test
-        run: |
-          source .venv/bin/activate
-          python3 scripts/bare_bones_integration_test.py
+        run: uv run python3 scripts/bare_bones_integration_test.py

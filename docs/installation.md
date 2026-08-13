@@ -48,23 +48,15 @@ for its subcommands.
 
 ## 3. `r/` — the pass-1 + pass-2 orchestration driver
 
-R, managed with [`rv`](https://a2-ai.github.io/rv-docs/):
+R, managed with [`renv`](https://rstudio.github.io/renv/):
 
 ```bash
-cd r && rv sync
+cd r && Rscript -e 'renv::restore()'
 ```
 
 This is a convenience wrapper around Quarto + `quartifyr-styling` +
 `reportifyr` — see [R orchestration](r-orchestration.html). It's optional;
 you can call the three underlying pieces yourself instead.
-
-**Windows note**: `rv sync` currently isn't reliable on Windows for this
-project (a `pyro`-from-source build failure, tracked in
-[jprybylski/quartifyr#4](https://github.com/jprybylski/quartifyr/issues/4)).
-CI verifies the full Quarto+R+reportifyr pipeline on Linux/macOS only;
-`styling/`'s pytest suite (which doesn't touch `rv`) is verified on
-Windows. See `r/README.md`'s "Using `renv` instead of `rv`" section for
-an alternative that avoids this specific failure.
 
 ## Full toolchain, end to end
 
@@ -78,11 +70,11 @@ source .venv/bin/activate
 uv pip install -e "./styling[dev]"
 
 # 2. R tooling
-cd r && rv sync && cd ..
+cd r && Rscript -e 'renv::restore()' && cd ..
 
 # 3. Run the demo end to end
 cd examples/demo-report
-rv sync
+Rscript -e 'renv::restore()'
 Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'   # first clone only
 Rscript render.R --final
 # -> report/draft/report-draft.docx, report/final/report-final.docx
