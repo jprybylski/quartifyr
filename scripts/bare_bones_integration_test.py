@@ -166,8 +166,20 @@ def main() -> int:
         filled_docx = project_dir / "filled.docx"
         final_docx = project_dir / "final.docx"
         print("3/3: reportifyr::build_report() + finalize_document() called directly (no make_doc_dirs()/render_report())...")
+        # .as_posix(), not str(): reportifyr's make_doc_dirs() (called
+        # internally by build_report()/finalize_document()) splits
+        # docx_in on "/" to derive sibling output paths, with no
+        # backslash handling -- a native Windows path here silently
+        # corrupts into garbage paths (confirmed via a real CI failure:
+        # "draft.docx/C:\...\shell.docx-clean.docx"). render_report()
+        # never hits this because R's own file.path() always uses "/",
+        # even on Windows; this script builds paths with Python's
+        # pathlib instead, which defaults to "\" there.
         result = subprocess.run(
-            ["Rscript", str(BUILD_REPORT_HELPER), str(shell_docx), str(filled_docx), str(final_docx)],
+            [
+                "Rscript", str(BUILD_REPORT_HELPER),
+                shell_docx.as_posix(), filled_docx.as_posix(), final_docx.as_posix(),
+            ],
             cwd=DEMO_DIR,
             capture_output=True,
             text=True,
