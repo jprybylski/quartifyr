@@ -73,17 +73,19 @@ jobs:
         with:
           enable-cache: true
 
-      # System headers R packages need to compile from source on a fresh
-      # Linux runner (no pre-built binaries the way CRAN's macOS/Windows
-      # repos provide) -- libuv for `fs` (a pyro/reportifyr transitive
-      # dependency), the rest for ggplot2's own dependency chain
-      # (ragg/systemfonts/textshaping/gdtools), which examples/demo-report
-      # also needs.
+      # Runtime/build libraries the Ubuntu R binaries below need -- libuv
+      # for `fs` (a pyro/reportifyr transitive dependency), libgit2 for
+      # `gert` (a pyro dependency; without it, loading gert fails with
+      # "libgit2.so.1.7: cannot open shared object file", confirmed via a
+      # real CI run -- Posit's Ubuntu binary repo assumes it's already on
+      # the system, it doesn't bundle it), the rest for ggplot2's own
+      # dependency chain (ragg/systemfonts/textshaping/gdtools), which
+      # examples/demo-report also needs.
       - name: Install R package system dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libuv1-dev libcurl4-openssl-dev libssl-dev libxml2-dev \
+          sudo apt-get install -y libuv1-dev libgit2-dev libcurl4-openssl-dev libssl-dev libxml2-dev \
             libfontconfig1-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev \
             libharfbuzz-dev libfribidi-dev libcairo2-dev
 
@@ -135,14 +137,19 @@ jobs:
 
       # The render_report()/r/ convenience-wrapper path. `uv run` resolves
       # the repo-root .venv set up above regardless of platform, same as
-      # the styling-tests job above -- no manual activation needed.
+      # the styling-tests job above -- no manual activation needed. `python`,
+      # not `python3`: confirmed via a real CI run that a Windows venv only
+      # provides `python.exe`, not `python3.exe`, so `uv run python3 ...`
+      # silently fell through to the system interpreter from
+      # actions/setup-python above (no python-docx there) instead of the
+      # venv's.
       - name: Run example smoke tests
         run: |
-          uv run python3 examples/demo-report/smoke_test.py
-          uv run python3 examples/memo-example/smoke_test.py
+          uv run python examples/demo-report/smoke_test.py
+          uv run python examples/memo-example/smoke_test.py
 
       # The decomposed "Using the pieces directly" path from the
       # repo-root README -- proves that documentation is actually true,
       # not just written down.
       - name: Run bare-bones pieces-only integration test
-        run: uv run python3 scripts/bare_bones_integration_test.py
+        run: uv run python scripts/bare_bones_integration_test.py
