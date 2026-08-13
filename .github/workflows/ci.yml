@@ -32,14 +32,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Windows isn't included here -- see r/README.md's Windows section
+        # for what was actually tried (r_version alignment, a2-ai/setup-rv,
+        # a PPM repository) and the specific, reproduced-twice failure that
+        # remains: rv deterministically fails installing pyro from source
+        # on Windows with "no package called 'rlang'", even though rlang is
+        # correctly present in r/rv.lock. Windows is still covered by
+        # styling-tests above (pure Python, no rv involved).
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    # Git Bash on windows-latest runners, so every `run:` step below can
-    # use the same bash syntax (for-loops, `source`, `[ ... ]`) across all
-    # three platforms without per-step `shell:` overrides.
-    defaults:
-      run:
-        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -80,30 +81,13 @@ jobs:
             libharfbuzz-dev libfribidi-dev libcairo2-dev
 
       # Uses the maintained a2-ai/setup-rv action (also what reportifyr's
-      # own CI uses) rather than a hand-rolled release download: it covers
-      # Windows's differently-named/zipped asset for free, and its
+      # own CI uses) rather than a hand-rolled release download: its
       # `github-token` input (defaulted to `github.token`) already avoids
       # the unauthenticated-GitHub-API rate limiting a hand-rolled
       # install.sh call hits (60 req/hour, shared across the whole runner
       # IP pool) -- previously worked around here with a bespoke
       # authenticated curl call; that workaround is now upstream instead.
       - uses: a2-ai/setup-rv@main
-
-      # PPM ships prebuilt Windows binaries; plain CRAN only ships source
-      # on Windows for many packages, which needs a matching Rtools/gcc
-      # toolchain and has been a source of compile failures there (see
-      # r/README.md's Windows section for specifics). reportifyr's own CI
-      # (A2-ai/reportifyr's R-CMD-check.yaml) uses this same
-      # prepend-PPM-on-Windows pattern successfully. `rv configure`
-      # rewrites the rproject.toml in the current directory (or
-      # `-c`'s target), not a global rv config, so it has to run once per
-      # project -- r/ and both examples each carry their own rproject.toml.
-      - name: Prepend PPM repository (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          for config in r/rproject.toml examples/demo-report/rproject.toml examples/memo-example/rproject.toml; do
-            rv configure repository add PPM --url https://packagemanager.posit.co/cran/latest --first -c "$config"
-          done
 
       # reportifyr's context resolution (embedded in report/figure/table
       # metadata) shells out to `git config` and errors if no identity is
@@ -136,15 +120,7 @@ jobs:
       - name: Set up styling/ venv
         run: |
           uv venv .venv --python 3.12
-          # Windows venvs use Scripts/, not bin/ -- recorded once here so
-          # every later step that needs the venv can `source
-          # "$VENV_ACTIVATE"` without repeating the OS branch.
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            echo "VENV_ACTIVATE=.venv/Scripts/activate" >> "$GITHUB_ENV"
-          else
-            echo "VENV_ACTIVATE=.venv/bin/activate" >> "$GITHUB_ENV"
-          fi
-          source .venv/*/activate
+          source .venv/bin/activate
           uv pip install -e "./styling[dev]"
 
       - name: rv sync (r/)
@@ -171,7 +147,7 @@ jobs:
       # The render_report()/r/ convenience-wrapper path.
       - name: Run example smoke tests
         run: |
-          source "$VENV_ACTIVATE"
+          source .venv/bin/activate
           python3 examples/demo-report/smoke_test.py
           python3 examples/memo-example/smoke_test.py
 
@@ -180,5 +156,5 @@ jobs:
       # not just written down.
       - name: Run bare-bones pieces-only integration test
         run: |
-          source "$VENV_ACTIVATE"
+          source .venv/bin/activate
           python3 scripts/bare_bones_integration_test.py

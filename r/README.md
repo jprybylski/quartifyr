@@ -23,15 +23,54 @@ instructions at that link), then:
 cd r && rv sync
 ```
 
-**Windows**: `rv sync` with R 4.6 (this project's `rproject.toml`
-`r_version`) currently isn't reliable on Windows -- `rv` refuses to
-activate its managed library ("R version specified in config (4.5) does
-not match session version (4.6.1)... entering safe mode"), which then
-cascades into missing-package errors for everything `rv` would otherwise
-provide. This is a live, currently-unresolved upstream issue
-([A2-ai/rv#493](https://github.com/A2-ai/rv/issues/493)), not something
-specific to this project -- a maintainer there notes Windows currently
-only works reliably with a PPM repository rather than plain CRAN.
+**Windows**: `rv sync` currently isn't reliable on Windows for this
+project, for two identified reasons ([investigated here](https://github.com/jprybylski/quartifyr/issues/4)):
+
+- This project's `rproject.toml` files used to pin
+  `r_version = "4.6"`, while `pyro` and `reportifyr` (both pulled from
+  GitHub, always built from source -- see `rproject.toml`) each carry
+  their *own* bundled `rproject.toml` pinned to `r_version = "4.5"`. `rv`
+  activates its managed library by walking up from an R subprocess's cwd
+  looking for an `rproject.toml`; during `rv sync`, the subprocess built
+  to compile `pyro`/`reportifyr` from source picks up *their* bundled
+  file, not just this project's, so running R 4.6.1 against that 4.5 pin
+  made `rv` enter "safe mode" -- confirmed directly, a real Windows CI
+  run of this repo reproduced the exact message: "R version specified in
+  config (4.5) does not match session version (4.6.1)... entering safe
+  mode". This is now fixed by pinning `r_version = "4.5"` here too,
+  matching upstream.
+
+That fix wasn't sufficient, though. With the version pin aligned, `rv
+sync` on Windows still fails installing `pyro` from source, every time
+(reproduced twice in independent CI runs):
+
+```
+Failed to install pyro:
+    ...
+    ** byte-compile and prepare package for lazy loading
+    Error in loadNamespace(j <- i[[1L]], c(lib.loc, .libPaths()), versionCheck = vI[[j]]) :
+      there is no package called 'rlang'
+    ...
+    ERROR: lazy loading failed for package 'pyro'
+```
+
+`rlang` *is* correctly resolved as a dependency of `pyro` in the
+committed `rv.lock` -- this isn't a dependency-graph bug, it's rv's
+installer not guaranteeing `rlang` is actually installed and visible on
+the library path before starting `pyro`'s from-source build on Windows.
+The identical error/symptom was previously reported and closed as
+[A2-ai/rv#27](https://github.com/A2-ai/rv/issues/27) without a documented
+fix, so this looks like either a regression or an edge case (specifically
+around GitHub-sourced packages' from-source Windows builds) that wasn't
+actually resolved. There's no `rv sync` flag to force serial installs as
+a workaround. `A2-ai/reportifyr`'s own CI does pass `rv sync` on
+`windows-latest` and adds a PPM repository the same way this project
+tried, but that's not proof this specific failure is avoidable: its own
+`rproject.toml` (`use_lockfile = false`) pulls `pyro` from a private
+prebuilt-binary package repository, not from GitHub source like this
+project's `rproject.toml` does -- so it never exercises the
+build-pyro-from-git-source path that triggers this failure here.
+
 Because of this, CI doesn't verify the full Quarto+R+reportifyr pipeline
 on Windows (see `.github/workflows/ci.yml`); `styling/`'s pytest suite,
 which doesn't touch `rv`, is verified on Windows.
