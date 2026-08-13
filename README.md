@@ -161,6 +161,7 @@ resolution" section.
 | [`r/`](r/README.md) | `renv`-managed R environment providing `render_report()`, the pass-1+pass-2 orchestration driver. Pulls `reportifyr` and `pyro` straight from GitHub (no CRAN release exists for either) as today's fill backend. |
 | [`examples/demo-report/`](examples/demo-report/README.md) | Complete, working example exercising every piece above, with an automated end-to-end smoke test: a reference to compare against, not the only way to start a project (see [Standing up a new project](#standing-up-a-new-project)). |
 | [`examples/memo-example/`](examples/memo-example/README.md) | The minimal end of the same pipeline: a memo cover page and a loose structure with no ToC/List of Figures/List of Tables/abbreviations/signature pages, also with its own smoke test. |
+| [`action.yml`](action.yml) | Reusable composite GitHub Action wrapping `render_report()` for use in another repo's own CI; see [Rendering in CI](#rendering-in-ci) below. |
 
 Each org overrides just the parts of the default look that differ
 (`styling/styles/default.yaml` is Times New Roman, black text, flat
@@ -348,6 +349,31 @@ with `Rscript render.R` (add `--final` once ready to finalize).
 [`examples/demo-report/`](examples/demo-report/README.md) has all of the
 above wired together and working end to end: a reference to check your
 own setup against, not a starting point you're expected to fork.
+
+## Rendering in CI
+
+Once a project is stood up the way above, `action.yml` at this repo's
+root is a reusable [GitHub
+Action](https://docs.github.com/en/actions/creating-actions/creating-a-composite-action)
+wrapping the same `render_report()` pipeline, so another repo's own
+workflow can render its report and upload the result as a build artifact
+without hand-rolling the Quarto/R/`reportifyr` setup steps:
+
+```yaml
+- uses: jprybylski/quartifyr@v1
+  id: render
+  with:
+    shell-qmd: report.qmd
+    final: 'true'
+
+- uses: actions/upload-artifact@v4
+  with:
+    name: report
+    path: ${{ steps.render.outputs.draft-docx }}
+```
+
+See [the docs site's GitHub Action page](https://jprybylski.github.io/quartifyr/github-action.html)
+for the full input/output list and what it expects from the calling repo.
 
 ## Document kinds
 

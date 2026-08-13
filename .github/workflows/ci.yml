@@ -166,3 +166,34 @@ jobs:
       # not just written down.
       - name: Run bare-bones pieces-only integration test
         run: uv run python scripts/bare_bones_integration_test.py
+
+  action-smoke-test:
+    name: composite action smoke test (dogfood)
+    # Exercises action.yml (the repo-root reusable action from issue #9)
+    # against examples/demo-report, the same way an external repo would
+    # `uses: jprybylski/quartifyr@<ref>` it. Single-OS: the underlying
+    # render_report() pipeline is already proven cross-OS by
+    # full-pipeline above -- this job's job is to prove the action's own
+    # wiring (inputs/outputs/steps), which is OS-agnostic logic lifted
+    # straight from that job.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Render examples/demo-report via the composite action
+        id: render
+        uses: ./
+        with:
+          shell-qmd: examples/demo-report/report.qmd
+          final: 'true'
+
+      - name: Assert rendered docx exists with no leftover magic strings
+        shell: bash
+        run: |
+          test -f "${{ steps.render.outputs.shell-docx }}"
+          test -f "${{ steps.render.outputs.draft-docx }}"
+          test -f "${{ steps.render.outputs.final-docx }}"
+          if unzip -p "${{ steps.render.outputs.draft-docx }}" word/document.xml | grep -q '{rpfy}:'; then
+            echo "Leftover {rpfy}: magic string in rendered draft docx" >&2
+            exit 1
+          fi

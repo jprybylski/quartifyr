@@ -169,6 +169,23 @@ why `examples/demo-report/` carries its own empty `.here` file (pins
 `here::here()`'s root so it doesn't walk past the demo into the outer
 quartifyr repo).
 
+**A calling project's R package library (its `renv`) activates based on
+the working directory an `Rscript` process *starts* in, not anything
+`withr::with_dir()` changes afterward.** `render_report()`'s own
+`with_dir()` wrapper (above) only fixes where `reportifyr` looks for its
+project; it can't retroactively make `reportifyr`/`pyro` importable if
+the R session never activated that project's `renv/.Rprofile` in the
+first place. Every caller of `r/render.R` -- `examples/demo-report/
+render.R`'s own subprocess call, and `action.yml`'s composite steps --
+invokes it with the shell's cwd already set to the *project's* directory
+(not `r/` or the toolkit root) for exactly this reason, passing
+`--toolkit-root` separately so `render.R` still finds `templates/`/
+`_extensions/`/the `styling/` venv. Don't "simplify" one of these call
+sites to run from the toolkit root instead -- it'll fail with
+`reportifyr`/`pyro` not found, since the toolkit's own `r/renv.lock` and
+a project's `renv.lock` are two independent lockfiles (see `action.yml`'s
+"renv restore (calling project)" step).
+
 **The `report/shell` → `report/draft`/`report/final` directory
 convention is load-bearing for `render_report()`, not just a naming
 convention.** `reportifyr::make_doc_dirs()` derives output paths by

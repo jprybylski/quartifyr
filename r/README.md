@@ -78,6 +78,7 @@ As a one-shot CLI:
 ```bash
 Rscript render.R /path/to/project/report.qmd
 Rscript render.R /path/to/project/report.qmd --final
+Rscript render.R /path/to/project/report.qmd --toolkit-root /path/to/quartifyr --reference-doc /path/to/org-reference.docx
 ```
 
 `shell_qmd` lives at the project root alongside `_extensions/` (standard

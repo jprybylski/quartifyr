@@ -1,0 +1,186 @@
+name: 'quartifyr render-report'
+description: >-
+  Renders a quartifyr shell (Quarto pass 1), applies page-header/footer
+  layout, and fills it via reportifyr (pass 2) -- the same render_report()
+  pipeline r/ provides, packaged for use from another repo's own CI.
+  Uploading the result as a workflow artifact is left to the calling
+  workflow (actions/upload-artifact against this action's docx outputs).
+author: 'jprybylski'
+branding:
+  icon: 'file-text'
+  color: 'blue'
+
+inputs:
+  shell-qmd:
+    description: >-
+      Path, relative to the calling repo's root, to the project's shell
+      .qmd -- alongside its _extensions/ and a _quarto.yml setting
+      `project: {output-dir: report/shell}`. See the repo README's
+      "Standing up a new project" section.
+    required: true
+  final:
+    description: >-
+      Also produce a report/final/ output (reportifyr::finalize_document())
+      alongside report/draft/. Defaults to draft-only.
+    required: false
+    default: 'false'
+  reference-doc:
+    description: >-
+      Path, relative to the calling repo's root, to an org's docx
+      reference-doc (built with `quartifyr-styling build`). Defaults to
+      this action's own bundled templates/org-reference.docx if unset.
+    required: false
+    default: ''
+  r-version:
+    description: 'R version to install (passed to r-lib/actions/setup-r).'
+    required: false
+    default: 'release'
+  initialize-project:
+    description: >-
+      Run reportifyr::initialize_report_project() on the project directory
+      before rendering. Set to 'false' if the calling workflow already
+      initializes the project itself (e.g. a committed *_init.json marker).
+    required: false
+    default: 'true'
+
+outputs:
+  shell-docx:
+    description: 'Path to the rendered shell docx (report/shell/).'
+    value: ${{ steps.render.outputs.shell-docx }}
+  draft-docx:
+    description: 'Path to the filled draft docx (report/draft/).'
+    value: ${{ steps.render.outputs.draft-docx }}
+  final-docx:
+    description: >-
+      Path to the filled final docx (report/final/); only set when
+      final: 'true'.
+    value: ${{ steps.render.outputs.final-docx }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Quarto
+      uses: quarto-dev/quarto-actions/setup@v2
+
+    - name: Set up R
+      uses: r-lib/actions/setup-r@v2
+      with:
+        r-version: ${{ inputs.r-version }}
+
+    # setup-r's use-public-rspm default points RENV_CONFIG_REPOS_OVERRIDE at
+    # Posit Package Manager only, which renv::restore() below prioritizes
+    # over the calling project's own renv.lock Repositories -- silently
+    # dropping a2-ai.r-universe.dev (reportifyr/pyro's actual source, no
+    # CRAN release exists for either). Restore it so restore() resolves
+    # them the same way local dev does.
+    - name: Restore a2-ai.r-universe.dev to the effective repos list
+      shell: bash
+      run: echo "RENV_CONFIG_REPOS_OVERRIDE=a2-ai=https://a2-ai.r-universe.dev;CRAN=https://packagemanager.posit.co/cran/latest" >> "$GITHUB_ENV"
+
+    # Runtime/build libraries reportifyr/pyro's own transitive dependencies
+    # need against Ubuntu's binary R packages: libuv for `fs` (pyro),
+    # libgit2 for `gert` (pyro), the rest for ggplot2/flextable's own chain
+    # (ragg/systemfonts/textshaping/gdtools) that a typical report
+    # project's analysis scripts pull in too.
+    - name: Install R package system dependencies (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libuv1-dev libgit2-dev libcurl4-openssl-dev libssl-dev libxml2-dev \
+          libfontconfig1-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev \
+          libharfbuzz-dev libfribidi-dev libcairo2-dev
+
+    # CRAN/PPM's macOS gdtools binary (a ggplot2/flextable dependency) links
+    # against /opt/X11/lib/libXrender.1.dylib and friends, which the hosted
+    # macos-latest image doesn't reliably bundle.
+    - name: Install XQuartz (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: brew install --cask xquartz
+
+    # reportifyr's context resolution shells out to `git config` and errors
+    # if no identity is set -- CI runners have none by default. Only sets
+    # an identity if the job doesn't already have one, so an earlier step's
+    # own git config in the calling workflow isn't clobbered.
+    - name: Configure git identity for reportifyr
+      shell: bash
+      run: |
+        git config --global user.email >/dev/null 2>&1 || git config --global user.email "quartifyr-action@users.noreply.github.com"
+        git config --global user.name  >/dev/null 2>&1 || git config --global user.name  "quartifyr GitHub Action"
+
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+
+    # This action's own toolkit checkout (github.action_path) -- templates/,
+    # _extensions/, r/, styling/ -- not the calling project's repo. The
+    # calling project brings its own renv.lock (next step) with
+    # reportifyr/pyro pinned, same as examples/demo-report does.
+    - name: Set up quartifyr's styling/ venv
+      shell: bash
+      run: |
+        uv venv "${{ github.action_path }}/.venv" --python 3.12
+        uv pip install --python "${{ github.action_path }}/.venv" "${{ github.action_path }}/styling"
+
+    - name: Determine project directory
+      id: project
+      shell: bash
+      env:
+        SHELL_QMD: ${{ inputs.shell-qmd }}
+      run: echo "dir=$(dirname "$SHELL_QMD")" >> "$GITHUB_OUTPUT"
+
+    # The calling project's own renv.lock -- its reportifyr/pyro (plus
+    # whatever analysis packages produced OUTPUTS/figures|tables/), not
+    # quartifyr's own r/renv.lock. See examples/demo-report/renv.lock for
+    # the shape a project's lockfile takes.
+    - name: renv restore (calling project)
+      shell: bash
+      working-directory: ${{ steps.project.outputs.dir }}
+      run: Rscript -e 'renv::restore()'
+
+    - name: Initialize reportifyr project
+      if: inputs.initialize-project == 'true'
+      shell: bash
+      working-directory: ${{ steps.project.outputs.dir }}
+      run: Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'
+
+    # Runs with cwd set to the calling project's directory so R auto-
+    # activates *its* renv/.Rprofile (giving the session reportifyr/pyro) --
+    # --toolkit-root points render.R at this action's own checkout instead,
+    # for templates/org-reference.docx, _extensions/, and the styling venv
+    # just built above. See r/render.R --help / r/README.md.
+    - name: Render report
+      id: render
+      shell: bash
+      working-directory: ${{ steps.project.outputs.dir }}
+      env:
+        SHELL_QMD: ${{ inputs.shell-qmd }}
+        FINAL: ${{ inputs.final }}
+        REFERENCE_DOC: ${{ inputs.reference-doc }}
+        TOOLKIT_ROOT: ${{ github.action_path }}
+      run: |
+        args=("$(basename "$SHELL_QMD")")
+        if [ "$FINAL" = "true" ]; then
+          args+=("--final")
+        fi
+        if [ -n "$REFERENCE_DOC" ]; then
+          args+=("--reference-doc" "$GITHUB_WORKSPACE/$REFERENCE_DOC")
+        fi
+        args+=("--toolkit-root" "$TOOLKIT_ROOT")
+
+        output="$(Rscript "$TOOLKIT_ROOT/r/render.R" "${args[@]}")"
+        echo "$output"
+
+        shell_docx="$(echo "$output" | sed -n 's/^shell: //p')"
+        draft_docx="$(echo "$output" | sed -n 's/^draft: //p')"
+        final_docx="$(echo "$output" | sed -n 's/^final: //p')"
+
+        {
+          echo "shell-docx=$shell_docx"
+          echo "draft-docx=$draft_docx"
+        } >> "$GITHUB_OUTPUT"
+        if [ -n "$final_docx" ]; then
+          echo "final-docx=$final_docx" >> "$GITHUB_OUTPUT"
+        fi

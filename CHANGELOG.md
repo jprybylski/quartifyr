@@ -8,6 +8,20 @@ versioned together at the repo level; component-level version numbers
 (e.g. `_extensions/quartifyr/_extension.yml`, `styling/pyproject.toml`)
 track this same number.
 
+## [Unreleased]
+
+### Added
+
+- `action.yml`: a reusable composite GitHub Action wrapping
+  `render_report()`, so another repo can render its report (and upload
+  the result as a workflow artifact) without hand-rolling the Quarto/R/
+  `reportifyr` setup steps itself. See [docs/github-action.md](docs/github-action.md)
+  (issue #9).
+- `r/render.R` gained a `--reference-doc PATH` flag (previously only
+  settable by calling `render_report()` directly from R), so the action
+  -- and any other external caller -- can point a render at an org's own
+  reference-doc instead of quartifyr's bundled default.
+
 ## [0.1.0] - 2026-08-13
 
 ### Changed
