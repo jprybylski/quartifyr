@@ -7,12 +7,12 @@
 -- renders alongside ours.
 --
 -- To satisfy "the ToC should include the title page" *without* the entry
--- just duplicating the document's own title text: a genuinely
+-- just duplicating the document's own title text: an actual
 -- `Heading1`-styled paragraph, carrying the literal text "Title Page",
 -- independent of the real, visible title paragraph (which keeps its own
 -- actual title text, unchanged, purely for its on-page look). Word's ToC
 -- field scans outline levels 1-3 by default (present unconditionally,
--- not something quartifyr adds), so a genuine Heading-1 paragraph is
+-- not something quartifyr adds), so a real Heading-1 paragraph is
 -- picked up automatically -- no `apply-layout` step needed for this, and
 -- it shows up in Word's Navigation Pane for free too, same as any other
 -- heading. What makes it invisible on the page itself is *ordinary*
@@ -44,7 +44,7 @@
 --
 -- The info block (Date/Lead Scientist/Version/Confidentiality/...) is a
 -- full-width, percentage-sized (w:type="pct") bordered table -- not fixed
--- twips -- so it genuinely spans the *current* usable text width
+-- twips -- so it always spans the *current* usable text width
 -- regardless of the page margins configured in the docx reference-doc
 -- (see styling/styles/*.yaml's page.margins_in).
 --
@@ -127,7 +127,7 @@ local function styled_paragraph(style, text)
   )
 end
 
--- See the file-header comment on why this exists: a genuinely
+-- See the file-header comment on why this exists: an actual
 -- `Heading1`-styled paragraph (real outline level, picked up by Word's
 -- native ToC field automatically) whose text is invisible on the page
 -- itself purely through ordinary formatting -- 1pt size (the smallest
@@ -233,7 +233,7 @@ return {
       end
 
       -- Mixed list of pandoc blocks (RawBlock strings get accumulated and
-      -- flushed as a group; the logo, when present, is a genuine
+      -- flushed as a group; the logo, when present, is a real
       -- pandoc.Image block spliced in between -- see utils.logo_block()'s
       -- comment for why it can't just be more raw OOXML).
       local blocks = {}

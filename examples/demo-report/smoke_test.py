@@ -160,7 +160,7 @@ def main() -> int:
     checks.append(("document-status stamp rendered", "DRAFT" in joined or "FINAL" in joined))
     checks.append(("\\gls{PK} resolved to a real definition", "pharmacokinetic (pk)" in joined.lower()))
 
-    # title_page.lua's "Title Page" ToC-entry marker -- a genuinely
+    # title_page.lua's "Title Page" ToC-entry marker -- an actual
     # Heading1-styled paragraph (real outline level, picked up by Word's
     # native ToC field automatically, no apply-layout step needed), made
     # invisible on the page itself via ordinary formatting (1pt size,
@@ -173,7 +173,7 @@ def main() -> int:
         document_xml_for_toc = z.read("word/document.xml").decode("utf-8")
     checks.append(
         (
-            "'Title Page' marker is genuinely Heading1-styled, tiny, and white",
+            "'Title Page' marker is actually Heading1-styled, tiny, and white",
             re.search(
                 r'<w:pStyle w:val="Heading1"/>.*?<w:sz w:val="2"/><w:szCs w:val="2"/><w:color w:val="FFFFFF"/></w:rPr><w:t[^>]*>Title Page',
                 document_xml_for_toc,
@@ -232,9 +232,9 @@ def main() -> int:
     # Plain "References", not numbered like Introduction/Results ("1. ",
     # "2. ", literal tabs baked in by number-sections) -- it uses the same
     # `custom-style="Heading 1"` Div idiom as Synopsis/Abbreviations above
-    # it in this file, deliberately NOT a genuine pandoc Header, so
+    # it in this file, deliberately NOT an actual pandoc Header, so
     # number-sections never numbers it (see report.qmd's comment for why a
-    # genuine `# References {.unnumbered}` heading doesn't work cleanly:
+    # real `# References {.unnumbered}` heading doesn't work cleanly:
     # quarto-plus's header.lua still inserts its tab, leaving one with no
     # number before it).
     checks.append(("References heading rendered, not numbered", any(t.strip() == "References" for t in all_text)))
@@ -262,7 +262,7 @@ def main() -> int:
     # Front-matter section labels (Synopsis, Table of Contents, List of
     # Figures/Tables, Abbreviations) use pandoc's `custom-style="Heading
     # 1"` Div attribute to get the real Heading 1 look without becoming a
-    # genuine numbered heading. This matches by *style name* ("Heading 1",
+    # real numbered heading. This matches by *style name* ("Heading 1",
     # with a space) -- get that backwards (the style *ID* "Heading1" has
     # no space, the opposite convention from raw-OOXML pStyle references
     # elsewhere in this extension) and pandoc silently fabricates a new,

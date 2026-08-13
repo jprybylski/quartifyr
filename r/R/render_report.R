@@ -32,7 +32,7 @@
 #'   its own `render.R` computes `toolkit_root` explicitly rather than
 #'   relying on this default, since `here::here()`'s root-finding walks up
 #'   from the caller's own working directory, not from wherever quartifyr
-#'   itself happens to live). For a genuinely independent project (its own
+#'   itself happens to live). For an independent project (its own
 #'   git repo, not nested inside a quartifyr checkout), this default is
 #'   wrong -- it'll resolve to the calling project's own root instead. Pass
 #'   `reference_doc` (and `venv_bin`, unless the `styling/` venv's `bin/`

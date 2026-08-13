@@ -203,7 +203,7 @@ def _style_hyperlink(doc: DocumentObject, config: StyleConfig) -> None:
     Deliberately made to look like plain body text (no blue, no underline)
     rather than a conventional web-link appearance -- matching this
     extension's own REF-field crossrefs/appendix_crossrefs, which are
-    genuinely clickable (`\\h` switch) but carry no distinguishing rStyle at
+    actually clickable (`\\h` switch) but carry no distinguishing rStyle at
     all, so they just inherit whatever formatting surrounds them. Word
     treats "Hyperlink" as one of its reserved built-in style IDs and will
     render *something* link-like (typically blue + underlined) even without

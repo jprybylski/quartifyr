@@ -378,7 +378,7 @@ def _insert_section_break(bookmark_p, final_sectPr) -> None:
     footerReference, so sections would silently end up permanently sharing
     the exact same footer part no matter how ``is_linked_to_previous`` is
     called afterward -- reproduced repeatedly before finding this.
-    Stripping the reference makes the new section start in the genuinely
+    Stripping the reference makes the new section start in the actual
     "inherited" state python-docx expects, so a later unlink-then-
     customize actually creates an independent part.
     """

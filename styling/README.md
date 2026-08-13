@@ -23,12 +23,12 @@ quartifyr-styling build \
 
 Add `--override styling/styles/<org>.yaml` with just the keys that differ
 from the default preset (fonts, colors, page setup, ...) to brand a new
-organization — see `styles/default.yaml` for the full schema and
+organization; see `styles/default.yaml` for the full schema and
 `quartifyr_styling/schema.py` for validation rules (hex colors, positive
 sizes, etc.).
 
-`--style`/`--override`/`--out` are plain file paths, not fixed locations
-— `styling/styles/*.yaml` and `templates/org-reference.docx` are just
+`--style`/`--override`/`--out` are plain file paths, not fixed locations;
+`styling/styles/*.yaml` and `templates/org-reference.docx` are just
 this repo's own convention. See the repo-root README's "Style YAML and
 reference-doc" section for how an org can keep its style YAML and built
 reference-doc elsewhere, and how most project authors can skip running
@@ -36,7 +36,7 @@ reference-doc elsewhere, and how most project authors can skip running
 
 The generated reference-doc also sets `<w:updateFields w:val="true"/>` in
 `word/settings.xml`, so Word automatically recalculates every field (ToC,
-`SEQ`, `REF`, `PAGE`, ...) the moment a delivered document is opened — no
+`SEQ`, `REF`, `PAGE`, ...) the moment a delivered document is opened; no
 manual "select all, F9", no LibreOffice involved. See `../r/README.md`'s
 "Word field recalculation" section for how this relates to
 `recalculate-fields` below (this covers real Word opening the file

@@ -195,7 +195,7 @@ def main() -> int:
     # Unlike title_page.lua, memo_cover.lua deliberately does NOT emit
     # quartifyr-front-matter-start -- giving the cover its own OOXML
     # section here would butt directly against body-start's own section
-    # boundary with nothing in between, which renders as a genuinely
+    # boundary with nothing in between, which renders as a fully
     # blank page (confirmed in practice -- see utils.
     # front_matter_start_bookmark()'s comment). Only body-start should
     # exist, giving a clean 2-section split with no blank page.

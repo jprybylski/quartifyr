@@ -29,14 +29,14 @@ failure modes across repeated real-world runs -- (1) hangs indefinitely
 (reproduced in a sandboxed environment *and* a plain native macOS
 terminal, ruling out sandboxing as the cause), (2) exits cleanly within
 seconds without the macro having actually run at all (file untouched), and
-(3) works correctly end-to-end, ToC genuinely recalculated. All three were
+(3) works correctly end-to-end, ToC actually recalculated. All three were
 observed against the *same* document across different runs, so this isn't
 document-specific either. This module now defends against (1) by killing
 the whole process group on timeout (not just the tracked PID, which can
 leave an orphaned ``soffice.bin`` worker behind) and against (2) by
 verifying the ToC placeholder actually disappeared rather than trusting
 the exit code -- but the underlying non-determinism itself is unresolved
-and looks like a genuine LibreOffice/macOS interaction bug outside
+and looks like a real LibreOffice/macOS interaction bug outside
 quartifyr's control. Treat this feature as experimental until proven
 reliable in your own environment; it fails loudly and cleanly either way
 (no silent false "success").

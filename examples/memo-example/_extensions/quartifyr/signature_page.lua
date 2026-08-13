@@ -37,7 +37,7 @@
 -- to every contributor/approver block.
 --
 -- Table widths are percentage-based (w:type="pct"), not fixed twips, so
--- they genuinely span the *current* usable text width regardless of the
+-- they always span the *current* usable text width regardless of the
 -- page margins configured in the docx reference-doc (see
 -- styling/styles/*.yaml's page.margins_in) -- a fixed-twips table sized
 -- for one org's margins would come up short or overflow under another's.

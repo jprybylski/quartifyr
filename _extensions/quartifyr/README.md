@@ -73,28 +73,28 @@ filters:
 
 ### Title page
 
-All fields except `title` are optional — the title page only renders the
+All fields except `title` are optional; the title page only renders the
 rows that are actually set, so the same shell template works whether a
 project has a `lead-scientist` or not. The info block (Date/Lead
 Scientist/Version/Confidentiality/...) renders as a full-width table, not
-centered text lines — borderless and unshaded (no header-row styling on
+centered text lines: borderless and unshaded (no header-row styling on
 the first row), with the label column bold and the value column plain so
 rows stay readable without table gridlines.
 
 `logo:` (a path to an image, relative to the `.qmd`) places a centered
-logo below the title-page fields — omit it and no space is reserved, no
+logo below the title-page fields; omit it and no space is reserved, no
 placeholder box. `logo-width:` controls its rendered width (default
 `"2in"`; any pandoc-recognized image width, e.g. `"150px"`). `logo-align:`
 controls its horizontal alignment (`"left"`, `"center"`, or `"right"`;
 default `"center"`).
 
 `address:` is a YAML list of lines (not a single string, so multi-line
-addresses render as genuine separate lines rather than one run-together
-paragraph — see `synopsis:`/`title-page-extra:` above for the same
+addresses render as separate lines rather than one run-together
+paragraph; see `synopsis:`/`title-page-extra:` above for the same
 list-over-map reasoning) and adds an "Address" row to the info block, for
 report-style documents that just want a sender address line on their
 title page. Omit it for document kinds that don't need one. (This is a
-lighter-weight option than the "Memo cover page" filter below — if what
+lighter-weight option than the "Memo cover page" filter below: if what
 you actually want is a fax-cover-sheet-style To/From/Date/Re cover with
 its own looser front-matter structure, use `memo:` instead of `title:`,
 not `address:` on top of a report title page.)
@@ -128,7 +128,7 @@ duplicate `title`/`subtitle`/`date`), so no other title-related frontmatter
 handling is needed.
 
 The ToC's entry for the title page reads "Title Page", not the document's
-actual title text -- a genuinely `Heading 1`-styled paragraph, independent
+actual title text -- an actual `Heading 1`-styled paragraph, independent
 of the real, visible `Title`-styled paragraph that still shows the
 report's own title. Word's ToC field scans outline levels 1-3 by default,
 so this needs no per-project configuration and no `apply-layout` step --
@@ -217,7 +217,7 @@ of the front matter -- the memo cover doesn't, since a memo has no other
 front-matter content between its cover and `{{< body-start >}}` (no ToC/
 synopsis/etc.), and giving it that same separate section would butt its
 boundary directly against `{{< body-start >}}`'s own with nothing
-between them, which renders as a genuinely blank page (confirmed in
+between them, which renders as a fully blank page (confirmed in
 practice). Instead the memo cover just gets a confidentiality label with
 no page number in its footer, and the body restarts cleanly at arabic
 `"1"` -- see `utils.front_matter_start_bookmark()`'s comment in
@@ -235,10 +235,10 @@ headings. Set `indent-headers: false` in frontmatter to turn it off; see
 ### Signature page
 
 Right after the title page (or the memo cover page, if `memo:` is set
-instead of `title:` — see above), `contributors:` (with
+instead of `title:`; see above), `contributors:` (with
 `authors:`/`reviewers:`
 lists) and a separate top-level `approvers:` list render a single
-"Signatures" section — one heading, one ToC entry, covering both groups.
+"Signatures" section: one heading, one ToC entry, covering both groups.
 "Contributors" and "Approvers" appear within that page as smaller bold
 sub-labels (not headings of their own, so they don't add extra ToC
 entries) directly above their respective blocks; either sub-label is
@@ -249,7 +249,7 @@ label ("Author"/"Reviewer") spanning beside it. Approvers use the same
 layout, but since "Approvers" is already the sub-label, the slot next to
 their signing space shows their actual job title instead of a redundant
 "Approver" tag. Either key (`contributors:`, `approvers:`) can be omitted
-if not needed — if both are omitted, no Signatures page renders at all.
+if not needed; if both are omitted, no Signatures page renders at all.
 
 The signing-space row is a tall, empty cell -- deliberately no line or
 box drawn inside it, since the table's own bordered cell already reads
@@ -267,7 +267,7 @@ uniformly across every contributor/approver block. Default is
 `signature-mode: "line"` (the empty box).
 
 There's no forced page break between the Contributors and Approvers
-sub-sections — with only a handful of people they'll naturally share a
+sub-sections: with only a handful of people they'll naturally share a
 page; Word just flows onto a new page once the content no longer fits.
 The only explicit break this filter inserts is right after the title page
 (before "Signatures") and once more after the whole Signatures page
@@ -296,7 +296,7 @@ synopsis:
 ```
 
 **Fully flexible, not a fixed field list**: any number of rows, any
-labels, in whatever order you write them — this isn't limited to
+labels, in whatever order you write them; this isn't limited to
 Objectives/Methods/Results, add or remove rows freely. It's a YAML
 *list*, not a plain map (`objectives: "..."`), deliberately: pandoc's Lua
 metadata tables don't preserve map key order (confirmed by testing --
@@ -306,18 +306,18 @@ on every render. A list's order is reliable.
 
 A "Title" row (from the top-level `title:` field) is prepended
 automatically whenever there's at least one synopsis row. **To turn the
-whole section off, omit `synopsis:` from frontmatter entirely** — the
+whole section off, omit `synopsis:` from frontmatter entirely.** The
 `::: .synopsis :::` div then renders nothing, so a shared shell template
 can leave the div marker in unconditionally and let each project's
 frontmatter decide.
 
-Author placement of the `::: .synopsis :::` div controls where it lands —
-unlike the title page and signature pages (always first/second by
+Author placement of the `::: .synopsis :::` div controls where it lands.
+Unlike the title page and signature pages (always first/second by
 construction), a synopsis's conventional position varies more by org, so
 this one isn't auto-inserted.
 
 **Multi-line values, and values with a figure**: `value:` also accepts a
-YAML list instead of a plain string — each string item becomes its own
+YAML list instead of a plain string: each string item becomes its own
 paragraph within the cell, and an `{image: "...", width: "..."}` item
 embeds a figure inline, in whatever order they're written:
 
@@ -331,12 +331,12 @@ synopsis:
 ```
 
 `image:` is a **bare filename within `OUTPUTS/figures/`**, not a path
-that includes that directory — the same convention a `{rpfy}:` figure
+that includes that directory, the same convention a `{rpfy}:` figure
 placeholder in the qmd body already uses. This isn't a shortcut for
 embedding an arbitrary picture: it emits a `{rpfy}:filename.png<width:
 N>` magic string into the cell, so the figure only actually appears
 after `reportifyr::build_report()` (pass 2) fills it in from
-`OUTPUTS/figures/` — a plain `quarto render` alone shows the literal
+`OUTPUTS/figures/`. A plain `quarto render` alone shows the literal
 `{rpfy}:...` text, exactly like any other figure placeholder in this
 project. Getting the filename convention wrong doesn't error -- reportifyr
 just logs a "Figure file not found" warning and leaves the cell showing
@@ -348,20 +348,20 @@ Routing through `{rpfy}:` rather than embedding a picture directly
 (which is what an earlier version of this feature did) is deliberate:
 `reportipyr` (the Python package `reportifyr::build_report()` drives)
 has dedicated, first-class support for magic strings inside table
-cells — confirmed by reading its source — so the figure genuinely lands
+cells (confirmed by reading its source), so the figure reliably lands
 inside the cell, carries the same provenance alt text (a content hash
 from the artifact's `_metadata.json` sidecar) every other `{rpfy}:`
-figure gets, and — since it's never captioned via `{{< fig_caption >}}`
-— stays excluded from `quarto-plus`'s List of Figures, the same as
+figure gets, and, since it's never captioned via `{{< fig_caption >}}`,
+stays excluded from `quarto-plus`'s List of Figures, the same as
 before.
 
 `reportifyr::build_report()` also auto-inserts a Source/Notes/
 Abbreviations footnote block for every `{rpfy}:` figure, cell figures
-included — this extension can't turn that off (and doesn't try to;
+included. This extension can't turn that off (and doesn't try to;
 the footnote *is* the "appropriate reportifyr-generated metadata"
 this feature is for). What it does control is *where that footnote
 lands*: reportifyr groups it per Word table element, inserting one
-combined footnote immediately after the whole table — not attached to
+combined footnote immediately after the whole table, not attached to
 any specific cell. A synopsis row containing a `{rpfy}:` magic string
 therefore gets its own dedicated single-row table rather than sharing
 one with every other row, so the footnote lands immediately after
@@ -375,7 +375,7 @@ renders as a single table with no fragmentation.
 ### Bibliography / references
 
 Citations and a `.bib` bibliography are ordinary Quarto/pandoc citeproc
-support — nothing quartifyr-specific to enable beyond the standard
+support, nothing quartifyr-specific to enable beyond the standard
 frontmatter field and citation syntax:
 
 ```yaml
@@ -387,18 +387,18 @@ Theophylline pharmacokinetics were characterized descriptively
 [@boeckmann1994].
 ```
 
-**Citation style** defaults to NLM/Vancouver (citation-sequence, brackets —
+**Citation style** defaults to NLM/Vancouver (citation-sequence, brackets,
 numbered in order of appearance, e.g. `[1]`, `[2]`), via `bibliography.lua`
 defaulting `csl:` to this extension's bundled `nlm.csl` and
 `link-citations:` to `true` whenever a project sets `bibliography:` but
 doesn't pick its own values for either. Set `csl:`/`link-citations:`
 yourself in the shell `.qmd`'s frontmatter (`csl:` as a path to another
-`.csl` file, or a URL) to use different ones instead — the defaults only
+`.csl` file, or a URL) to use different ones instead; the defaults only
 fill gaps that aren't set at all, they never override an explicit choice.
 
 `link-citations: true` makes each in-text citation number a real internal
 hyperlink to its bibliography entry, via pandoc's own `Hyperlink`
-character style — added to the reference-doc by `build_template.py`'s
+character style, added to the reference-doc by `build_template.py`'s
 `_style_hyperlink()` for the same reason `_style_bibliography()` exists:
 Word treats `Hyperlink` as one of its reserved built-in style IDs and will
 render *something* link-like even undefined, but leaving it undefined
@@ -409,24 +409,24 @@ a conventional web-link look, the same way this extension's own
 `crossref`/`appendix_crossref` REF-field hyperlinks (above) blend into
 whatever text surrounds them instead of standing out.
 
-**Known limitation — citation hyperlink targets can be silently broken by
+**Known limitation: citation hyperlink targets can be silently broken by
 `reportifyr`'s pass-2 fill.** quartifyr's own shell (Quarto render +
-`apply-layout`) never emits an unpaired `w:bookmarkStart`/`w:bookmarkEnd` —
-confirmed directly, and guarded by `examples/demo-report/smoke_test.py`'s
-shell-level bookmark check. But `reportifyr`'s own `remove_bookmarks()`
+`apply-layout`) never emits an unpaired `w:bookmarkStart`/`w:bookmarkEnd`
+(confirmed directly, and guarded by `examples/demo-report/smoke_test.py`'s
+shell-level bookmark check). But `reportifyr`'s own `remove_bookmarks()`
 step (`docx_utils.py`, Python) matches `bookmarkEnd` elements to delete
 *purely by numeric `w:id`*, without also checking that the matching
 `bookmarkStart`'s name carries reportifyr's own `fp_` footnote-bookmark
 prefix. `reportifyr` assigns its own footnote-bookmark ids from the
-footnoted paragraph's index in `doc.paragraphs` — a small integer with no
-relationship to pandoc's own citeproc/heading bookmark ids — so on some
+footnoted paragraph's index in `doc.paragraphs`, a small integer with no
+relationship to pandoc's own citeproc/heading bookmark ids, so on some
 documents (confirmed on this repo's own demo) it coincidentally collides
 with an unrelated bookmark, e.g. a citeproc `ref-<key>` bookmark, and
 `remove_bookmarks()` then deletes *both* same-numbered `bookmarkEnd`
 elements, leaving the unrelated one (here, a citation's target) unpaired
-in the delivered docx — its `<w:hyperlink w:anchor="ref-<key>">` source
+in the delivered docx. Its `<w:hyperlink w:anchor="ref-<key>">` source
 still renders correctly styled, but doesn't reliably navigate in Word.
-This is a `reportifyr` bug, not something quartifyr's shell can prevent —
+This is a `reportifyr` bug, not something quartifyr's shell can prevent;
 there's no bookmark-id range quartifyr could reserve that's guaranteed
 safe, since reportifyr's own ids scale with document length.
 `examples/demo-report/smoke_test.py` detects (and warns on, without
@@ -434,7 +434,7 @@ failing the suite over an external bug) whichever citation it affects on
 a given render.
 
 By default, citeproc appends the generated reference list to the very end
-of the document — after any appendices that follow the body, which is
+of the document, after any appendices that follow the body, which is
 rarely what you want. To control where it lands (here, right after the
 body and before the appendices), add a heading and an empty `{#refs}` Div
 at that location; citeproc fills the Div in place instead of appending a
@@ -450,19 +450,19 @@ References
 ```
 
 The `custom-style="Heading 1"` Div (the same idiom Synopsis/Abbreviations
-above use) gets the real Heading 1 look and shows up in the native ToC —
-both key off the paragraph style itself, not whether the heading is a
-genuine numbered pandoc Header — without becoming a numbered section the
-way `# Introduction`/`# Results` are. A genuine `# References` heading
+above use) gets the real Heading 1 look and shows up in the native ToC.
+Both key off the paragraph style itself, not whether the heading is an
+actual numbered pandoc Header, without becoming a numbered section the
+way `# Introduction`/`# Results` are. An actual `# References` heading
 would also render, but even marked `{.unnumbered}` it still picks up
 `quarto-plus`'s `header.lua` tab-insertion (meant to precede a section
-number), leaving a stray leading tab with no number before it — the Div
-form sidesteps that entirely since `header.lua` only touches genuine
+number), leaving a stray leading tab with no number before it. The Div
+form sidesteps that entirely since `header.lua` only touches actual
 `Header` nodes.
 
 The reference-doc's "Bibliography" paragraph style (the style pandoc's
 docx writer applies to each entry) is generated by `styling/`'s
-`build_template.py` — see `_style_bibliography()` there — since it isn't
+`build_template.py` (see `_style_bibliography()` there), since it isn't
 one of Word's/python-docx's built-in styles the way `Caption`/`Heading
 N`/`Table Grid` are.
 
@@ -478,13 +478,13 @@ N`/`Table Grid` are.
 
 Each `{{< appendix "BookmarkId" "Title" >}}` renders an "Appendix A: ...",
 "Appendix B: ...", ... heading using a native Word `SEQ Appendix \*
-ALPHABETIC` field — reordering, adding, or removing appendices never
+ALPHABETIC` field: reordering, adding, or removing appendices never
 requires manual relettering, just a field recalculation (see
-`../../r/README.md`'s "Word field recalculation" section — experimental,
+`../../r/README.md`'s "Word field recalculation" section; experimental,
 off by default; without it, a delivered doc needs one manual "select all,
-F9" in Word). It uses the `Heading 1` style — referenced by style ID
-(`Heading1`), not display name, which matters: see "A pStyle gotcha"
-below — so appendices show up in the ToC the same as any other top-level
+F9" in Word). It uses the `Heading 1` style, referenced by style ID
+(`Heading1`), not display name, which matters (see "A pStyle gotcha"
+below), so appendices show up in the ToC the same as any other top-level
 heading, no `toc-style-map` entry needed.
 
 Reference an appendix from body text with
@@ -493,14 +493,14 @@ Reference an appendix from body text with
 
 Note: figure/table numbering from `quarto-plus`'s own `fig_caption`/
 `tbl_caption` shortcodes is intentionally left continuous through
-appendices (e.g. "Figure 12" inside Appendix B, not "Figure B-1") — see
+appendices (e.g. "Figure 12" inside Appendix B, not "Figure B-1"); see
 the comment at the top of `appendix.lua` for why and how that could be
 extended later.
 
 ### Figures, tables, and cross-references
 
 Auto-numbering and cross-referencing for figures and tables is already
-available — it's `quarto-plus`'s own machinery, not something this
+available; it's `quarto-plus`'s own machinery, not something this
 extension adds on top:
 
 ```
@@ -512,12 +512,12 @@ See {{< crossref "TblPkSummary" >}} for the full profile.
 
 The first argument is a bookmark ID `crossref` looks up by (it must start
 with `Figure`/`Fig` or `Table`/`Tbl`, case-insensitive, for `quarto-plus`
-to know which counter it belongs to) — **not** the displayed number.
+to know which counter it belongs to), **not** the displayed number.
 Deliberately spelled without a digit above (`FigConcTime`, not `Figure1`):
 the actual "Figure 1"/"Table 1" text comes entirely from a live Word `SEQ
 Figure`/`SEQ Table` field, so reordering/adding/removing figures or tables
 renumbers correctly on the next field recalculation regardless of what the
-bookmark ID says — an ID like `Figure1` would still work, but reads as a
+bookmark ID says. An ID like `Figure1` would still work, but reads as a
 manually-typed number even though it isn't one. `crossref` itself resolves
 to that live number via a `REF ... \h` field back to the bookmark. This
 extension's own `appendix_crossref` (above) emits the identical `REF ...
@@ -526,7 +526,7 @@ because `quarto-plus`'s version is hardcoded to the "Figure"/"Table" SEQ
 names.
 
 The `\h` switch is what makes a resolved cross-reference a clickable
-hyperlink — Word does this unconditionally by default, regardless of
+hyperlink; Word does this unconditionally by default, regardless of
 whether the reference and its target end up on the same page or ten pages
 apart. `crossref-hyperlinks:` in the shell `.qmd`'s frontmatter controls
 this, document-wide, for every `crossref`/`appendix_crossref` alike:
@@ -544,21 +544,21 @@ patching each shortcode separately, so it applies uniformly no matter
 which extension emitted the field.
 
 `"same-page"` needs an extra step, and can't be resolved by `apply-layout`
-alone: real page numbers don't exist yet at that point — `apply-layout`
+alone: real page numbers don't exist yet at that point. `apply-layout`
 runs on the pass-1 shell, before reportifyr has filled in the actual
 content pagination depends on. So `apply-layout` only *marks* each
 same-page crossref (a small bookmark next to its `REF` field) and leaves
 it hyperlinked, the safe fallback if nothing resolves the mark later. The
-actual decision happens in a separate, **opt-in** post-reportifyr step —
+actual decision happens in a separate, **opt-in** post-reportifyr step,
 `quartifyr-styling resolve-same-page-crossrefs` (see
 `../../styling/README.md` and `../../r/README.md`'s `render_report()`
-`resolve_same_page_crossrefs` argument) — which reads each marked
+`resolve_same_page_crossrefs` argument), which reads each marked
 crossref's and its target's real page number via headless LibreOffice
 (read-only; it never re-saves the docx itself) and strips `\h` wherever
 they match. It's off by default and inherits the same intermittent-hang
 behavior already documented for `recalculate-fields` (see
-`../../styling/quartifyr_styling/same_page_crossrefs.py`'s docstring) —
-an earlier version of this mode instead tried to push the whole
+`../../styling/quartifyr_styling/same_page_crossrefs.py`'s docstring).
+An earlier version of this mode instead tried to push the whole
 comparison into a live nested Word field so Word/LibreOffice would
 resolve it on its own; abandoned after confirming, via a real
 headless-LibreOffice round-trip, that it silently corrupts the field
@@ -572,12 +572,12 @@ hyperlinked everywhere, same as `true`.
 number-sections: true
 ```
 
-A plain pandoc/Quarto option, no quartifyr-specific code involved — it
+A plain pandoc/Quarto option, no quartifyr-specific code involved: it
 numbers real body headings (`# Introduction` → "1.", `## Background` →
 "1.1", `# Results` → "2.", ...) as static text baked in at render time,
 correctly nested by level. Verified it does **not** touch title/signature/
 appendix headings, since those are raw OOXML this extension injects
-directly rather than genuine pandoc `Header` nodes — `number-sections`
+directly rather than actual pandoc `Header` nodes; `number-sections`
 only walks real ones. Per-project opt-in; see
 `examples/demo-report/report.qmd` for a working example.
 
@@ -593,7 +593,7 @@ Everything in this section requires `styling/`'s post-render
 `quartifyr-styling apply-layout` step (run automatically by
 `r/R/render_report.R` -- see `../../r/README.md`'s "Page header/footer
 and page numbering" section and `../../styling/README.md`'s
-`apply-layout` entry), since a genuinely independent second header/footer
+`apply-layout` entry), since an independent second header/footer
 means adding new *parts* to the docx package, which a Lua filter's
 `RawBlock` injection can't do on its own.
 
@@ -629,9 +629,9 @@ just with no page-number split (single section throughout).
 ### A pStyle gotcha (if you're extending this extension)
 
 `<w:pStyle w:val="...">` must reference a style's **ID** (e.g.
-`Heading1`, `TableGrid` — no spaces), not its **display name** (`Heading
+`Heading1`, `TableGrid`, no spaces), not its **display name** (`Heading
 1`, `Table Grid`). Word/LibreOffice render the display-name form visually
-fine via a fallback lookup, which makes this easy to miss — but Word's ToC
+fine via a fallback lookup, which makes this easy to miss, but Word's ToC
 field silently fails to recognize such a paragraph as a heading at all
 (confirmed via a real Word field-recalculation test: Contributors/
 Approvers/the appendix were rendering correctly but missing from the ToC
@@ -642,11 +642,11 @@ ID form.
 
 **The opposite is true from the `.qmd` body.** Pandoc's `custom-style`
 Div attribute (used, for example, to give a front-matter section label
-like "Synopsis" the real Heading 1 look without making it a genuine
-numbered heading — see `examples/demo-report/report.qmd`) matches by a
+like "Synopsis" the real Heading 1 look without making it an actual
+numbered heading; see `examples/demo-report/report.qmd`) matches by a
 style's **name** (`Heading 1`, with the space), not its ID (`Heading1`).
 Get this backwards and pandoc doesn't error or fall back to the real
-style — it silently fabricates a new, blank style with that literal name,
+style: it silently fabricates a new, blank style with that literal name,
 based on Normal, so the text renders in plain body formatting with no
 indication anything's wrong (confirmed by making this exact mistake:
 `custom-style="Heading1"` produced a style with no `<w:rPr>`/`<w:pPr>` at
@@ -663,7 +663,7 @@ filter emits actually carry your org's fonts/colors.
 
 Every table this extension generates (title page info block, synopsis,
 signature blocks) is sized with percentage widths (`w:type="pct"`), not
-fixed twips — they genuinely span the *current* usable text width, so
+fixed twips: they always span the *current* usable text width, so
 changing `page.margins_in` in your style YAML (see
 `styling/styles/default.yaml`) doesn't leave a fixed-width table
 overflowing the page or falling short of it.

@@ -12,7 +12,7 @@ means copying a handful of files into a consistent shape: `_extensions/`,
 a `_quarto.yml` with `output-dir: report/shell`, a shell `.qmd` with the
 right frontmatter, and `reportifyr`'s own `report/standard_footnotes.yaml`/
 `report/config.yaml`. That's a good fit for a project-template filler
-rather than copy-paste-and-edit — this page is a **suggested pattern**,
+rather than copy-paste-and-edit; this page is a **suggested pattern**,
 not a maintained quartifyr integration. Nothing described here is bundled
 with the repo.
 
@@ -21,13 +21,13 @@ tool, from the same organization behind `reportifyr`, `pyro`, and `rv`: a
 `spackle.toml` at a template's root declares a set of *slots* (prompted
 values, with types and defaults), and any file with a `.j2`/`.tera`
 extension in the template gets rendered through [Tera](https://keats.github.io/tera/)
-with those slots in scope — `spackle fill` walks the template, prompts
+with those slots in scope; `spackle fill` walks the template, prompts
 for each slot, and writes the filled-in project to a target directory.
 
 ## Sketch: a quartifyr report starter
 
 A `spackle.toml` for a quartifyr report template might declare the
-handful of values that actually vary per project — everything else
+handful of values that actually vary per project; everything else
 (the extension copies, the filter list, the `output-dir` convention)
 stays fixed:
 
@@ -86,24 +86,24 @@ filters:
 
 `_quarto.yml` (setting `project: {output-dir: report/shell}`) and the
 physical `_extensions/` copies can be plain, unfilled files in the same
-template — spackle only runs slots through files with a `.j2`/`.tera`
+template; spackle only runs slots through files with a `.j2`/`.tera`
 extension, so anything that doesn't need per-project values just gets
 copied as-is.
 
 ## Why this pairs well with quartifyr specifically
 
-- **The values that vary are genuinely small in number** — org name,
-  project code, report number, lead scientist — exactly the shape
+- **The values that vary are small in number**: org name,
+  project code, report number, lead scientist, exactly the shape
   spackle's slot model is built for, rather than a general-purpose
   scaffolding tool that would be overkill here.
 - **quartifyr already treats "one project = one directory with a fixed
   shape" as load-bearing** (the `report/shell` convention
-  `render_report()` depends on — see [Architecture](architecture.html))
-  — a template filler that reproduces that shape exactly, every time,
+  `render_report()` depends on; see [Architecture](architecture.html)).
+  A template filler that reproduces that shape exactly, every time,
   removes a whole class of "forgot to set `output-dir`" mistakes.
 - **An org's reference-doc rarely changes** once built (see
   [Styling](styling.html)), so `reference_doc` is a good candidate for a
-  slot with a `default` — most new projects accept it as-is, but a
+  slot with a `default`; most new projects accept it as-is, but a
   project reusing a different org's styling can override it at fill
   time.
 

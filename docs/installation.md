@@ -6,7 +6,7 @@ nav_order: 2
 
 # Installation
 
-quartifyr's three components are independently usable — install only
+quartifyr's three components are independently usable; install only
 what you need.
 
 ## 1. Quarto extension only
@@ -27,12 +27,12 @@ duplicating them, so install that too:
 quarto add A2-ai/quarto-plus
 ```
 
-With nothing else installed you can already render a real, styled shell
-— see the [Quick start](index.html#quick-start) on the home page. The
+With nothing else installed you can already render a real, styled shell;
+see the [Quick start](index.html#quick-start) on the home page. The
 only other prerequisite is [Quarto](https://quarto.org/docs/get-started/)
 itself.
 
-## 2. `styling/` — the reference-doc builder
+## 2. `styling/`: the reference-doc builder
 
 Python, managed with [`uv`](https://docs.astral.sh/uv/getting-started/installation/):
 
@@ -43,10 +43,10 @@ source .venv/bin/activate
 uv pip install -e "./styling[dev]"
 ```
 
-This gets you the `quartifyr-styling` CLI — see [Styling](styling.html)
+This gets you the `quartifyr-styling` CLI; see [Styling](styling.html)
 for its subcommands.
 
-## 3. `r/` — the pass-1 + pass-2 orchestration driver
+## 3. `r/`: the pass-1 + pass-2 orchestration driver
 
 R, managed with [`renv`](https://rstudio.github.io/renv/):
 
@@ -55,7 +55,7 @@ cd r && Rscript -e 'renv::restore()'
 ```
 
 This is a convenience wrapper around Quarto + `quartifyr-styling` +
-`reportifyr` — see [R orchestration](r-orchestration.html). It's optional;
+`reportifyr`; see [R orchestration](r-orchestration.html). It's optional;
 you can call the three underlying pieces yourself instead.
 
 ## Full toolchain, end to end

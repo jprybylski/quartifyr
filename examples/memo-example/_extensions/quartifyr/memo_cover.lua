@@ -45,7 +45,7 @@
 -- title_page.lua) -- see utils.front_matter_start_bookmark()'s comment
 -- for why: a memo has no other front-matter content between its cover
 -- and `{{< body-start >}}`, so giving the cover its own OOXML section
--- here would render as a genuinely blank page between the cover and the
+-- here would render as a fully blank page between the cover and the
 -- body (confirmed in practice). The cover's manual page break plus
 -- `{{< body-start >}}`'s own section boundary is enough on its own.
 --
@@ -185,7 +185,7 @@ return {
       end
 
       -- Mixed list of pandoc blocks (RawBlock strings get accumulated and
-      -- flushed as a group; the logo, when present, is a genuine
+      -- flushed as a group; the logo, when present, is a real
       -- pandoc.Image block spliced in between -- see utils.logo_block()'s
       -- comment for why it can't just be more raw OOXML).
       local blocks = {}

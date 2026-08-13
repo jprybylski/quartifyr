@@ -22,8 +22,8 @@ and a `.qmd`, not a hand-edited Word template.
 ## What quartifyr does
 
 quartifyr only does **pass 1** of a two-pass pipeline: rendering a
-styled, structurally-complete `.docx` "shell" — title page, signature
-pages, ToC, synopsis, numbered appendices — but no real content yet, just
+styled, structurally-complete `.docx` "shell" (title page, signature
+pages, ToC, synopsis, numbered appendices), but no real content yet, just
 `{rpfy}:filename.ext` magic-string placeholders. A separate **pass 2**
 fill tool ([`reportifyr`](https://github.com/A2-ai/reportifyr), external)
 fills those placeholders with real tables/figures/footnotes. See
@@ -31,14 +31,14 @@ fills those placeholders with real tables/figures/footnotes. See
 
 ```mermaid
 flowchart LR
-    subgraph Pass1["Pass 1 — Quarto"]
+    subgraph Pass1["Pass 1: Quarto"]
         yaml["style YAML\n(styling/styles/*.yaml)"] --> refdoc["org-reference.docx\n(quartifyr-styling build)"]
         qmd["shell .qmd\n(title/signature/appendix\nfrontmatter + {rpfy}: placeholders)"]
         refdoc --> render["quarto render"]
         qmd --> render
         render --> shell["shell.docx\n(structure + placeholders,\nno real content yet)"]
     end
-    subgraph Pass2["Pass 2 — fill (reportifyr, R)"]
+    subgraph Pass2["Pass 2: fill (reportifyr, R)"]
         outputs["OUTPUTS/\n(tables, figures + metadata)"] --> fill["reportifyr::build_report()"]
         shell --> fill
         fill --> draft["report/draft/*.docx"]
@@ -48,18 +48,18 @@ flowchart LR
 
 ## Why
 
-Hand-built Word "shell" templates don't scale across projects or orgs —
+Hand-built Word "shell" templates don't scale across projects or orgs:
 every new study means someone re-clicking through Word's style pane, and
 drift between shells is a matter of when, not if. The usual alternative,
 pharmtex-style LaTeX pipelines, trades that problem for a steep learning
-curve most scientific staff don't have, a toolchain that's genuinely
+curve most scientific staff don't have, a toolchain that's
 prone to breaking, and an output format (PDF) that's harder for
 non-technical reviewers to comment on directly than the Word documents
 they already know.
 
-quartifyr's answer: generate everything — the org's docx styling, the
+quartifyr's answer: generate everything (the org's docx styling, the
 shell's title/signature/ToC/abbreviations front matter, appendix
-numbering — from code and YAML, output real `.docx` all the way through,
+numbering) from code and YAML, output real `.docx` all the way through,
 then hand the shell to a fill tool to do what it already does well:
 filling it with real tables, figures, and footnotes. No LaTeX. No manual
 Word template surgery. A new org's look is a YAML diff; a new project is
@@ -78,7 +78,7 @@ hand-builds from scratch.
 
 Want to see the shell before installing anything but Quarto? A committed
 `templates/org-reference.docx` means this alone renders a real, styled
-shell — title page, signature pages, synopsis — with `{rpfy}:`
+shell (title page, signature pages, synopsis) with `{rpfy}:`
 placeholders still literal (pass 2 hasn't run):
 
 ```bash

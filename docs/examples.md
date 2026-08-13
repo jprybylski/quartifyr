@@ -7,13 +7,13 @@ nav_order: 7
 # Examples
 
 Two complete, working examples ship in
-[`examples/`](https://github.com/jprybylski/quartifyr/tree/main/examples)
-— each a real project you can `cd` into and render yourself. Both are
+[`examples/`](https://github.com/jprybylski/quartifyr/tree/main/examples),
+each a real project you can `cd` into and render yourself. Both are
 built from base R's built-in datasets, so no external data is needed,
 and both ship pre-generated `OUTPUTS/` so they work immediately after a
 clone even before you've set up the full toolchain.
 
-## [`demo-report`](https://github.com/jprybylski/quartifyr/tree/main/examples/demo-report) — the full pipeline
+## [`demo-report`](https://github.com/jprybylski/quartifyr/tree/main/examples/demo-report): the full pipeline
 
 A small PK-style report built from `Theoph`, exercising every piece of
 the toolkit: dynamic title page, draft/final status stamp,
@@ -22,7 +22,7 @@ title page), list of figures, list of tables, only-used abbreviations, a
 citeproc-driven bibliography, a numbered appendix, and a real
 `reportifyr` fill pass.
 
-**Quick look (Quarto only, no R/Python)** — renders the shell with
+**Quick look (Quarto only, no R/Python)**: renders the shell with
 `{rpfy}:` placeholders left literal:
 
 ```bash
@@ -31,7 +31,7 @@ quarto render report.qmd --to docx --reference-doc ../../templates/org-reference
   -M document-status:DRAFT
 ```
 
-**Full pipeline** — real tables/figures/footnotes filled in:
+**Full pipeline**: real tables/figures/footnotes filled in:
 
 ```bash
 cd examples/demo-report
@@ -57,12 +57,12 @@ really filled in, bibliography populated before the appendices, ...):
 python3 examples/demo-report/smoke_test.py
 ```
 
-## [`memo-example`](https://github.com/jprybylski/quartifyr/tree/main/examples/memo-example) — the minimal end
+## [`memo-example`](https://github.com/jprybylski/quartifyr/tree/main/examples/memo-example): the minimal end
 
 The same pipeline's other extreme: a fax-cover-sheet-style memo cover
 page (logo, left-aligned `MEMORANDUM` banner, To/From/Date/Re/Cc grid)
 instead of a formal title page, and no ToC/list of figures/list of
-tables/abbreviations/signature pages — a loose, short-form document. The
+tables/abbreviations/signature pages, a loose, short-form document. The
 body still exercises a real `reportifyr` fill pass: one figure (a
 milestone timeline) with a live caption and hyperlinked crossref.
 
@@ -86,5 +86,5 @@ python3 examples/memo-example/smoke_test.py
 ```
 
 None of the omitted sections (ToC, signature pages, ...) needed any
-quartifyr code changes — see [Quarto extension](quarto-extension.html)
+quartifyr code changes; see [Quarto extension](quarto-extension.html)
 for how each front-matter piece is opt-in via frontmatter alone.

@@ -8,13 +8,13 @@ quartifyr is a code-first system for generating standardized scientific/
 regulated documents (reports today; presentations/analysis plans/memos
 meant to follow later) with Quarto. It only does **pass 1** of a two-pass
 pipeline: rendering a styled, structurally-complete `.docx` "shell" (title
-page, signature pages, ToC, synopsis, numbered appendices — but no real
+page, signature pages, ToC, synopsis, numbered appendices, but no real
 content, just `{rpfy}:filename.ext` magic-string placeholders). A separate
 **pass 2** fill tool (`reportifyr`, an external R/Python package sourced
 from [A2-ai's GitHub org](https://github.com/A2-ai), built and served via
 `a2-ai.r-universe.dev`) fills those placeholders with real
 tables/figures/footnotes.
-The two passes are independent — quartifyr doesn't know about
+The two passes are independent: quartifyr doesn't know about
 `reportifyr`'s internals beyond emitting the magic strings it expects, and
 `reportifyr` doesn't know or care that a shell came from quartifyr rather
 than a hand-built template.
@@ -28,7 +28,7 @@ Three components, each independently usable:
 | `r/` | `render_report()` orchestration driver chaining Quarto render → `apply-layout` → `reportifyr::build_report()` | R (`renv`-managed) |
 
 `examples/demo-report/` is a complete working example exercising every
-piece, with an automated end-to-end smoke test — treat it as the
+piece, with an automated end-to-end smoke test; treat it as the
 reference implementation to check changes against.
 
 Read the repo-root `README.md` first for the full two-pass architecture
@@ -79,7 +79,7 @@ Rscript render.R /path/to/project/report.qmd --final
 ### Demo / integration tests (the real correctness checks)
 
 ```bash
-# Full render_report() path — asserts on actual rendered docx content
+# Full render_report() path: asserts on actual rendered docx content
 python3 examples/demo-report/smoke_test.py
 
 # "Using the pieces directly" path (quarto render + apply-layout +
@@ -104,7 +104,7 @@ python3 scripts/quarto_only_smoke_test.py
 Both integration tests require the full toolchain on `PATH` (Quarto, R
 with `renv`-restored packages, the `styling/` venv) and skip (exit 0) if
 `Rscript`/`quarto` aren't available. These are the tests that actually
-prove correctness — the `styling/` pytest suite covers unit-level Python
+prove correctness: the `styling/` pytest suite covers unit-level Python
 logic only, and there is no Lua unit test suite, so changes to
 `_extensions/quartifyr/*.lua` are only verified by running the smoke
 test.
@@ -116,13 +116,13 @@ test.
 runs the repo-root Quick Start commands verbatim, so it also doubles as a
 check that the README itself stays accurate. `full-pipeline`'s very first
 step after the Quarto setup action is `scripts/quarto_only_smoke_test.py`,
-deliberately before any R/uv setup — proof the Quarto-only render path
+deliberately before any R/uv setup; proof the Quarto-only render path
 has no R or Python dependency of its own.
 
 ## Architecture notes that span files
 
 **Filter/shortcode load order in `_extension.yml` is load-bearing, not
-arbitrary** — see the comment block there. `synopsis.lua` must run before
+arbitrary.** See the comment block there. `synopsis.lua` must run before
 `title_page.lua` (Meta-stage ordering: `title_page.lua` nulls
 `meta.title` to suppress pandoc's auto title-block, and `synopsis.lua`
 still needs to read it for its own "Title" row). `signature_page.lua` and
@@ -130,30 +130,30 @@ still needs to read it for its own "Title" row). `signature_page.lua` and
 declared order is the *reverse* of final page order.
 
 **`{rpfy}:filename.ext` magic strings are `reportifyr`'s own mechanism,
-not a quartifyr invention** — the Lua filters emit them (e.g.
-`synopsis.lua`'s `image:` fields), `reportifyr::build_report()` (pass 2,
+not a quartifyr invention.** The Lua filters emit them (e.g.
+`synopsis.lua`'s `image:` fields); `reportifyr::build_report()` (pass 2,
 external) resolves them from `OUTPUTS/figures/`/`OUTPUTS/tables/`. A
 plain `quarto render` alone leaves the literal `{rpfy}:...` text visible;
 that's expected, not a bug, until pass 2 runs.
 
-**pStyle ID vs. display name — easy to get backwards, fails silently in
+**pStyle ID vs. display name: easy to get backwards, fails silently in
 opposite directions.** Raw OOXML injected by the Lua filters
 (`<w:pStyle w:val="...">`) must reference a style's **ID** (`Heading1`,
-no space) — Word/LibreOffice render the display-name form fine visually
+no space); Word/LibreOffice render the display-name form fine visually
 via fallback, but Word's ToC field silently fails to recognize such a
 paragraph as a heading. Conversely, pandoc's `custom-style` Div attribute
 in `.qmd` bodies matches by **display name** (`Heading 1`, with the
-space) — get this backwards and pandoc silently fabricates a blank style
+space); get this backwards and pandoc silently fabricates a blank style
 with that literal name instead of erroring. See
 `_extensions/quartifyr/README.md`'s "A pStyle gotcha" section before
 touching either.
 
 **`reportifyr`/`pyro` resolve their project by walking up from R's
-current working directory** looking for a `.*_init.json` marker —
+current working directory** looking for a `.*_init.json` marker;
 they ignore path arguments for this. `render_report()` derives the real
 project root from `shell_qmd` and wraps every `reportifyr::` call in
 `withr::with_dir(project_dir, ...)`. Don't remove that wrapper without
-understanding this — calling `reportifyr` functions directly from a
+understanding this: calling `reportifyr` functions directly from a
 session rooted elsewhere has been observed to silently seed a stray
 `pyproject.toml`/`.venv`/`.rpfy-logs/` in the wrong place. This is also
 why `examples/demo-report/` carries its own empty `.here` file (pins
@@ -162,7 +162,7 @@ quartifyr repo).
 
 **The `report/shell` → `report/draft`/`report/final` directory
 convention is load-bearing for `render_report()`, not just a naming
-convention** — `reportifyr::make_doc_dirs()` derives output paths by
+convention.** `reportifyr::make_doc_dirs()` derives output paths by
 substring-replacing "shell" in the *rendered docx's containing
 directory*. A project's `_quarto.yml` must set
 `project: {output-dir: report/shell}` for this to work. Projects calling
@@ -171,27 +171,27 @@ the three pieces directly (`quarto render` / `apply-layout` /
 
 **Percentage-width tables, not fixed twips**: every table
 `_extensions/quartifyr/*.lua` generates uses `w:type="pct"` so it spans
-the current usable text width — changing `page.margins_in` in a style
+the current usable text width, so changing `page.margins_in` in a style
 YAML doesn't leave tables overflowing or falling short.
 
 **`apply-layout`'s header/footer/page-restart requires editing docx
-package parts directly** (a genuinely independent second header/footer
+package parts directly** (an independent second header/footer
 means adding new OOXML *parts*, which a Lua filter's `RawBlock`
-injection can't do) — that's why it's a separate post-render Python step
+injection can't do); that's why it's a separate post-render Python step
 (`styling/quartifyr_styling/layout.py`) rather than part of the Quarto
 filter chain. `header-format:`/`confidentiality:`/`{{< body-start >}}`
 in a `.qmd` are all inert without running it.
 
 **Word field recalculation (`quartifyr-styling recalculate-fields`,
-headless LibreOffice) is experimental and known-flaky** — real-world runs
+headless LibreOffice) is experimental and known-flaky.** Real-world runs
 against the same document have produced three different outcomes (hangs,
-silent no-op, or genuine success), reproduced both sandboxed and in a
+silent no-op, or success), reproduced both sandboxed and in a
 plain macOS terminal. Off by default (`render_report(..., recalculate_fields = FALSE)`).
 Don't treat a clean exit as proof it worked; see `r/README.md`'s "Word
 field recalculation" section before changing this code path.
 
 **`templates/org-reference.docx` is committed, not just a build
-artifact** — every other `templates/*.docx` is gitignored ("regenerate
+artifact.** Every other `templates/*.docx` is gitignored ("regenerate
 with `quartifyr-styling build`"), but this specific file is the one
 `--out` path this repo's own docs/CI/`render_report()` default point at,
 committed on purpose so the two bundled examples (and `scripts/
@@ -199,13 +199,13 @@ quarto_only_smoke_test.py`'s Quarto-only render path) work straight out
 of a clone without needing the `styling/` Python venv set up first.
 `quartifyr-styling build`'s docx output isn't byte-reproducible across
 runs (zipfile embeds a per-run timestamp in each entry), so `scripts/
-check_template_freshness.py` compares unzipped content, not raw bytes —
+check_template_freshness.py` compares unzipped content, not raw bytes;
 run with `--check` (as both examples' `smoke_test.py` already do) to
 catch drift from `styling/styles/default.yaml`, same pattern as `scripts/
 sync_demo_extension.py` for the Lua extension copies.
 
-**YAML lists, not maps, for `synopsis:`/`title-page-extra:`/`address:`**
-— deliberate: pandoc's Lua metadata tables don't preserve map key order
+**YAML lists, not maps, for `synopsis:`/`title-page-extra:`/`address:`.**
+Deliberate: pandoc's Lua metadata tables don't preserve map key order
 (confirmed by testing), so these are lists specifically to keep row/line
 order reliable across renders. Don't "simplify" one of these into a
 plain map.
@@ -219,11 +219,11 @@ internals beyond the `{rpfy}:` magic-string contract and the
 its own `report/draft/`/`report/final/` directories and
 `finalize_document()`; quartifyr's `document-status` frontmatter is set
 independently at render time and the orchestration driver, not any
-automatic sync, is what keeps the two aligned — see
+automatic sync, is what keeps the two aligned; see
 `_extensions/quartifyr/README.md`'s "Title page" section).
 
 When changing `_extensions/quartifyr/*.lua`, verify against the demo
 (`python3 examples/demo-report/smoke_test.py`) and re-sync the demo's
-physical extension copy (`python3 scripts/sync_demo_extension.py`) —
+physical extension copy (`python3 scripts/sync_demo_extension.py`);
 there's no Lua unit test suite, so the smoke test is the only real
 correctness signal for filter changes.

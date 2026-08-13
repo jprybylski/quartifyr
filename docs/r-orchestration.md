@@ -12,7 +12,7 @@ render → `reportifyr` fill) in one call, plus a thin CLI (`render.R`)
 around it. `reportifyr` and `pyro` are pulled straight from GitHub since
 neither has a CRAN release.
 
-This is a convenience wrapper, not a requirement — it chains `quarto
+This is a convenience wrapper, not a requirement: it chains `quarto
 render`, `quartifyr-styling apply-layout`, and
 `reportifyr::build_report()` together and adopts a specific
 `report/shell`/`report/draft`/`report/final` directory convention. See
@@ -54,7 +54,7 @@ Rscript render.R /path/to/project/report.qmd --final
 project's `_quarto.yml` must set `project: {output-dir: report/shell}`,
 since `reportifyr::make_doc_dirs()` derives `report/draft/` and
 `report/final/` output paths by substring-replacing "shell" in the
-*rendered docx's* containing directory — not the qmd's — so this is
+*rendered docx's* containing directory, not the qmd's, so this is
 load-bearing, not just a naming convention.
 
 ## What `render_report()` actually does
@@ -80,7 +80,7 @@ subcommands does on its own.
 
 `reportifyr`/`pyro` locate their Python venv and project config by
 walking **up from R's current working directory** looking for a
-`.*_init.json` marker — they ignore path arguments for this.
+`.*_init.json` marker; they ignore path arguments for this.
 `render_report()` derives the actual project root from `shell_qmd` and
 wraps every `reportifyr::` call in `withr::with_dir(project_dir, ...)`,
 so it's safe to call from an R session rooted anywhere. Calling
@@ -94,10 +94,10 @@ be.
 
 Quarto/pandoc docx output contains native Word field codes (`TOC`,
 `SEQ`, `REF`) that don't self-populate. For anyone opening the delivered
-docx in real Microsoft Word, this is already handled for free — the
+docx in real Microsoft Word, this is already handled for free: the
 reference-doc sets `<w:updateFields w:val="true"/>`, which tells Word to
 recalculate every field automatically on open. This doesn't help a
-headless pipeline or LibreOffice running non-interactively — see
+headless pipeline or LibreOffice running non-interactively; see
 [Styling](styling.html#recalculate-fields--headless-tocfield-recalculation)
 for the experimental step that covers that case, and its known
 reliability caveat.

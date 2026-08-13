@@ -107,7 +107,7 @@ function M.field_table(rows)
     table.insert(row_xml, M.table_row(r.label, r.value))
   end
   -- "TableNormal" (display name "Normal Table"), not "TableGrid" --
-  -- genuinely borderless (confirmed: no tblBorders/shading in its style
+  -- actually borderless (confirmed: no tblBorders/shading in its style
   -- definition at all), unlike synopsis/signature tables which keep
   -- visible borders on purpose. tblLook firstRow="0" additionally
   -- prevents Word's default bold/shaded first-row treatment (omitting
@@ -151,7 +151,7 @@ end
 -- front-matter content between its cover and `{{< body-start >}}`
 -- (no ToC/synopsis/etc.), so giving the cover its own section here would
 -- immediately butt up against body-start's own section break with
--- nothing in between -- confirmed in practice to render as a genuinely
+-- nothing in between -- confirmed in practice to render as a fully
 -- blank page in Word/LibreOffice (an OOXML section boundary forces a
 -- page start on its own, and two of them back-to-back with zero content
 -- between them each claim a page). Leaving this bookmark out entirely
@@ -171,7 +171,7 @@ function M.front_matter_start_bookmark()
 end
 
 -- Wraps an accumulated OOXML string as a single raw block, for mixing
--- into a list alongside genuine pandoc blocks (e.g. a logo image).
+-- into a list alongside real pandoc blocks (e.g. a logo image).
 function M.raw_block(ooxml)
   return pandoc.RawBlock("openxml", ooxml)
 end
@@ -179,7 +179,7 @@ end
 -- A real pandoc.Image, not raw OOXML: embedding an image (the relationship
 -- linking to the actual media file) is package-level plumbing a Lua
 -- filter's RawBlock injection can't do -- only pandoc's own writer can,
--- which means the image has to travel through the pandoc AST as a genuine
+-- which means the image has to travel through the pandoc AST as an actual
 -- Image element, not a string of hand-written XML like everything else
 -- these helpers emit. Centering it took a real investigation: neither a
 -- `.center`-classed Div nor a `fig-align="center"` image attribute

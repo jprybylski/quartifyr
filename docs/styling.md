@@ -18,7 +18,7 @@ source .venv/bin/activate
 uv pip install -e "./styling[dev]"
 ```
 
-## `build` — style YAML → reference-doc
+## `build`: style YAML → reference-doc
 
 ```bash
 quartifyr-styling build \
@@ -30,12 +30,12 @@ quartifyr-styling build \
 
 Add `--override styling/styles/<org>.yaml` with just the keys that
 differ from the default preset (fonts, colors, page setup, ...) to brand
-a new organization — see `styling/styles/default.yaml` for the full
+a new organization; see `styling/styles/default.yaml` for the full
 schema and `styling/quartifyr_styling/schema.py` for validation rules
 (hex colors, positive sizes, valid page sizes, ...).
 
-`--style`/`--override`/`--out` are plain file paths, not fixed locations
-— `styling/styles/*.yaml` and `templates/org-reference.docx` are just
+`--style`/`--override`/`--out` are plain file paths, not fixed locations;
+`styling/styles/*.yaml` and `templates/org-reference.docx` are just
 this repo's own convention. An org can keep its style YAML anywhere, and
 most project authors never need to run `build` at all: reuse an
 already-built `.docx`, distributed however your org already shares
@@ -44,10 +44,10 @@ binary artifacts.
 The generated reference-doc also sets `<w:updateFields w:val="true"/>`
 in `word/settings.xml`, so real Word automatically recalculates every
 field (ToC, `SEQ`, `REF`, `PAGE`, ...) the moment a delivered document is
-opened — no manual "select all, F9", no LibreOffice involved for that
+opened; no manual "select all, F9", no LibreOffice involved for that
 case.
 
-## `abbrevs` — footnotes YAML → abbreviations bridge
+## `abbrevs`: footnotes YAML → abbreviations bridge
 
 ```bash
 quartifyr-styling abbrevs \
@@ -59,7 +59,7 @@ Converts a project's `standard_footnotes.yaml` (`reportifyr`'s own
 format) into the `abbreviations.tex` that `quarto-plus` reads to render
 a "only abbreviations actually used via `\gls{}`" list.
 
-## `apply-layout` — header/footer + page-number split
+## `apply-layout`: header/footer + page-number split
 
 ```bash
 quartifyr-styling apply-layout \
@@ -74,16 +74,16 @@ the footer's left zone, and, if the `.qmd` uses `{% raw %}{{< body-start >}}{% e
 splits the rendered docx into title-page/front-matter/body OOXML
 sections so the whole front matter numbers in lowercase roman (starting
 at "i") and the body restarts at arabic "1". A `.qmd` with neither
-`header-format:` nor `{% raw %}{{< body-start >}}{% endraw %}` is left untouched — both are
+`header-format:` nor `{% raw %}{{< body-start >}}{% endraw %}` is left untouched; both are
 opt-in.
 
-Also reads `crossref-hyperlinks:` (default `true`) — `false` strips the
+Also reads `crossref-hyperlinks:` (default `true`); `false` strips the
 `\h` hyperlink switch from every figure/table/appendix cross-reference's
 `REF` field, document-wide. `"same-page"` can't be resolved here (no
-real pagination exists yet on the pass-1 shell) — it just marks each
+real pagination exists yet on the pass-1 shell); it just marks each
 crossref for the next command.
 
-## `resolve-same-page-crossrefs` — post-fill crossref resolution
+## `resolve-same-page-crossrefs`: post-fill crossref resolution
 
 ```bash
 quartifyr-styling resolve-same-page-crossrefs \
@@ -92,35 +92,35 @@ quartifyr-styling resolve-same-page-crossrefs \
 
 Resolves the markers `apply-layout`'s `crossref-hyperlinks: "same-page"`
 left behind, now that `reportifyr`'s pass 2 has filled in real content
-and pagination means something — run on the *filled* draft/final docx,
+and pagination means something; run on the *filled* draft/final docx,
 not the shell. A no-op (skips LibreOffice entirely) if the document has
 no same-page markers. Read-only with respect to LibreOffice: it drives a
 headless-LibreOffice macro only to read page numbers, never to re-save
 the docx.
 
-**Experimental** — inherits the same intermittent-hang behavior
+**Experimental.** Inherits the same intermittent-hang behavior
 documented for `recalculate-fields` below. Off by default in
 `render_report()`.
 
-## `recalculate-fields` — headless ToC/field recalculation
+## `recalculate-fields`: headless ToC/field recalculation
 
 ```bash
 quartifyr-styling recalculate-fields --docx path/to/report-final.docx
 ```
 
 Drives headless LibreOffice to recalculate a docx's Word ToC (page
-numbers, entries) in place — for non-interactive pipelines that never
+numbers, entries) in place; for non-interactive pipelines that never
 open the file in an application at all. Real Word already recalculates
 fields automatically on open (via the reference-doc's own
 `updateFields` setting above), so this is only needed for headless
 consumers.
 
-**Experimental and known-flaky** — real-world runs against the same
+**Experimental and known-flaky.** Real-world runs against the same
 document have produced three different outcomes: it hangs, it exits
-cleanly as a silent no-op, or it genuinely succeeds. Reproduced both
+cleanly as a silent no-op, or it actually succeeds. Reproduced both
 sandboxed and in a plain native terminal, ruling out sandboxing as the
 cause. Off by default (`render_report(..., recalculate_fields = FALSE)`).
-When it does fail, it only produces a warning, not a render failure —
+When it does fail, it only produces a warning, not a render failure;
 the document is still fully usable, just needs a manual "select all,
 F9" in Word.
 

@@ -8,7 +8,7 @@
 `repos` option and `renv.lock`'s `Repositories`) since neither has a
 CRAN release.
 
-This is a convenience wrapper, not a requirement — it chains `quarto
+This is a convenience wrapper, not a requirement: it chains `quarto
 render`, `quartifyr-styling apply-layout`, and `reportifyr::build_report()`
 together and adopts a specific `report/shell`/`report/draft`/`report/final`
 directory convention. If you already have your own Quarto and
@@ -193,7 +193,7 @@ w:val="true"/>` in `word/settings.xml`, which tells Word to recalculate
 every field automatically the moment the file is opened -- confirmed to
 survive Quarto's reference-doc handling, `apply-layout`, and `reportifyr`
 into the actual delivered docx (`examples/demo-report/smoke_test.py`
-asserts on this). This is a genuine Word feature, not something quartifyr
+asserts on this). This is an ordinary Word feature, not something quartifyr
 invented, and has none of the reliability caveats below -- it's a document
 setting Word itself honors, not an external process. It doesn't help
 anyone opening the file in a *headless* pipeline (e.g. this project's own
@@ -214,14 +214,14 @@ against the same document have shown three distinct outcomes -- it hangs
 indefinitely, it exits cleanly within seconds without the macro having
 actually run (file untouched), or it works correctly end-to-end. This has
 been reproduced both in a sandboxed environment and a plain native macOS
-terminal (ruling out sandboxing as the cause), so it looks like a genuine
+terminal (ruling out sandboxing as the cause), so it looks like a real
 LibreOffice/macOS interaction bug outside quartifyr's control, not
 something fixable from here. The module now defends against the two
 failure modes it *can* control: the whole `soffice` process group gets
 killed on timeout (not just the tracked PID, which could otherwise leave
 an orphaned worker process running indefinitely), and it verifies the ToC
 placeholder actually disappeared rather than trusting a clean exit code --
-so a run either genuinely succeeds or fails loudly, never silently
+so a run either actually succeeds or fails loudly, never silently
 no-ops. Turn it on (`render_report(..., recalculate_fields = TRUE)`) only
 after you've confirmed it's reliable enough for your own use, and expect
 to sometimes need a manual re-run. When it does fail, it only produces a
