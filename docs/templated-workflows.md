@@ -4,7 +4,7 @@ title: Templated Workflows
 nav_order: 8
 ---
 
-# Templated workflows: scaffolding new projects with spackle
+# Templated workflows: scaffolding projects with spackle and scaffold
 
 Standing up a new quartifyr project ([the repo README's "Standing up a
 new project" walks through this by hand](https://github.com/jprybylski/quartifyr#standing-up-a-new-project))
@@ -120,3 +120,60 @@ project](https://github.com/jprybylski/quartifyr#standing-up-a-new-project)
 (installing the extensions, running
 `reportifyr::initialize_report_project()`) against the filled-in
 directory.
+
+## A different shape of repetition: scaffolding *inside* an existing project
+
+spackle above fills a whole new project directory once, from nothing.
+[hay-kot/scaffold](https://github.com/hay-kot/scaffold) covers a
+complementary case: a pattern that recurs *inside* a project you already
+have, any number of times, as the project grows. It keeps a `.scaffolds/`
+directory of named generators (each a `scaffold.yaml` plus Go-templated
+files) checked into the project itself, and `scaffold new <name>` prompts
+for that generator's values and writes the result, same as spackle but
+scoped to one recurring pattern rather than a whole project tree.
+
+[Standing up a new org](https://github.com/jprybylski/quartifyr#standing-up-a-new-org)
+is that shape of task: copy `styling/styles/default.yaml` to
+`styling/styles/<org>.yaml`, edit it, then run `quartifyr-styling build`
+with `--override`/`--out` pointed at both new paths. It's the same three
+steps by hand every time a new org needs a look, unlike "stand up a
+project," which happens once per project.
+
+A `.scaffolds/org-style/scaffold.yaml` sketch, using scaffold's
+[template scaffold](https://hay-kot.github.io/scaffold/introduction/terminology.html)
+mode (`rewrites` sends a file under the scaffold's own `templates/` into
+a path inside the *existing* project, rather than a whole new directory):
+
+```yaml
+messages:
+  pre: |
+    Adding a new org style override under styling/styles/.
+  post: |
+    Now build the reference-doc:
+      quartifyr-styling build --style styling/styles/default.yaml \
+        --override styling/styles/{{ .Scaffold.org_slug }}.yaml \
+        --out templates/{{ .Scaffold.org_slug }}-reference.docx
+
+questions:
+  - name: "org_slug"
+    prompt:
+      message: "Org slug (e.g. acme-pharma)"
+
+rewrites:
+  - from: templates/org-style.yaml
+    to: styling/styles/{{ .Scaffold.org_slug }}.yaml
+```
+
+with `templates/org-style.yaml` seeded from `default.yaml`'s own fields
+(fonts, colors, page setup, `table.header_bold`, ...), left at their
+defaults as a starting point for the new org to edit.
+
+### Why the two pair well together
+
+- spackle answers "zero to a new project directory": org name, project
+  code, report number, filled in once per project.
+- scaffold answers "this checkout needs another instance of a pattern it
+  already has": another org style, another `examples/` entry, repeated
+  as often as the project grows.
+- Both are optional, external suggestions, same as the rest of this
+  page: nothing here is bundled with or maintained by quartifyr.
