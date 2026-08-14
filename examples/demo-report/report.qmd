@@ -217,3 +217,39 @@ concentration-time data; no model-based estimation (e.g. the nonlinear
 mixed-effects approach in [@pinheiro1995]) was performed for this
 demonstration report. See {{< appendix_crossref "StatisticalMethods" >}}
 for the complete methodology.
+
+{{< pagebreak >}}
+
+{{< appendix "AnalysisCode" "Analysis Code" >}}
+
+<!-- Quarto's own native `{{< include >}}` shortcode, nested inside a
+     fenced code block, is how Quarto embeds a source file's real content
+     with syntax highlighting -- not a quartifyr shortcode. (A bare `file=`
+     attribute on the fence looks plausible but does nothing here: tested
+     directly against this project's Quarto version and it renders an
+     empty code block, no error.) pandoc's docx writer highlights the
+     included source the same way it would a manually-typed fenced code
+     block, so this stays in sync with scripts/01_analysis.R automatically
+     -- nothing here needs updating if that script changes. Path is
+     relative to this .qmd. -->
+The complete R script used to produce this report's tables and figure
+({{< appendix_crossref "StatisticalMethods" >}} above) is reproduced
+below for reference.
+
+```{.r}
+{{< include scripts/01_analysis.R >}}
+```
+
+<!-- Deliberate trailing sentence, not decorative: pandoc's docx writer
+     puts an entire fenced code block in one giant paragraph (line breaks
+     are `<w:br/>` runs, not separate `<w:p>` elements), and this script
+     literally contains its own output filenames (e.g. "conc-time.png")
+     as R code -- reportifyr's alt-text magic-string scan matches on that
+     substring text, not just real `{rpfy}:` prefixes, and crashes
+     (`XPathEvalError: Undefined namespace prefix`) if the match is the
+     very last paragraph before the closing bookmarkEnd/sectPr, the same
+     "trailing magic string" failure mode as ending a section on a real
+     `{rpfy}:` line -- see the repo's reportifyr-integration-gotchas
+     notes. End every appendix that embeds source code with a real
+     sentence after the code block for this reason. -->
+End of script.

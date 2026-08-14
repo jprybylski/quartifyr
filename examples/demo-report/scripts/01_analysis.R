@@ -45,8 +45,8 @@ write_csv_with_metadata(
 )
 
 # A second table, complementing pk_summary above to show reportifyr's two
-# ways of filling a {rpfy}: table magic string: a plain data frame (.csv,
-# above) vs. a pre-built `flextable` object (.rds, here). This matters
+# ways of filling an rpfy-prefixed table magic string: a plain data frame
+# (.csv, above) vs. a pre-built `flextable` object (.rds, here). This matters
 # because reportifyr::add_tables() (process_table_file(), R/add_tables.R)
 # only runs its own formatting -- format_flextable(), which hardcodes
 # Arial Narrow 10pt borders/spacing regardless of the reference-doc's
@@ -109,7 +109,7 @@ ggsave_with_metadata(
 
 # reportifyr's own add_figure_footnotes() dedupes footnotes by filename
 # document-wide (a bookmark-name xpath check, unconditional -- no
-# config.yaml knob controls it): the *first* `{rpfy}:` occurrence of a
+# config.yaml knob controls it): the *first* rpfy-prefixed occurrence of a
 # given filename gets the metadata footnote and every later occurrence of
 # that same filename is silently skipped. The synopsis intentionally
 # embeds the same plot as a preview ahead of the numbered Figure 1 in the

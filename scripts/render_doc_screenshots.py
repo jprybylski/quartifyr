@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Regenerate man/figures/*.png from the two examples' final rendered docx.
+"""Regenerate man/figures/*.png (and refresh the docs site's downloadable
+docx copies) from the two examples' final rendered docx.
 
 Run after re-rendering examples/demo-report and examples/memo-example (via
 `Rscript render.R --final` in each), whenever their visible content changes,
-so the docs site's screenshots don't drift from what the tool actually
-produces. Requires `soffice` (headless LibreOffice, for docx -> pdf) and
-`uv` (to run PyMuPDF without adding it to any project's own dependencies):
+so the docs site's screenshots and downloads don't drift from what the tool
+actually produces. Requires `soffice` (headless LibreOffice, for docx -> pdf)
+and `uv` (to run PyMuPDF without adding it to any project's own
+dependencies):
 
     cd examples/demo-report && Rscript render.R --final && cd ../..
     cd examples/memo-example && Rscript render.R --final && cd ../..
@@ -27,8 +29,21 @@ JOBS = [
     ("examples/demo-report/report/final/report-final.docx", 2, "demo-report-synopsis.png"),
     ("examples/demo-report/report/final/report-final.docx", 8, "demo-report-body.png"),
     ("examples/demo-report/report/final/report-final.docx", 12, "demo-report-appendix.png"),
+    ("examples/demo-report/report/final/report-final.docx", 13, "demo-report-analysis-code.png"),
     ("examples/memo-example/report/final/report-final.docx", 0, "memo-example-cover.png"),
     ("examples/memo-example/report/final/report-final.docx", 1, "memo-example-body.png"),
+]
+
+# (source docx, output filename) -- committed copies of the two examples'
+# real final output, downloadable straight from the docs site (issue #18)
+# rather than only viewable as screenshots. man/figures/ is pkgdown's/
+# GitHub's standard convention for vignette/README-referenced assets and
+# it copies the whole directory verbatim, so a non-image file works the
+# same way the PNGs above already do -- see vignettes/articles/
+# examples.Rmd's "Download the rendered ... .docx" links.
+DOCX_DOWNLOADS = [
+    ("examples/demo-report/report/final/report-final.docx", "demo-report-final.docx"),
+    ("examples/memo-example/report/final/report-final.docx", "memo-example-final.docx"),
 ]
 
 
@@ -74,6 +89,15 @@ def main() -> None:
             [(str(pdfs[docx_rel]), page_idx, str(IMG_DIR / out_name)) for docx_rel, page_idx, out_name in JOBS]
         )
         subprocess.run(["uv", "run", "--with", "pymupdf", "python3", str(script), jobs_arg], check=True)
+
+    for docx_rel, out_name in DOCX_DOWNLOADS:
+        docx = REPO_ROOT / docx_rel
+        if not docx.exists():
+            print(f"missing {docx} -- render it first (see module docstring)", file=sys.stderr)
+            sys.exit(1)
+        dest = IMG_DIR / out_name
+        shutil.copy(docx, dest)
+        print(f"wrote {dest}")
 
 
 if __name__ == "__main__":

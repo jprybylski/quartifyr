@@ -6,8 +6,10 @@ R's built-in `Theoph` dataset, exercising every piece of the toolkit --
 dynamic title page, draft/final status stamp, contributor/approver
 signature pages, table of contents (including the title page), list of
 figures, list of tables, only-used abbreviations, a citeproc-driven
-bibliography (populated before the appendices), a numbered appendix, and
-a real `reportifyr` fill pass.
+bibliography (populated before the appendices), two numbered appendices
+(the second embedding the analysis script itself, syntax-highlighted,
+via Quarto's own native `{{< include >}}` shortcode), and a real
+`reportifyr` fill pass.
 
 ## Layout
 
