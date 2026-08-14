@@ -14,3 +14,5 @@ quartifyr = [
     "pyyaml",
 ]
 
+[tool.uv]
+default-groups = "all"
