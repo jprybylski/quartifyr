@@ -9,3 +9,10 @@ reportifyr = [
     "pyyaml==6.0.2",
     "pillow==11.1.0",
 ]
+quartifyr = [
+    "python-docx",
+    "pyyaml",
+]
+
+[tool.uv]
+default-groups = "all"

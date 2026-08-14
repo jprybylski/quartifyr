@@ -1,0 +1,75 @@
+# Standard R CMD check, adapted from https://github.com/r-lib/actions/tree/v2/examples
+# (see ../xpose.xtras's own R-CMD-check.yaml for the sibling-project version this
+# was modeled on). This checks the package itself (structure, documentation,
+# NAMESPACE, examples, tests/testthat) -- it does NOT replace ci.yml's
+# full-pipeline job, which is what actually proves render_report() produces
+# correct output end to end; see this repo's CLAUDE.md.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+name: R-CMD-check.yaml
+
+permissions: read-all
+
+jobs:
+  R-CMD-check:
+    runs-on: ${{ matrix.config.os }}
+
+    name: ${{ matrix.config.os }} (${{ matrix.config.r }})
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {os: macos-latest,   r: 'release'}
+          - {os: windows-latest, r: 'release'}
+          - {os: ubuntu-latest,   r: 'devel', http-user-agent: 'release'}
+          - {os: ubuntu-latest,   r: 'release'}
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: ${{ matrix.config.r }}
+          http-user-agent: ${{ matrix.config.http-user-agent }}
+          use-public-rspm: true
+
+      # Runtime/build libraries reportifyr/pyro's own transitive dependencies
+      # need against Ubuntu's binary R packages -- same as ci.yml's
+      # full-pipeline job, pages.yml, and release.yaml.
+      - name: Install R package system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libuv1-dev libgit2-dev libcurl4-openssl-dev libssl-dev libxml2-dev
+
+      - name: Add Additional_repositories from DESCRIPTION (pyro/reportifyr via a2-ai.r-universe.dev)
+        run: |
+          raw <- read.dcf("DESCRIPTION", fields = "Additional_repositories")[1, 1]
+          if (!is.na(raw) && nzchar(raw)) {
+            repos <- trimws(strsplit(raw, ",")[[1]])
+            cat(sprintf("options(repos = c(getOption('repos'), %s))\n", deparse(repos)),
+                file = path.expand("~/.Rprofile"), append = TRUE)
+          }
+        shell: Rscript {0}
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+          upload-snapshots: true
+          build_args: 'c("--no-manual","--compact-vignettes=gs+qpdf")'
+          args: 'c("--no-manual", "--as-cran")'

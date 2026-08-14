@@ -1,0 +1,71 @@
+url: https://jprybylski.github.io/quartifyr/
+
+title: quartifyr
+
+template:
+  bootstrap: 5
+  bslib:
+    primary: "#0054AD"
+
+home:
+  title: quartifyr
+  description: >-
+    A code-first system for generating standardized scientific/regulated
+    documents with Quarto.
+
+navbar:
+  structure:
+    left: [intro, reference, articles, news]
+    right: [search, github]
+  components:
+    intro:
+      text: Get started
+      href: articles/installation.html
+    articles:
+      text: Articles
+      menu:
+        - text: "Architecture: two passes"
+          href: articles/architecture.html
+        - text: Quarto extension
+          href: articles/quarto-extension.html
+        - text: Styling (Python engine)
+          href: articles/styling.html
+        - text: The R package
+          href: articles/r-package.html
+        - text: Examples
+          href: articles/examples.html
+        - text: Templated workflows
+          href: articles/templated-workflows.html
+        - text: GitHub Action
+          href: articles/github-action.html
+
+reference:
+  - title: Render a report
+    desc: The main pass-1 + pass-2 orchestration driver.
+    contents:
+      - render_report
+  - title: Project setup
+    desc: One-time-per-project setup, alongside `reportifyr::initialize_report_project()`.
+    contents:
+      - initialize_quartifyr_project
+      - install_quartifyr_extension
+  - title: Styling engine (pyro bridge)
+    desc: >-
+      Thin R wrappers around the bundled Python engine
+      (`inst/python/quartifyr_styling`), each also available standalone
+      as a `quartifyr-styling` CLI subcommand.
+    contents:
+      - starts_with("styling_")
+
+articles:
+  - title: Articles
+    navbar: ~
+    contents:
+      - articles/installation
+      - articles/architecture
+      - articles/quarto-extension
+      - articles/styling
+      - articles/r-package
+      - articles/examples
+      - articles/templated-workflows
+      - articles/github-action

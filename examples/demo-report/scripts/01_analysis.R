@@ -55,7 +55,7 @@ write_csv_with_metadata(
 # inserted completely as-is, untouched. So pk_summary above (a plain data
 # frame) always renders in reportifyr's hardcoded Arial Narrow 10pt no
 # matter what this doc's reference-doc sets fonts.body to (Times New
-# Roman here, per styling/styles/default.yaml -- see report/config.yaml's
+# Roman here, per inst/python/styles/default.yaml -- see report/config.yaml's
 # footnotes_font comment for the same clash affecting table *footnotes*,
 # fixed there but not fixable for a plain data frame's own table body).
 # Building a flextable by hand, styled to match those same values, is the

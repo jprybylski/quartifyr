@@ -1,7 +1,7 @@
 #!/bin/sh
 # Reminder, not an enforcer: warns when a commit touches a file whose
-# visible CLI output feeds one of docs/assets/img/*.gif, but the commit
-# doesn't also touch that GIF (or its docs/assets/tapes/*.tape recipe).
+# visible CLI output feeds one of man/figures/*.gif, but the commit
+# doesn't also touch that GIF (or its dev/tapes/*.tape recipe).
 # Skip with SKIP_DOCS_ASSET_CHECK=1 or `git commit --no-verify` for
 # changes that don't actually alter what's on screen (e.g. a comment or
 # a refactor with identical printed output) -- this can't tell the
@@ -19,7 +19,7 @@ fi
 staged=$(git diff --cached --name-only --diff-filter=ACMR)
 [ -z "$staged" ] && exit 0
 
-assets_touched=$(printf '%s\n' "$staged" | grep -c '^docs/assets/\(img\|tapes\)/')
+assets_touched=$(printf '%s\n' "$staged" | grep -cE '^(man/figures|dev/tapes)/')
 found=0
 
 check_tape() {
@@ -34,14 +34,14 @@ check_tape() {
   fi
 }
 
-check_tape docs/assets/tapes/render-pipeline.tape docs/assets/img/render-pipeline.gif \
-  '^(r/(render\.R|R/render_report\.R|DESCRIPTION|renv\.lock)|examples/demo-report/(render\.R|DESCRIPTION|renv\.lock|report\.qmd|report/(standard_footnotes|config)\.yaml))$'
+check_tape dev/tapes/render-pipeline.tape man/figures/render-pipeline.gif \
+  '^(R/render-report\.R|DESCRIPTION|examples/demo-report/(render\.R|DESCRIPTION|renv\.lock|report\.qmd|report/(standard_footnotes|config)\.yaml))$'
 
-check_tape docs/assets/tapes/quarto-only.tape docs/assets/img/quarto-only.gif \
-  '^(examples/demo-report/report\.qmd|templates/org-reference\.docx|_extensions/quartifyr/)'
+check_tape dev/tapes/quarto-only.tape man/figures/quarto-only.gif \
+  '^(examples/demo-report/report\.qmd|inst/templates/org-reference\.docx|inst/extensions/quartifyr/)'
 
-check_tape docs/assets/tapes/styling-build.tape docs/assets/img/styling-build.gif \
-  '^styling/(styles/default\.yaml|quartifyr_styling/(build_template|schema)\.py)$'
+check_tape dev/tapes/styling-build.tape man/figures/styling-build.gif \
+  '^inst/python/(styles/default\.yaml|quartifyr_styling/(build_template|schema)\.py)$'
 
 if [ "$found" = "1" ]; then
   echo "" >&2

@@ -12,8 +12,24 @@ below).
 
 ## Install
 
-quartifyr's shell-generation piece (`_extensions/quartifyr/`) is a
-regular Quarto extension, installed the standard way:
+quartifyr is an installable R package:
+
+```r
+pak::pkg_install("local::/path/to/quartifyr")   # or remotes::install_local()
+```
+
+`quartifyr::render_report()` is the orchestration driver: it chains a
+`quarto render` against a docx `reference-doc` it can build for you
+(`quartifyr::styling_build_reference_docx()`, a thin `pyro`-bridged
+wrapper around a bundled Python engine -- see
+[Components](#components)) with a fill tool (`reportifyr` today) in one
+call.
+
+The shell-generation piece is also a regular Quarto extension bundled
+inside the package (`inst/extensions/quartifyr/`) -- install it into a
+project with `quartifyr::install_quartifyr_extension()`, or the standard
+Quarto way if you'd rather not depend on the R package for this piece
+alone:
 
 ```bash
 quarto add jprybylski/quartifyr
@@ -23,10 +39,7 @@ That's the title page, signature pages, synopsis, numbered appendices,
 and page header/footer, composed with
 [A2-ai's `quarto-plus`](https://github.com/A2-ai/quarto-plus) for ToC/
 list of figures/list of tables/abbreviations rather than duplicating
-them. The rest of this repo, `styling/` (turns a style YAML into a docx
-`reference-doc`) and `r/` (the orchestration driver that runs Quarto then
-hands off to a fill tool), is the surrounding toolkit that pairs with
-it; see [Components](#components) below.
+them.
 
 ## Why
 
@@ -54,7 +67,7 @@ Word template someone hand-builds from scratch.
 ```mermaid
 flowchart LR
     subgraph Pass1["Pass 1: Quarto"]
-        yaml["style YAML\n(styling/styles/*.yaml)"] --> refdoc["org-reference.docx\n(quartifyr-styling build)"]
+        yaml["style YAML\n(inst/python/styles/*.yaml)"] --> refdoc["org-reference.docx\n(styling_build_reference_docx())"]
         qmd["shell .qmd\n(title/signature/appendix\nfrontmatter + {rpfy}: placeholders)"]
         refdoc --> render["quarto render"]
         qmd --> render
@@ -84,9 +97,9 @@ flowchart LR
 These two passes are independent tools, not a monolith. `reportifyr`
 doesn't know or care that a shell's `{rpfy}:` magic strings came from a
 quartifyr render rather than a hand-built one; `quarto render` doesn't
-know or care what happens to its docx afterward. `r/`'s `render_report()`
-(see [`r/README.md`](r/README.md)) is one convenience wrapper that chains
-both passes together and adopts a specific `report/shell` →
+know or care what happens to its docx afterward. `quartifyr::
+render_report()` is one convenience wrapper that chains both passes
+together and adopts a specific `report/shell` →
 `report/draft`/`report/final` directory convention (via
 `reportifyr::make_doc_dirs()`); it's optional. See
 [Using the pieces directly](#using-the-pieces-directly) below for the
@@ -94,12 +107,12 @@ three plain tool calls underneath it.
 
 ## Using the pieces directly
 
-You don't need this repo's `r/` orchestration driver, its `renv`-managed R
-environment, or its `report/shell`/`report/draft`/`report/final`
-directory convention to use quartifyr; that's all just what
-`render_report()` happens to do. If you already have your own Quarto
-project and your own `reportifyr` project set up, the underlying
-mechanics are three ordinary, independent tool calls:
+You don't need the `quartifyr` R package's orchestration driver or its
+`report/shell`/`report/draft`/`report/final` directory convention to use
+quartifyr; that's all just what `render_report()` happens to do. If you
+already have your own Quarto project and your own `reportifyr` project
+set up, the underlying mechanics are three ordinary, independent tool
+calls:
 
 ```bash
 # 1. Render the shell -- ordinary `quarto render`; quartifyr is just a
@@ -113,9 +126,12 @@ quarto render report.qmd --to docx --reference-doc org-reference.docx \
 #    the reference-doc itself was built with (by default: a continuous
 #    page number, no restart) -- but header-format:/confidentiality:/
 #    crossref-hyperlinks:/{{< body-start >}} in the .qmd have no effect
-#    without this step; see _extensions/quartifyr/README.md's "Page
+#    without this step; see inst/extensions/quartifyr/README.md's "Page
 #    header/footer and page numbering" and "Figures, tables, and
 #    cross-references" sections for exactly what each piece needs.
+#    quartifyr-styling is the standalone CLI (uv tool install / pip
+#    install the quartifyr-styling package); from R, use
+#    quartifyr::styling_apply_layout() instead -- same underlying engine.
 quartifyr-styling apply-layout --docx report.docx --qmd report.qmd --status draft
 ```
 
@@ -147,39 +163,40 @@ convenient for a project starting from scratch (and for
 convenience, not a requirement.
 
 If `crossref-hyperlinks: "same-page"` is set, one more optional step goes
-after step 3, on the *filled* docx: `quartifyr-styling
-resolve-same-page-crossrefs --docx report-filled.docx`; see
-`styling/README.md` and `r/README.md`'s "Same-page cross-reference
-resolution" section.
+after step 3, on the *filled* docx: `quartifyr::
+styling_resolve_same_page_crossrefs("report-filled.docx")` (or the CLI
+equivalent, `quartifyr-styling resolve-same-page-crossrefs`); see
+[`inst/python/README.md`](inst/python/README.md) for the underlying
+Python engine.
 
 ## Components
 
 | Path | What it is |
 | --- | --- |
-| [`styling/`](styling/README.md) | Python package: turns a style YAML (fonts, colors, page setup) into a docx `reference-doc`; the `standard_footnotes.yaml` → `abbreviations.tex` bridge; headless Word field recalculation via LibreOffice (experimental). `uv`-managed venv. |
-| [`_extensions/quartifyr/`](_extensions/quartifyr/README.md) | Quarto extension: dynamic title page + status stamp, a fax-cover-sheet-style memo cover page, contributor/approver signature pages, synopsis, numbered appendices, page header/footer with roman/arabic page numbering. Composes with [A2-ai's `quarto-plus`](https://github.com/A2-ai/quarto-plus) (ToC/List of Figures/List of Tables/abbreviations/captions) rather than duplicating it. |
-| [`r/`](r/README.md) | `renv`-managed R environment providing `render_report()`, the pass-1+pass-2 orchestration driver. Pulls `reportifyr` and `pyro` straight from GitHub (no CRAN release exists for either) as today's fill backend. |
+| `R/`, `DESCRIPTION`, `NAMESPACE` | The installable `quartifyr` R package itself: `render_report()` (the pass-1+pass-2 orchestration driver), `initialize_quartifyr_project()`, `install_quartifyr_extension()`, and thin `pyro`-bridged `styling_*()` wrappers around the bundled Python engine. Pulls `reportifyr` and `pyro` straight from `a2-ai.r-universe.dev` (no CRAN release exists for either) as today's fill backend. |
+| [`inst/python/`](inst/python/README.md) | The bundled Python engine (`quartifyr_styling`): turns a style YAML (fonts, colors, page setup) into a docx `reference-doc`; the `standard_footnotes.yaml` → `abbreviations.tex` bridge; headless Word field recalculation via LibreOffice (experimental). Also independently pip/uv-installable (`quartifyr-styling` console script) -- see the repo-root `pyproject.toml`, which points at this same source tree. |
+| [`inst/extensions/quartifyr/`](inst/extensions/quartifyr/README.md) | Quarto extension, bundled in the R package and installable via `install_quartifyr_extension()` or `quarto add jprybylski/quartifyr`: dynamic title page + status stamp, a fax-cover-sheet-style memo cover page, contributor/approver signature pages, synopsis, numbered appendices, page header/footer with roman/arabic page numbering. Composes with [A2-ai's `quarto-plus`](https://github.com/A2-ai/quarto-plus) (ToC/List of Figures/List of Tables/abbreviations/captions) rather than duplicating it. |
 | [`examples/demo-report/`](examples/demo-report/README.md) | Complete, working example exercising every piece above, with an automated end-to-end smoke test: a reference to compare against, not the only way to start a project (see [Standing up a new project](#standing-up-a-new-project)). |
 | [`examples/memo-example/`](examples/memo-example/README.md) | The minimal end of the same pipeline: a memo cover page and a loose structure with no ToC/List of Figures/List of Tables/abbreviations/signature pages, also with its own smoke test. |
 | [`action.yml`](action.yml) | Reusable composite GitHub Action wrapping `render_report()` for use in another repo's own CI; see [Rendering in CI](#rendering-in-ci) below. |
 
 Each org overrides just the parts of the default look that differ
-(`styling/styles/default.yaml` is Times New Roman, black text, flat
+(`inst/python/styles/default.yaml` is Times New Roman, black text, flat
 neutral tables, no brand color baked in) as a small YAML diff, not a
 round of clicking through Word's style pane.
 
 ## Quick start
 
 Want to see the shell before installing anything but Quarto? Both bundled
-examples ship a pre-built `templates/org-reference.docx` (committed to
-the repo; see [Style YAML and reference-doc](#style-yaml-and-reference-doc-generating-locating-sharing)
+examples ship a pre-built `inst/templates/org-reference.docx` (committed
+to the repo; see [Style YAML and reference-doc](#style-yaml-and-reference-doc-generating-locating-sharing)
 below), so this alone renders a real, styled shell (title page,
 signature pages, synopsis) with `{rpfy}:` placeholders still literal
 (pass 2 hasn't run):
 
 ```bash
 cd examples/demo-report
-quarto render report.qmd --to docx --reference-doc ../../templates/org-reference.docx \
+quarto render report.qmd --to docx --reference-doc ../../inst/templates/org-reference.docx \
   -M document-status:DRAFT
 ```
 
@@ -192,22 +209,20 @@ not just the shell), you need the rest of the toolchain, once each
 (platform-specific instructions at each link):
 
 - [Quarto](https://quarto.org/docs/get-started/)
-- [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python tooling)
-- [renv](https://rstudio.github.io/renv/) (R package management; `install.packages("renv")`)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python tooling, used internally by `pyro`)
+- [renv](https://rstudio.github.io/renv/) (R package management for report *projects*; `install.packages("renv")`. The `quartifyr` R package itself isn't renv-managed -- see [Components](#components).)
 
 ```bash
-# 1. Python tooling
-uv venv .venv --python 3.12
-source .venv/bin/activate
-uv pip install -e "./styling[dev]"
+# 1. Install the quartifyr R package itself (pulls in reportifyr/pyro
+#    transitively via its DESCRIPTION Imports:)
+Rscript -e 'pak::pkg_install("local::.")'   # from this checkout's root
 
-# 2. R tooling
-cd r && Rscript -e 'renv::restore()' && cd ..
-
-# 3. Run the demo end to end
+# 2. Run the demo end to end
 cd examples/demo-report
 Rscript -e 'renv::restore()'
+Rscript -e 'renv::install("local::../..")'   # installs quartifyr into this project's own renv library
 Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'   # first clone only
+Rscript -e 'quartifyr::initialize_quartifyr_project(getwd())'              # first clone only
 Rscript render.R --final
 # -> report/draft/report-draft.docx, report/final/report-final.docx
 ```
@@ -226,76 +241,77 @@ Tables/abbreviations/signature pages.
 
 An org's look lives entirely in one YAML file, no Word template editing.
 
-```bash
-cp styling/styles/default.yaml styling/styles/acme-pharma.yaml
+```r
+default_style <- system.file("python", "styles", "default.yaml", package = "quartifyr")
+file.copy(default_style, "acme-pharma.yaml")
 # edit fonts/colors/page setup/table.header_bold/etc.
-quartifyr-styling build \
-  --style styling/styles/default.yaml \
-  --override styling/styles/acme-pharma.yaml \
-  --out templates/acme-pharma-reference.docx
+quartifyr::styling_build_reference_docx(
+  style = default_style,
+  override = "acme-pharma.yaml",
+  out = "acme-pharma-reference.docx"
+)
 ```
 
-See `styling/styles/default.yaml` for the full schema and
-`styling/quartifyr_styling/schema.py` for validation rules.
+Or the equivalent standalone CLI, if you'd rather not go through R:
+
+```bash
+quartifyr-styling build \
+  --style /path/to/inst/python/styles/default.yaml \
+  --override acme-pharma.yaml \
+  --out acme-pharma-reference.docx
+```
+
+See `inst/python/styles/default.yaml` for the full schema and
+`inst/python/quartifyr_styling/schema.py` for validation rules.
 
 ## Style YAML and reference-doc: generating, locating, sharing
 
 **Generating a style YAML**: there's no interactive wizard. "Generate"
-means copy `styling/styles/default.yaml` and edit just the fields that
+means copy the bundled `default.yaml` and edit just the fields that
 differ, as shown above. That file doubles as both the default preset
-and the schema reference; `styling/quartifyr_styling/schema.py`
+and the schema reference; `inst/python/quartifyr_styling/schema.py`
 documents validation rules (hex colors, positive sizes, valid page
 sizes, ...).
 
-**Where a style YAML lives**: `styling/styles/*.yaml` is just this
-repo's own convention for keeping org styles alongside the tool that
-builds them; nothing requires it. `--style`/`--override` take plain
-file paths, so an org can keep its style YAML(s) anywhere: a separate
-internal config repo, a shared drive, wherever it already manages
-shared config.
+**Where a style YAML lives**: wherever you put it. `style`/`override`
+(`styling_build_reference_docx()`) or `--style`/`--override`
+(`quartifyr-styling build`) take plain file paths, so an org can keep
+its style YAML(s) anywhere: a separate internal config repo, a shared
+drive, wherever it already manages shared config.
 
-**Where the built reference-doc lives**: likewise, wherever `--out`
-points. `templates/org-reference.docx` (relative to this checkout) is
-what this repo's own docs default to, and unlike everything else
+**Where the built reference-doc lives**: likewise, wherever `out`/
+`--out` points. `render_report()`'s `reference_doc` parameter defaults
+to the package's own bundled `inst/templates/org-reference.docx` (via
+`system.file("templates", "org-reference.docx", package = "quartifyr")`)
+-- unlike everything else `styling_build_reference_docx()`/
 `quartifyr-styling build` produces, this repo commits that specific
 file rather than gitignoring it, precisely so the two bundled examples
 (and the Quarto-only path above) work straight out of a clone with no
-`quartifyr-styling build` step required. `scripts/
-check_template_freshness.py` (run by both examples' `smoke_test.py`, and
-safe to run yourself) guards against it drifting from `styling/styles/
-default.yaml`; rebuild it (`python3 scripts/check_template_freshness.py`)
-after changing that file. `render_report()`'s
-`reference_doc` parameter defaults to `file.path(toolkit_root,
-"templates", "org-reference.docx")`, and `toolkit_root` itself defaults
-to `here::here()`. For `examples/demo-report/`, that resolves correctly
-only because its own `render.R` computes `toolkit_root` explicitly, as
-a relative path back up to this repo's root (it doesn't rely on the
-`here::here()` default at all; see its source). **An independent
-project (its own git repo, not nested inside a quartifyr
-checkout) can't rely on that default**: `here::here()` would resolve
-to the new project's own root instead of quartifyr's. Pass
-`reference_doc` explicitly instead (and `venv_bin` too, unless the
-`styling/` venv's `bin/` is already on `PATH`):
+build step required. `scripts/check_template_freshness.py` (run by both
+examples' `smoke_test.py`, and safe to run yourself) guards against it
+drifting from `inst/python/styles/default.yaml`; rebuild it (`python3
+scripts/check_template_freshness.py`) after changing that file.
+
+For your own org's reference-doc, pass `reference_doc` explicitly rather
+than relying on the bundled default:
 
 ```r
 render_report(
   shell_qmd = "report.qmd",
   status = "draft",
-  reference_doc = "/path/to/org-reference.docx",
-  venv_bin = "/path/to/quartifyr/.venv/bin"
+  reference_doc = "/path/to/acme-pharma-reference.docx"
 )
 ```
 
-**Sharing a reference-doc so most users never run `quartifyr-styling
-build`**: only whoever owns an org's styling needs to run `build` at
-all. Once built, `templates/org-reference.docx` is an ordinary `.docx`
-file, distribute *that* however your org already shares binary
-artifacts (commit a copy into each project's own repo under its own
-`templates/`, a shared drive, an internal artifact store, ...), and
-point each project's `reference_doc` at wherever it landed. Committing
-a copy into each project is the simplest option for a standalone
-project: it makes the project fully self-contained (no need to locate
-or even keep a quartifyr checkout around just to render) at the cost of
+**Sharing a reference-doc so most users never call
+`styling_build_reference_docx()`**: only whoever owns an org's styling
+needs to build one at all. Once built, it's an ordinary `.docx` file,
+distribute *that* however your org already shares binary artifacts
+(commit a copy into each project's own repo, a shared drive, an internal
+artifact store, ...), and point each project's `reference_doc` at
+wherever it landed. Committing a copy into each project is the simplest
+option for a standalone project: it makes the project fully
+self-contained (no need to rebuild it just to render) at the cost of
 re-copying the file whenever the org's styling changes.
 
 ## Standing up a new project
@@ -315,7 +331,9 @@ A project set up the `render_report()` way needs:
    project root, alongside the shell `.qmd`:
    ```bash
    quarto add A2-ai/quarto-plus
-   quarto add jprybylski/quartifyr
+   ```
+   ```r
+   quartifyr::install_quartifyr_extension()   # or: quarto add jprybylski/quartifyr
    ```
 2. **`_quarto.yml`** setting `project: {output-dir: report/shell}`. This
    is only needed for `render_report()`'s own directory convention: it's
@@ -326,20 +344,22 @@ A project set up the `render_report()` way needs:
 3. **A shell `.qmd`** at the project root with `filters: [quarto-plus,
    quartifyr]`, plus frontmatter for whichever front-matter pieces you want (`title`,
    `contributors`/`approvers`, `synopsis`, `header-format`, ...); see
-   [`_extensions/quartifyr/README.md`](_extensions/quartifyr/README.md)
+   [`inst/extensions/quartifyr/README.md`](inst/extensions/quartifyr/README.md)
    for the full list, and use `{{< body-start >}}`/`{rpfy}:` placeholders/
    `quarto-plus`'s caption shortcodes in the body as needed.
 4. **`reportifyr`'s own project structure** (`report/standard_footnotes.yaml`,
-   `report/config.yaml`, `OUTPUTS/`):
-   ```bash
-   Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'
+   `report/config.yaml`, `OUTPUTS/`), plus `quartifyr`'s own pyro-managed
+   Python environment:
+   ```r
+   reportifyr::initialize_report_project(project_dir = getwd())
+   quartifyr::initialize_quartifyr_project(getwd())
    ```
 5. **A docx reference-template**: reuse an existing org one, or build a
    new one (see [Standing up a new org](#standing-up-a-new-org) above).
-   If this project isn't nested inside a quartifyr checkout, pass
-   `reference_doc` (and likely `venv_bin`) explicitly to `render_report()`;
-   see [Style YAML and reference-doc](#style-yaml-and-reference-doc-generating-locating-sharing)
-   above for why the defaults don't apply there.
+   Pass `reference_doc` explicitly to `render_report()` unless the
+   bundled default is what you want; see
+   [Style YAML and reference-doc](#style-yaml-and-reference-doc-generating-locating-sharing)
+   above.
 
 Then write your own `scripts/`, producing `OUTPUTS/tables/`/
 `OUTPUTS/figures/` artifacts via `reportifyr`'s
@@ -372,7 +392,7 @@ without hand-rolling the Quarto/R/`reportifyr` setup steps:
     path: ${{ steps.render.outputs.draft-docx }}
 ```
 
-See [the docs site's GitHub Action page](https://jprybylski.github.io/quartifyr/github-action.html)
+See [the docs site's GitHub Action page](https://jprybylski.github.io/quartifyr/articles/github-action.html)
 for the full input/output list and what it expects from the calling repo.
 
 ## Document kinds
@@ -401,22 +421,29 @@ fill pass) is built and verified end to end (see
 checks the actual output on every run). Two things are deliberately
 incomplete rather than papered over:
 
-- **Word field recalculation** (`quartifyr-styling recalculate-fields`,
-  headless LibreOffice) is experimental: it works, but has shown
-  non-deterministic failure modes in real testing. See
-  [`r/README.md`](r/README.md#word-field-recalculation-optional-off-by-default).
-  Off by default; without it, delivered docs need one manual "select all,
-  F9" in Word to populate the ToC.
+- **Word field recalculation** (`styling_recalculate_fields()` /
+  `quartifyr-styling recalculate-fields`, headless LibreOffice) is
+  experimental: it works, but has shown non-deterministic failure modes
+  in real testing (hangs, silent no-ops, or success, reproduced both
+  sandboxed and in a plain terminal). Off by default
+  (`render_report(..., recalculate_fields = FALSE)`); without it,
+  delivered docs need one manual "select all, F9" in Word to populate the
+  ToC. Real Word itself needs none of this -- the reference-doc sets
+  `<w:updateFields>` so Word auto-recalculates on open regardless; this
+  only matters for headless/non-interactive pipelines. Same reasoning and
+  the same underlying headless-LibreOffice mechanism apply to
+  `styling_resolve_same_page_crossrefs()` (for `crossref-hyperlinks:
+  "same-page"`), also off by default.
 - **Figure/table numbering stays continuous through appendices** (e.g.
   "Figure 12" inside an appendix, not "Figure B-1"), a deliberate v1
   scope call, not a bug. See
-  [`_extensions/quartifyr/README.md`](_extensions/quartifyr/README.md#appendices).
+  [`inst/extensions/quartifyr/README.md`](inst/extensions/quartifyr/README.md#appendices).
 - **A citation's `link-citations: true` hyperlink can fail to navigate in
   Word** on documents where `reportifyr`'s own footnote-bookmark id
   happens to numerically collide with a citeproc bookmark id, confirmed
   as a bug in `reportifyr`'s `remove_bookmarks()`, not something
   quartifyr's shell can prevent. See
-  [`_extensions/quartifyr/README.md`](_extensions/quartifyr/README.md#bibliography--references)'s
+  [`inst/extensions/quartifyr/README.md`](inst/extensions/quartifyr/README.md#bibliography--references)'s
   "Known limitation" note.
 
 ## vs. pharmtex, onbrand, and vanilla Quarto
@@ -432,8 +459,8 @@ incomplete rather than papered over:
 
 ## License
 
-[GPL-3.0-or-later](LICENSE). `r/` (the orchestration driver) directly
-imports and calls [`reportifyr`](https://github.com/A2-ai/reportifyr)
-and [`pyro`](https://github.com/A2-ai/pyro), both GPL-3-licensed, so the
+[GPL-3.0-or-later](LICENSE). The `quartifyr` R package directly imports
+and calls [`reportifyr`](https://github.com/A2-ai/reportifyr) and
+[`pyro`](https://github.com/A2-ai/pyro), both GPL-3-licensed, so the
 whole repo is licensed GPL-3.0-or-later to match rather than splitting
 licenses across components.

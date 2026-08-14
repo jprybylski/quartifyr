@@ -4,7 +4,7 @@
 # examples/demo-report (which keeps reportifyr's full default CSR-style
 # glossary), this memo's body never references any of them via \gls{}
 # (only entries actually referenced end up in the rendered document --
-# see styling/quartifyr_styling/abbreviations.py's docstring), so a
+# see inst/python/quartifyr_styling/abbreviations.py's docstring), so a
 # couple of generic, thematically-appropriate placeholders satisfy the
 # tool without carrying an unrelated pharma glossary into a business
 # memo's scaffolding.

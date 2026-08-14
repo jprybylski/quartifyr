@@ -1,0 +1,103 @@
+---
+title: "Installation"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+quartifyr is a single installable R package bundling a Quarto extension
+and a Python engine; install only the pieces you need.
+
+## 1. Quarto extension only
+
+If you just want the shell-generation pieces (title page, signature
+pages, synopsis, numbered appendices, header/footer), this is a regular
+Quarto extension:
+
+```bash
+quarto add jprybylski/quartifyr
+```
+
+Or, once the R package itself is installed (step 3 below):
+
+```r
+quartifyr::install_quartifyr_extension()
+```
+
+It composes with [A2-ai's `quarto-plus`](https://github.com/A2-ai/quarto-plus)
+for ToC/list of figures/list of tables/abbreviations rather than
+duplicating them, so install that too:
+
+```bash
+quarto add A2-ai/quarto-plus
+```
+
+With nothing else installed you can already render a real, styled shell;
+see the repo README's Quick Start. The only other prerequisite is
+[Quarto](https://quarto.org/docs/get-started/) itself.
+
+## 2. `inst/python/`: the reference-doc builder (standalone)
+
+The Python engine behind `styling_build_reference_docx()`/etc. is also
+independently pip/uv-installable, if you'd rather not go through R:
+
+```bash
+# from a checkout of the repo
+uv venv .venv --python 3.12
+source .venv/bin/activate
+uv pip install -e '.[dev]'
+```
+
+This gets you the `quartifyr-styling` CLI; see [Styling](styling.html)
+for its subcommands.
+
+## 3. The `quartifyr` R package
+
+```r
+pak::pkg_install("local::/path/to/quartifyr")   # or remotes::install_local()
+```
+
+Pulls in [`reportifyr`](https://github.com/A2-ai/reportifyr) and
+[`pyro`](https://github.com/A2-ai/pyro) transitively (neither has a CRAN
+release; both resolve from `a2-ai.r-universe.dev`, declared in
+`DESCRIPTION`'s `Additional_repositories:`). This is a convenience
+wrapper around Quarto + the Python engine + `reportifyr`; see [The R
+package](r-package.html). It's optional; you can call the underlying
+pieces yourself instead.
+
+The `quartifyr` R package itself is **not** `renv`-managed -- install it
+into each report project's own `renv` library explicitly, from that
+project's directory:
+
+```r
+renv::install("local::/path/to/quartifyr")
+```
+
+## Full toolchain, end to end
+
+For the complete two-pass pipeline (real tables/figures/footnotes
+filled in, not just the shell):
+
+```bash
+# 1. Install the quartifyr R package itself
+Rscript -e 'pak::pkg_install("local::.")'   # from this checkout's root
+
+# 2. Run the demo end to end
+cd examples/demo-report
+Rscript -e 'renv::restore()'
+Rscript -e 'renv::install("local::../..")'
+Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'   # first clone only
+Rscript -e 'quartifyr::initialize_quartifyr_project(getwd())'              # first clone only
+Rscript render.R --final
+# -> report/draft/report-draft.docx, report/final/report-final.docx
+```
+
+Or just run the demo's own smoke test, which does step 2 for you and
+asserts the output is actually correct:
+
+```bash
+python3 examples/demo-report/smoke_test.py
+```
+
+See [Examples](examples.html) for what this produces.

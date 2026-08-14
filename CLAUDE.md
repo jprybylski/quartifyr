@@ -19,61 +19,74 @@ The two passes are independent: quartifyr doesn't know about
 `reportifyr` doesn't know or care that a shell came from quartifyr rather
 than a hand-built template.
 
-Three components, each independently usable:
+quartifyr is a single installable R package at the repo root
+(`DESCRIPTION`/`NAMESPACE`/`R/`), modeled on the sibling `../deckifyr`
+project's architecture ("one engine, two facades" -- see issue #13):
 
 | Path | What it is | Language |
 | --- | --- | --- |
-| `_extensions/quartifyr/` | Quarto extension: title page, signature pages, synopsis, appendices, page header/footer | Lua (pandoc filters/shortcodes) |
-| `styling/` | Turns a style YAML into a docx `reference-doc`; abbreviations bridge; `apply-layout` post-processing; headless LibreOffice field recalc | Python (`quartifyr-styling` package) |
-| `r/` | `render_report()` orchestration driver chaining Quarto render → `apply-layout` → `reportifyr::build_report()` | R (`renv`-managed) |
+| `R/` | `render_report()` orchestration driver chaining Quarto render → `apply-layout` → `reportifyr::build_report()`, plus thin `pyro`-bridged `styling_*()` wrapper functions | R |
+| `inst/extensions/quartifyr/` | Quarto extension: title page, signature pages, synopsis, appendices, page header/footer. Installed into a project via `install_quartifyr_extension()` or `quarto add jprybylski/quartifyr` | Lua (pandoc filters/shortcodes) |
+| `inst/python/` (`quartifyr_styling`) | Turns a style YAML into a docx `reference-doc`; abbreviations bridge; `apply-layout` post-processing; headless LibreOffice field recalc. Bundled inside the R package *and* independently pip/uv-installable (`quartifyr-styling` console script, same source tree -- repo-root `pyproject.toml` points at it) | Python |
 
 `examples/demo-report/` is a complete working example exercising every
 piece, with an automated end-to-end smoke test; treat it as the
 reference implementation to check changes against.
 
 Read the repo-root `README.md` first for the full two-pass architecture
-diagram and rationale; component READMEs (`_extensions/quartifyr/README.md`,
-`styling/README.md`, `r/README.md`, `examples/demo-report/README.md`) have
-the mechanical details referenced below.
+diagram and rationale; component READMEs (`inst/extensions/quartifyr/README.md`,
+`inst/python/README.md`, `examples/demo-report/README.md`) have the
+mechanical details referenced below.
 
 ## Commands
 
-### Python (`styling/`)
+### Python (`inst/python/`, `quartifyr_styling`)
 
 ```bash
-# Setup (from repo root)
+# Setup (from repo root) -- root pyproject.toml points at inst/python/
 uv venv .venv --python 3.12
 source .venv/bin/activate
-uv pip install -e "./styling[dev]"
+uv pip install -e '.[dev]'
 
 # Tests
-cd styling && python -m pytest tests/ -v
+python -m pytest tests/python -v
 # single test file
-cd styling && python -m pytest tests/test_layout.py -v
+python -m pytest tests/python/test_layout.py -v
 # or, without an activated venv:
-cd styling && uv run --extra dev pytest tests -v
+uv run --extra dev pytest tests/python -v
 
-# Build an org's reference-doc (templates/org-reference.docx itself is
-# committed to the repo already -- only rebuild after editing
-# styling/styles/default.yaml; see check_template_freshness.py below)
-quartifyr-styling build --style styling/styles/default.yaml --out templates/org-reference.docx
+# Build an org's reference-doc (inst/templates/org-reference.docx itself
+# is committed to the repo already -- only rebuild after editing
+# inst/python/styles/default.yaml; see check_template_freshness.py below)
+quartifyr-styling build --style inst/python/styles/default.yaml --out inst/templates/org-reference.docx
 # with an org override
-quartifyr-styling build --style styling/styles/default.yaml --override styling/styles/acme-pharma.yaml --out templates/acme-pharma-reference.docx
+quartifyr-styling build --style inst/python/styles/default.yaml --override /path/to/acme-pharma.yaml --out /path/to/acme-pharma-reference.docx
 
-# Other subcommands (see styling/README.md)
+# Other subcommands (see inst/python/README.md) -- each also has an R
+# equivalent via the pyro bridge, e.g. quartifyr::styling_apply_layout()
 quartifyr-styling abbrevs --footnotes report/standard_footnotes.yaml --out report/shell/abbreviations.tex
 quartifyr-styling apply-layout --docx report/shell/report.docx --qmd report.qmd --status draft
 quartifyr-styling recalculate-fields --docx path/to/report-final.docx   # experimental, see below
 ```
 
-### R (`r/`)
+### R (root package)
 
 ```bash
-cd r && Rscript -e 'renv::restore()'   # requires renv: https://rstudio.github.io/renv/
+# Dev: load without installing (not renv-managed -- see ../deckifyr's
+# identical convention)
+Rscript -e 'devtools::load_all(".")'
 
-# As a CLI
-Rscript render.R /path/to/project/report.qmd
-Rscript render.R /path/to/project/report.qmd --final
+# Install for real use (into a report project's own renv library, run
+# from that project's directory so it lands in the right place -- see
+# "A calling project's R package library" note below)
+Rscript -e 'renv::install("local::/path/to/quartifyr")'
+
+# As an R function
+Rscript -e 'quartifyr::render_report("/path/to/project/report.qmd", status = "draft")'
+
+# examples/*/render.R is a thin CLI wrapper around the same call:
+Rscript render.R
+Rscript render.R --final
 ```
 
 ### Demo / integration tests (the real correctness checks)
@@ -83,7 +96,8 @@ Rscript render.R /path/to/project/report.qmd --final
 python3 examples/demo-report/smoke_test.py
 
 # "Using the pieces directly" path (quarto render + apply-layout +
-# reportifyr::build_report() called directly, no r/ orchestration)
+# reportifyr::build_report() called directly, no quartifyr::render_report()
+# orchestration)
 python3 scripts/bare_bones_integration_test.py
 
 # Check the demo's physical extension copy hasn't drifted from the
@@ -91,42 +105,52 @@ python3 scripts/bare_bones_integration_test.py
 python3 scripts/sync_demo_extension.py --check
 python3 scripts/sync_demo_extension.py   # re-sync if it has drifted
 
-# Check the committed templates/org-reference.docx hasn't drifted from
-# styling/styles/default.yaml
+# Check the committed inst/templates/org-reference.docx hasn't drifted
+# from inst/python/styles/default.yaml
 python3 scripts/check_template_freshness.py --check
 python3 scripts/check_template_freshness.py   # rebuild if it has drifted
 
-# Quarto-render-only path (no R, no reportifyr, no styling venv) for both
+# Quarto-render-only path (no R, no reportifyr, no Python venv) for both
 # examples, against the committed reference-doc -- only needs `quarto`
 python3 scripts/quarto_only_smoke_test.py
 
 # Unit-style check of synopsis.lua's synopsis-style: options (definition-list/
 # inline/table/false) against a small standalone fixture -- needs `quarto`
-# and python-docx (the styling/ venv), but not R/reportifyr
+# and python-docx (the Python venv), but not R/reportifyr
 python3 scripts/test_synopsis_styles.py
+
+# Also (tests/testthat/test-wiring.R): proves the R -> pyro -> bundled-
+# Python bridge itself works, and runs render_report() end to end against
+# examples/demo-report:
+Rscript -e 'devtools::load_all("."); testthat::test_dir("tests/testthat")'
 ```
 
 Both integration tests require the full toolchain on `PATH` (Quarto, R
-with `renv`-restored packages, the `styling/` venv) and skip (exit 0) if
+with `renv`-restored packages, the Python venv) and skip (exit 0) if
 `Rscript`/`quarto` aren't available. These are the tests that actually
-prove correctness: the `styling/` pytest suite covers unit-level Python
-logic only, and there is no *native* Lua unit test suite (no busted/
-similar harness) -- `scripts/test_synopsis_styles.py` is the closest
-thing, a Python-driven test that renders a small fixture per
+prove correctness: the `tests/python` pytest suite covers unit-level
+Python logic only, and there is no *native* Lua unit test suite (no
+busted/similar harness) -- `scripts/test_synopsis_styles.py` is the
+closest thing, a Python-driven test that renders a small fixture per
 `synopsis-style:` option and asserts on the resulting docx's raw XML
 structure, isolating synopsis.lua's own logic from the full pipeline.
-Everything else in `_extensions/quartifyr/*.lua` is only verified by
+Everything else in `inst/extensions/quartifyr/*.lua` is only verified by
 running the smoke test.
 
 ### CI
 
-`.github/workflows/ci.yml` runs `styling-tests` and `full-pipeline`
-(Quarto+R+reportifyr), both across all three OSes. The full-pipeline job
-runs the repo-root Quick Start commands verbatim, so it also doubles as a
-check that the README itself stays accurate. `full-pipeline`'s very first
-step after the Quarto setup action is `scripts/quarto_only_smoke_test.py`,
-deliberately before any R/uv setup; proof the Quarto-only render path
-has no R or Python dependency of its own.
+`.github/workflows/ci.yml` runs `styling-tests`, `full-pipeline`
+(Quarto+R+reportifyr), and `action-smoke-test` (dogfoods `action.yml`),
+across all three OSes (the first two jobs; `action-smoke-test` is
+Ubuntu-only). The full-pipeline job runs the repo-root Quick Start
+commands verbatim, so it also doubles as a check that the README itself
+stays accurate. `full-pipeline`'s very first step after the Quarto setup
+action is `scripts/quarto_only_smoke_test.py`, deliberately before any
+R/uv setup; proof the Quarto-only render path has no R or Python
+dependency of its own. The root `quartifyr` R package itself is **not**
+renv-managed (see "A calling project's R package library" below); CI
+installs it into each example's own renv library via `renv::install
+("local::...")`, mirroring `action.yml`'s identical step.
 
 ## Architecture notes that span files
 
@@ -154,7 +178,7 @@ paragraph as a heading. Conversely, pandoc's `custom-style` Div attribute
 in `.qmd` bodies matches by **display name** (`Heading 1`, with the
 space); get this backwards and pandoc silently fabricates a blank style
 with that literal name instead of erroring. See
-`_extensions/quartifyr/README.md`'s "A pStyle gotcha" section before
+`inst/extensions/quartifyr/README.md`'s "A pStyle gotcha" section before
 touching either.
 
 **`reportifyr`/`pyro` resolve their project by walking up from R's
@@ -169,22 +193,45 @@ why `examples/demo-report/` carries its own empty `.here` file (pins
 `here::here()`'s root so it doesn't walk past the demo into the outer
 quartifyr repo).
 
+**`pyro::get_proj_dir()` (`getOption("venv_dir") %||% here::here()`)
+caches its result for the life of an R session, independent of
+`withr::with_dir()` or `.here` files.** Confirmed directly: calling it
+from two different `with_dir()`-scoped directories in the same session
+returns the *first*-resolved directory both times -- a stricter version
+of the `reportifyr`/`pyro` cwd gotcha above, since here even the correct
+marker being present doesn't help. This bit `R/run-python.R`'s
+`.run_quartifyr_styling_cli()` (calls `pyro::get_venv_uv_paths()`, which
+takes no arguments) and `R/initialize.R`'s
+`initialize_quartifyr_project()` (calls `pyro::write_group_to_pyproject()`/
+`pyro::initialize_python()`) the hard way: rendering two different
+projects in one R session wrote the second project's Python dependency
+group into the *first* project's `pyproject.toml`. Fix used: pass
+`venv_dir`/`pyproject_dir` explicitly wherever those functions accept
+them, and wrap `get_venv_uv_paths()` (which doesn't) in
+`withr::local_options(venv_dir = getwd())` immediately before calling
+it -- see `R/run-python.R` for the working pattern. Don't assume a bare
+`with_dir()` around a `pyro::` call is sufficient; verify against this.
+
 **A calling project's R package library (its `renv`) activates based on
 the working directory an `Rscript` process *starts* in, not anything
 `withr::with_dir()` changes afterward.** `render_report()`'s own
 `with_dir()` wrapper (above) only fixes where `reportifyr` looks for its
-project; it can't retroactively make `reportifyr`/`pyro` importable if
-the R session never activated that project's `renv/.Rprofile` in the
-first place. Every caller of `r/render.R` -- `examples/demo-report/
-render.R`'s own subprocess call, and `action.yml`'s composite steps --
-invokes it with the shell's cwd already set to the *project's* directory
-(not `r/` or the toolkit root) for exactly this reason, passing
-`--toolkit-root` separately so `render.R` still finds `templates/`/
-`_extensions/`/the `styling/` venv. Don't "simplify" one of these call
-sites to run from the toolkit root instead -- it'll fail with
-`reportifyr`/`pyro` not found, since the toolkit's own `r/renv.lock` and
-a project's `renv.lock` are two independent lockfiles (see `action.yml`'s
-"renv restore (calling project)" step).
+project; it can't retroactively make `quartifyr`/`reportifyr`/`pyro`
+importable if the R session never activated that project's
+`renv/.Rprofile` in the first place. The `quartifyr` R package itself is
+**not** renv-managed (no `renv.lock` at the package root -- see
+`../deckifyr`'s identical convention), so every report project needs it
+installed into *its own* renv library explicitly:
+`renv::install("local::/path/to/quartifyr")`, run with the project
+directory as cwd. `examples/demo-report/render.R`'s own subprocess call
+and `action.yml`'s composite steps all run with cwd already set to the
+*project's* directory for exactly this reason (`library(quartifyr)`
+needs the project's own renv-activated library path). Don't "simplify"
+one of these call sites to run from the quartifyr checkout root instead
+-- it'll fail to find `reportifyr`/`pyro`, since quartifyr's own
+(non-renv) library and a project's `renv.lock`-pinned library are
+entirely separate (see `action.yml`'s "renv restore (calling project)"
+and "Install the quartifyr R package" steps).
 
 **The `report/shell` → `report/draft`/`report/final` directory
 convention is load-bearing for `render_report()`, not just a naming
@@ -196,39 +243,42 @@ the three pieces directly (`quarto render` / `apply-layout` /
 `build_report()`) instead of `render_report()` aren't bound by this.
 
 **Percentage-width tables, not fixed twips**: every table
-`_extensions/quartifyr/*.lua` generates uses `w:type="pct"` so it spans
-the current usable text width, so changing `page.margins_in` in a style
-YAML doesn't leave tables overflowing or falling short.
+`inst/extensions/quartifyr/*.lua` generates uses `w:type="pct"` so it
+spans the current usable text width, so changing `page.margins_in` in a
+style YAML doesn't leave tables overflowing or falling short.
 
 **`apply-layout`'s header/footer/page-restart requires editing docx
 package parts directly** (an independent second header/footer
 means adding new OOXML *parts*, which a Lua filter's `RawBlock`
 injection can't do); that's why it's a separate post-render Python step
-(`styling/quartifyr_styling/layout.py`) rather than part of the Quarto
-filter chain. `header-format:`/`confidentiality:`/`{{< body-start >}}`
-in a `.qmd` are all inert without running it.
+(`inst/python/quartifyr_styling/layout.py`, called via
+`styling_apply_layout()`) rather than part of the Quarto filter chain.
+`header-format:`/`confidentiality:`/`{{< body-start >}}` in a `.qmd` are
+all inert without running it.
 
-**Word field recalculation (`quartifyr-styling recalculate-fields`,
-headless LibreOffice) is experimental and known-flaky.** Real-world runs
-against the same document have produced three different outcomes (hangs,
-silent no-op, or success), reproduced both sandboxed and in a
-plain macOS terminal. Off by default (`render_report(..., recalculate_fields = FALSE)`).
-Don't treat a clean exit as proof it worked; see `r/README.md`'s "Word
-field recalculation" section before changing this code path.
+**Word field recalculation (`styling_recalculate_fields()` /
+`quartifyr-styling recalculate-fields`, headless LibreOffice) is
+experimental and known-flaky.** Real-world runs against the same
+document have produced three different outcomes (hangs, silent no-op, or
+success), reproduced both sandboxed and in a plain macOS terminal. Off
+by default (`render_report(..., recalculate_fields = FALSE)`). Don't
+treat a clean exit as proof it worked; see the repo-root README's
+"Status and known limitations" section before changing this code path.
 
-**`templates/org-reference.docx` is committed, not just a build
+**`inst/templates/org-reference.docx` is committed, not just a build
 artifact.** Every other `templates/*.docx` is gitignored ("regenerate
-with `quartifyr-styling build`"), but this specific file is the one
-`--out` path this repo's own docs/CI/`render_report()` default point at,
-committed on purpose so the two bundled examples (and `scripts/
-quarto_only_smoke_test.py`'s Quarto-only render path) work straight out
-of a clone without needing the `styling/` Python venv set up first.
+with `styling_build_reference_docx()`"), but this specific file is the
+one `render_report()`'s default (`system.file("templates",
+"org-reference.docx", package = "quartifyr")`) and this repo's own
+docs/CI point at, committed on purpose so the two bundled examples (and
+`scripts/quarto_only_smoke_test.py`'s Quarto-only render path) work
+straight out of a clone without needing the Python venv set up first.
 `quartifyr-styling build`'s docx output isn't byte-reproducible across
 runs (zipfile embeds a per-run timestamp in each entry), so `scripts/
 check_template_freshness.py` compares unzipped content, not raw bytes;
 run with `--check` (as both examples' `smoke_test.py` already do) to
-catch drift from `styling/styles/default.yaml`, same pattern as `scripts/
-sync_demo_extension.py` for the Lua extension copies.
+catch drift from `inst/python/styles/default.yaml`, same pattern as
+`scripts/sync_demo_extension.py` for the Lua extension copies.
 
 **YAML lists, not maps, for `synopsis:`/`title-page-extra:`/`address:`.**
 Deliberate: pandoc's Lua metadata tables don't preserve map key order
@@ -246,9 +296,9 @@ its own `report/draft/`/`report/final/` directories and
 `finalize_document()`; quartifyr's `document-status` frontmatter is set
 independently at render time and the orchestration driver, not any
 automatic sync, is what keeps the two aligned; see
-`_extensions/quartifyr/README.md`'s "Title page" section).
+`inst/extensions/quartifyr/README.md`'s "Title page" section).
 
-When changing `_extensions/quartifyr/*.lua`, verify against the demo
+When changing `inst/extensions/quartifyr/*.lua`, verify against the demo
 (`python3 examples/demo-report/smoke_test.py`) and re-sync the demo's
 physical extension copy (`python3 scripts/sync_demo_extension.py`);
 there's no Lua unit test suite, so the smoke test is the only real

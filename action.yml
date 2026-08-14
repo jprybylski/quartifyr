@@ -2,9 +2,10 @@ name: 'quartifyr render-report'
 description: >-
   Renders a quartifyr shell (Quarto pass 1), applies page-header/footer
   layout, and fills it via reportifyr (pass 2) -- the same render_report()
-  pipeline r/ provides, packaged for use from another repo's own CI.
-  Uploading the result as a workflow artifact is left to the calling
-  workflow (actions/upload-artifact against this action's docx outputs).
+  the quartifyr R package provides, packaged for use from another repo's
+  own CI. Uploading the result as a workflow artifact is left to the
+  calling workflow (actions/upload-artifact against this action's docx
+  outputs).
 author: 'jprybylski'
 branding:
   icon: 'file-text'
@@ -27,8 +28,9 @@ inputs:
   reference-doc:
     description: >-
       Path, relative to the calling repo's root, to an org's docx
-      reference-doc (built with `quartifyr-styling build`). Defaults to
-      this action's own bundled templates/org-reference.docx if unset.
+      reference-doc (built with `quartifyr-styling build` /
+      `styling_build_reference_docx()`). Defaults to the quartifyr R
+      package's own bundled inst/templates/org-reference.docx if unset.
     required: false
     default: ''
   r-version:
@@ -114,16 +116,6 @@ runs:
       with:
         enable-cache: true
 
-    # This action's own toolkit checkout (github.action_path) -- templates/,
-    # _extensions/, r/, styling/ -- not the calling project's repo. The
-    # calling project brings its own renv.lock (next step) with
-    # reportifyr/pyro pinned, same as examples/demo-report does.
-    - name: Set up quartifyr's styling/ venv
-      shell: bash
-      run: |
-        uv venv "${{ github.action_path }}/.venv" --python 3.12
-        uv pip install --python "${{ github.action_path }}/.venv" "${{ github.action_path }}/styling"
-
     - name: Determine project directory
       id: project
       shell: bash
@@ -133,12 +125,34 @@ runs:
 
     # The calling project's own renv.lock -- its reportifyr/pyro (plus
     # whatever analysis packages produced OUTPUTS/figures|tables/), not
-    # quartifyr's own r/renv.lock. See examples/demo-report/renv.lock for
-    # the shape a project's lockfile takes.
+    # this action's own quartifyr checkout. See examples/demo-report/
+    # renv.lock for the shape a project's lockfile takes.
     - name: renv restore (calling project)
       shell: bash
       working-directory: ${{ steps.project.outputs.dir }}
       run: Rscript -e 'renv::restore()'
+
+    # Installed into the calling project's own renv library (not this
+    # action's checkout) via renv::install("local::...") so it lands
+    # wherever the later `Render report` step's renv-activated session can
+    # find it -- renv isolates the library path when active, so a package
+    # installed anywhere else wouldn't be visible there. Pulls in
+    # pyro/reportifyr transitively via quartifyr's own DESCRIPTION
+    # Imports:; resolves against a2-ai.r-universe.dev via the calling
+    # project's own .Rprofile (every quartifyr report project has one --
+    # see examples/demo-report/.Rprofile), same as local dev.
+    # QUARTIFYR_SRC goes through env, not inlined into the -e string
+    # directly: github.action_path is backslash-separated on Windows, and
+    # R's string-literal parser treats an embedded substitution's
+    # backslashes as escape sequences -- Sys.getenv() sidesteps that
+    # entirely since env var values aren't escape-parsed (see ci.yml's
+    # identically-named steps for this confirmed the hard way in CI).
+    - name: Install the quartifyr R package
+      shell: bash
+      working-directory: ${{ steps.project.outputs.dir }}
+      env:
+        QUARTIFYR_SRC: ${{ github.action_path }}
+      run: Rscript -e 'renv::install(paste0("local::", Sys.getenv("QUARTIFYR_SRC")))'
 
     - name: Initialize reportifyr project
       if: inputs.initialize-project == 'true'
@@ -146,41 +160,46 @@ runs:
       working-directory: ${{ steps.project.outputs.dir }}
       run: Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'
 
+    # Provisions the "quartifyr" pyro dependency group (python-docx/pyyaml)
+    # in the calling project's own pyproject.toml/.venv, alongside the
+    # reportifyr/pyro one initialize_report_project() sets up above -- see
+    # R/initialize.R.
+    - name: Initialize quartifyr project
+      shell: bash
+      working-directory: ${{ steps.project.outputs.dir }}
+      run: Rscript -e 'quartifyr::initialize_quartifyr_project(getwd())'
+
     # Runs with cwd set to the calling project's directory so R auto-
-    # activates *its* renv/.Rprofile (giving the session reportifyr/pyro) --
-    # --toolkit-root points render.R at this action's own checkout instead,
-    # for templates/org-reference.docx, _extensions/, and the styling venv
-    # just built above. See r/render.R --help / r/README.md.
+    # activates *its* renv/.Rprofile (giving the session quartifyr,
+    # reportifyr, and pyro). reference_doc is passed through only when set
+    # -- render_report()'s own default resolves the package's bundled
+    # inst/templates/org-reference.docx via system.file() otherwise.
     - name: Render report
       id: render
-      shell: bash
+      shell: Rscript {0}
       working-directory: ${{ steps.project.outputs.dir }}
       env:
         SHELL_QMD: ${{ inputs.shell-qmd }}
         FINAL: ${{ inputs.final }}
         REFERENCE_DOC: ${{ inputs.reference-doc }}
-        TOOLKIT_ROOT: ${{ github.action_path }}
       run: |
-        args=("$(basename "$SHELL_QMD")")
-        if [ "$FINAL" = "true" ]; then
-          args+=("--final")
-        fi
-        if [ -n "$REFERENCE_DOC" ]; then
-          args+=("--reference-doc" "$GITHUB_WORKSPACE/$REFERENCE_DOC")
-        fi
-        args+=("--toolkit-root" "$TOOLKIT_ROOT")
+        reference_doc <- Sys.getenv("REFERENCE_DOC")
+        args <- list(
+          shell_qmd = basename(Sys.getenv("SHELL_QMD")),
+          status = if (Sys.getenv("FINAL") == "true") "final" else "draft"
+        )
+        if (nzchar(reference_doc)) {
+          args$reference_doc <- file.path(Sys.getenv("GITHUB_WORKSPACE"), reference_doc)
+        }
+        result <- do.call(quartifyr::render_report, args)
 
-        output="$(Rscript "$TOOLKIT_ROOT/r/render.R" "${args[@]}")"
-        echo "$output"
-
-        shell_docx="$(echo "$output" | sed -n 's/^shell: //p')"
-        draft_docx="$(echo "$output" | sed -n 's/^draft: //p')"
-        final_docx="$(echo "$output" | sed -n 's/^final: //p')"
-
-        {
-          echo "shell-docx=$shell_docx"
-          echo "draft-docx=$draft_docx"
-        } >> "$GITHUB_OUTPUT"
-        if [ -n "$final_docx" ]; then
-          echo "final-docx=$final_docx" >> "$GITHUB_OUTPUT"
-        fi
+        gh_output <- Sys.getenv("GITHUB_OUTPUT")
+        lines <- c(
+          paste0("shell-docx=", result$shell),
+          paste0("draft-docx=", result$draft)
+        )
+        if (!is.null(result$final)) {
+          lines <- c(lines, paste0("final-docx=", result$final))
+        }
+        cat(lines, sep = "\n", file = gh_output, append = TRUE)
+        cat(lines, sep = "\n")

@@ -11,7 +11,7 @@ signature-page/synopsis/ToC artifacts, confirming title_page.lua/
 signature_page.lua/synopsis.lua all stayed no-ops for a memo project.
 
 Requires the full toolchain: R (with this repo's renv-managed packages),
-Quarto, and the styling/ venv. Run from anywhere:
+Quarto, and the Python venv. Run from anywhere:
 
     python3 examples/memo-example/smoke_test.py
 """
@@ -73,7 +73,7 @@ def main() -> int:
         text=True,
     )
     if template_check.returncode != 0:
-        print("FAIL: templates/org-reference.docx has drifted from styling/styles/default.yaml", file=sys.stderr)
+        print("FAIL: inst/templates/org-reference.docx has drifted from inst/python/styles/default.yaml", file=sys.stderr)
         print(template_check.stdout, file=sys.stderr)
         print(template_check.stderr, file=sys.stderr)
         return 1

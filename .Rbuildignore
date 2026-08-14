@@ -1,0 +1,24 @@
+^examples$
+^docs$
+^scripts$
+^tests/python$
+^\.github$
+^\.venv$
+^\.githooks$
+^uv\.lock$
+^pyproject\.toml$
+^CONTRIBUTING\.md$
+^CLAUDE\.md$
+^action\.yml$
+^VERSION$
+^\.Rhistory$
+^\.claude$
+^\.pytest_cache$
+^\.rpfy-logs$
+^dev$
+^_pkgdown\.yml$
+^pkgdown$
+# vignettes/articles/ is pkgdown's "article, not a real vignette"
+# convention -- rendered for the docs site only, not built into the
+# package (no VignetteBuilder needed, R CMD check should never see it).
+^vignettes/articles$

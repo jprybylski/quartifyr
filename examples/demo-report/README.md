@@ -47,20 +47,20 @@ a real `reportifyr` fill pass.
   comment for the full "style bleed" explanation.
 - `report/standard_footnotes.yaml`, `report/config.yaml` -- reportifyr's
   own defaults (via `reportifyr::initialize_report_project()`).
-- `render.R` -- runs the full pipeline via the toolkit's
-  `render_report()` (see `../../r/README.md`).
+- `render.R` -- runs the full pipeline via the `quartifyr` R package's
+  `render_report()` (see the repo-root README).
 - `smoke_test.py` -- automated end-to-end check (see below).
 
 ## Quick look: shell only, Quarto alone (no R, no Python)
 
-`../../templates/org-reference.docx` is committed to the repo (see the
-repo-root README's "Style YAML and reference-doc" section), so the shell
-alone -- title page, signature pages, synopsis, everything pass 1
+`../../inst/templates/org-reference.docx` is committed to the repo (see
+the repo-root README's "Style YAML and reference-doc" section), so the
+shell alone -- title page, signature pages, synopsis, everything pass 1
 produces -- renders with nothing but Quarto installed:
 
 ```bash
 cd examples/demo-report
-quarto render report.qmd --to docx --reference-doc ../../templates/org-reference.docx \
+quarto render report.qmd --to docx --reference-doc ../../inst/templates/org-reference.docx \
   -M document-status:DRAFT
 ```
 
@@ -74,22 +74,30 @@ the result.
 
 For the full two-pass pipeline (real tables/figures/abbreviations filled
 in), this repo's toolchain needs to be set up: `Rscript -e
-'renv::restore()'` in both `../../r/` and this directory, and the
-`styling/` venv (`uv venv .venv && uv pip install -e "./styling[dev]"`
-from the repo root). If `restore()` here unexpectedly tries to reach
-GitHub or recurrently times out against `a2-ai.r-universe.dev`, see
-`../../r/README.md`'s "If `renv::restore()` tries to reach GitHub"
-section -- same lockfile/`.Rprofile` setup, same fix.
+'renv::restore()'` in this directory, the `quartifyr` R package itself
+(`Rscript -e 'renv::install("local::../..")'`, from this directory --
+installs into this project's own renv library, pulling in
+`reportifyr`/`pyro` transitively), and the repo-root Python venv (`uv
+venv .venv && uv pip install -e '.[dev]'` from the repo root). If
+`renv::restore()`/`renv::install()` here unexpectedly tries to reach
+GitHub or recurrently times out against `a2-ai.r-universe.dev`: r-universe
+stamps GitHub provenance (`RemoteType`/`RemoteUrl`/`RemoteSha`) into
+`reportifyr`/`pyro`'s `DESCRIPTION`, which `renv` can fall back to
+`git clone`-ing if a repository-based install doesn't succeed first try;
+this project's `.Rprofile` already raises R's download timeout to
+mitigate slow/proxied links reaching `a2-ai.r-universe.dev` in the first
+place.
 
 `.report_init.json` is gitignored (it embeds a username/timestamp), so a
-fresh clone needs one setup call before the first render -- this is safe
-to run even though `report/standard_footnotes.yaml`/`report/config.yaml`/
-`OUTPUTS/` are already committed: `reportifyr::initialize_report_project()`
-only creates files that don't already exist, it never overwrites them.
+fresh clone needs two setup calls before the first render -- both are
+safe to run even though `report/standard_footnotes.yaml`/
+`report/config.yaml`/`OUTPUTS/` are already committed, since neither
+overwrites existing files:
 
 ```bash
 cd examples/demo-report
 Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'
+Rscript -e 'quartifyr::initialize_quartifyr_project(getwd())'
 
 Rscript render.R           # -> report/draft/report-draft.docx
 Rscript render.R --final   # also -> report/final/report-final.docx

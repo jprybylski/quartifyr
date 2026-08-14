@@ -11,5 +11,6 @@ Imports:
     ggplot2,
     withr,
     pyro,
-    reportifyr
+    reportifyr,
+    quartifyr
 Encoding: UTF-8

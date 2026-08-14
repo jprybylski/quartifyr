@@ -2,14 +2,14 @@
 """Integration test for the "Using the pieces directly" path documented
 in the repo-root README: plain `quarto render` + `quartifyr-styling
 apply-layout` + a direct `reportifyr::build_report()` call, with none of
-`r/`'s `render_report()` orchestration, its `renv`-managed environment, or
-its `report/shell`/`report/draft`/`report/final` directory convention
+the `quartifyr` R package's `render_report()` orchestration or its
+`report/shell`/`report/draft`/`report/final` directory convention
 involved.
 
 This exists to prove that documented claim is actually true, not just
 written down: the shell renders from a temp project containing nothing
 but a physical copy of the extensions and a bare `report.qmd` -- no
-`_quarto.yml`, no `render.R`, no `r/` at all.
+`_quarto.yml`, no `render.R`, no `quartifyr::render_report()` at all.
 
 Reuses `examples/demo-report`'s already-initialized reportifyr project
 (its `OUTPUTS/`, `standard_footnotes.yaml`, `config.yaml`, and renv-managed
@@ -20,7 +20,7 @@ prerequisite, unrelated to what's being tested here -- while proving
 structure required between the Quarto render and the reportifyr fill.
 
 Requires the full toolchain: Quarto, R (with examples/demo-report's
-renv-managed packages already restored and initialized), and the styling/
+renv-managed packages already restored and initialized), and the Python
 venv. Run from anywhere:
 
     python3 scripts/bare_bones_integration_test.py
@@ -39,7 +39,7 @@ from docx.oxml.ns import qn
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEMO_DIR = REPO_ROOT / "examples" / "demo-report"
-REFERENCE_DOC = REPO_ROOT / "templates" / "org-reference.docx"
+REFERENCE_DOC = REPO_ROOT / "inst" / "templates" / "org-reference.docx"
 BUILD_REPORT_HELPER = Path(__file__).resolve().parent / "_bare_bones_build_report.R"
 
 REPORT_QMD = """---
@@ -115,7 +115,7 @@ def main() -> int:
         # _quarto.yml, no report/shell//report/draft//report/final
         # layout. Just the extensions, physically copied (matching what
         # `quarto add` would leave behind), and a shell .qmd.
-        shutil.copytree(REPO_ROOT / "_extensions" / "quartifyr", project_dir / "_extensions" / "quartifyr")
+        shutil.copytree(REPO_ROOT / "inst" / "extensions" / "quartifyr", project_dir / "_extensions" / "quartifyr")
         # quarto-plus isn't vendored at the repo root (quartifyr is the
         # only canonical extension there) -- reuse the copy `quarto add
         # A2-ai/quarto-plus` already left in the demo project.

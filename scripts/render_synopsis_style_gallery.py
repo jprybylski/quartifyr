@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate docs/assets/img/synopsis-style-*.png -- a side-by-side
+"""Regenerate man/figures/synopsis-style-*.png -- a side-by-side
 comparison of synopsis-style: definition-list/inline/table, each
 rendered from examples/demo-report's actual content through the real
 `Rscript render.R --final` pipeline (not a synthetic fixture), so the
@@ -30,7 +30,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEMO_DIR = REPO_ROOT / "examples" / "demo-report"
 REPORT_QMD = DEMO_DIR / "report.qmd"
-IMG_DIR = REPO_ROOT / "docs" / "assets" / "img"
+IMG_DIR = REPO_ROOT / "man" / "figures"
 
 STYLES = ["definition-list", "inline", "table"]
 
