@@ -1,7 +1,7 @@
 Type: Package
 Package: quartifyr
 Title: Code-First Regulated Document Shells with Quarto
-Version: 0.2.0
+Version: 0.2.1
 Description: Generates styled, structurally-complete docx "shells" (title
     page, signature pages, ToC, synopsis, numbered appendices) for
     scientific/regulated reports from Quarto, emitting {rpfy}: magic-string
