@@ -419,16 +419,16 @@ incomplete rather than papered over:
   [`_extensions/quartifyr/README.md`](_extensions/quartifyr/README.md#bibliography--references)'s
   "Known limitation" note.
 
-## vs. pharmtex and onbrand
+## vs. pharmtex, onbrand, and vanilla Quarto
 
-| | pharmtex (LaTeX) | [onbrand](https://onbrand.ubiquity.tools/) (officer) | quartifyr |
-| --- | --- | --- | --- |
-| Toolchain | Full LaTeX distribution + custom packages | R + `officer` (CRAN) | Quarto + R + Python, all mainstream, cross-platform installers |
-| Org styling | LaTeX template files, org-specific macros | Hand-built Word/PowerPoint file, mapped to human-readable names via YAML | One YAML file per org, no hand-built template at all |
-| Failure mode | Obscure LaTeX compile errors, package resolution | Ordinary R errors, but silent breakage if the mapping YAML drifts from the hand-edited template | Ordinary Quarto/R/Python errors with normal stack traces |
-| Output format | PDF | `.docx` / `.pptx` | `.docx`; reviewers use Word's own track-changes/comments |
-| Learning curve | Steep (LaTeX syntax, package ecosystem) | R + `officer` conventions | A `.qmd` is Markdown + YAML frontmatter |
-| Report fill | Custom | Imperative R calls (`report_add_doc_content()`/`report_add_slide()`) in the same script that generates content, no shell/fill separation | `reportifyr` today; pass-2 is a pluggable fill step, not fixed to it |
+| | pharmtex (LaTeX) | [onbrand](https://onbrand.ubiquity.tools/) (officer) | vanilla Quarto | quartifyr |
+| --- | --- | --- | --- | --- |
+| Toolchain | Full LaTeX distribution + custom packages | R + `officer` (CRAN) | Quarto alone (R/Python only if your own code chunks need them) | Quarto + R + Python, all mainstream, cross-platform installers |
+| Org styling | LaTeX template files, org-specific macros | Hand-built Word/PowerPoint file, mapped to human-readable names via YAML | Hand-built docx reference-doc (pandoc's own convention: render once, restyle in Word, reuse), no mapping layer at all | One YAML file per org, no hand-built template at all |
+| Failure mode | Obscure LaTeX compile errors, package resolution | Ordinary R errors, but silent breakage if the mapping YAML drifts from the hand-edited template | Ordinary Quarto/pandoc errors | Ordinary Quarto/R/Python errors with normal stack traces |
+| Output format | PDF | `.docx` / `.pptx` | `.docx` (or any of Quarto's many other targets) | `.docx`; reviewers use Word's own track-changes/comments |
+| Learning curve | Steep (LaTeX syntax, package ecosystem) | R + `officer` conventions | A `.qmd` is Markdown + YAML frontmatter, but no title/signature/synopsis/appendix pieces -- hand-roll each report's structure | A `.qmd` is Markdown + YAML frontmatter, structural pieces included |
+| Report fill | Custom | Imperative R calls (`report_add_doc_content()`/`report_add_slide()`) in the same script that generates content, no shell/fill separation | None -- content is authored/executed inline as code chunks at render time, no separate shell/fill pass | `reportifyr` today; pass-2 is a pluggable fill step, not fixed to it |
 
 ## License
 
