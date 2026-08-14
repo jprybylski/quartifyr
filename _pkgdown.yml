@@ -6,6 +6,21 @@ template:
   bootstrap: 5
   bslib:
     primary: "#0054AD"
+  includes:
+    # pkgdown's own markdown renderer already emits `<pre class="mermaid">`
+    # for ```mermaid fenced code blocks (confirmed in a local
+    # pkgdown::build_home() run) -- that's the exact markup mermaid.js
+    # looks for, but pkgdown doesn't bundle or load mermaid.js itself
+    # outside of Quarto-authored vignettes (which render diagrams to
+    # static SVG at build time instead, see `vignette("quarto", "pkgdown")`).
+    # README.md's diagram isn't Quarto-authored, so it needs the JS library
+    # loaded client-side here for GitHub Pages to render it the same way
+    # GitHub's own README preview already does.
+    after_body: |
+      <script type="module">
+        import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+        mermaid.initialize({ startOnLoad: true });
+      </script>
 
 home:
   title: quartifyr
