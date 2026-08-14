@@ -1,0 +1,89 @@
+# Standard R test-coverage workflow, adapted from
+# https://github.com/r-lib/actions/tree/v2/examples (same upstream source
+# as ../R-CMD-check.yaml, which this mirrors for dependency setup --
+# r-lib/actions/setup-r-dependencies@v2 with `needs: coverage` resolves
+# and caches the Suggests/Imports pak needs via its own binary cache,
+# rather than a hand-rolled install.packages() that rebuilds
+# reportifyr/pyro from source on every run).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+name: test-coverage.yaml
+
+permissions: read-all
+
+jobs:
+  test-coverage:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      # Runtime/build libraries reportifyr/pyro's own transitive
+      # dependencies need against Ubuntu's binary R packages -- same as
+      # ../R-CMD-check.yaml and ci.yml's full-pipeline job.
+      - name: Install R package system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libuv1-dev libgit2-dev libcurl4-openssl-dev libssl-dev libxml2-dev
+
+      # Identical to ../R-CMD-check.yaml's own step -- keep both in sync if
+      # DESCRIPTION's Additional_repositories ever changes.
+      - name: Add Additional_repositories from DESCRIPTION (pyro/reportifyr via a2-ai.r-universe.dev)
+        run: |
+          raw <- read.dcf("DESCRIPTION", fields = "Additional_repositories")[1, 1]
+          if (!is.na(raw) && nzchar(raw)) {
+            repos <- trimws(strsplit(raw, ",")[[1]])
+            cat(sprintf("options(repos = c(getOption('repos'), %s))\n", deparse(repos)),
+                file = path.expand("~/.Rprofile"), append = TRUE)
+          }
+        shell: Rscript {0}
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::covr, any::xml2
+          needs: coverage
+
+      - name: Test coverage
+        run: |
+          cov <- covr::package_coverage(
+            quiet = FALSE,
+            clean = FALSE,
+            install_path = file.path(normalizePath(Sys.getenv("RUNNER_TEMP"), winslash = "/"), "package")
+          )
+          print(cov)
+          covr::to_cobertura(cov)
+        shell: Rscript {0}
+
+      - uses: codecov/codecov-action@v5
+        with:
+          # Fail the job if not on a PR (i.e. a push to main), or if on a
+          # PR and a token is actually configured -- on a PR with no token,
+          # Codecov's tokenless upload is best-effort and shouldn't block.
+          fail_ci_if_error: ${{ github.event_name != 'pull_request' || secrets.CODECOV_TOKEN }}
+          files: ./cobertura.xml
+          plugins: noop
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Show testthat output
+        if: always()
+        run: |
+          find '${{ runner.temp }}/package' -name 'testthat.Rout*' -exec cat '{}' \; || true
+        shell: bash
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-test-failures
+          path: ${{ runner.temp }}/package
