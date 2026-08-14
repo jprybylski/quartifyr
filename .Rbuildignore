@@ -1,3 +1,14 @@
+# NOTE: .Rbuildignore has no real comment syntax -- R compiles every
+# non-blank line (# lines included) as its own Perl regex and matches it
+# against relative file paths. A "#" line is normally a harmless no-op
+# (matches nothing), EXCEPT R CMD build hard-errors if that line isn't
+# valid regex on its own -- confirmed the hard way: a multi-line comment
+# here with an opening "(" on one line and its closing ")" on the next
+# broke the regex compiler and failed every subsequent build, including
+# the one that shipped changelog.md into a real released tarball because
+# the (broken) exclusion for it silently never took effect. Keep every
+# comment line below self-contained and free of unbalanced regex
+# metacharacters -- no line-spanning parens/brackets/quotes.
 ^examples$
 ^docs$
 ^scripts$
@@ -11,6 +22,9 @@
 ^CLAUDE\.md$
 ^action\.yml$
 ^VERSION$
+# changelog.md: scratch file sync-release-metadata.R writes just before
+# R CMD build runs in the same release.yaml job; not meant to ship.
+^changelog\.md$
 ^\.Rhistory$
 ^\.claude$
 ^\.pytest_cache$
@@ -18,7 +32,6 @@
 ^dev$
 ^_pkgdown\.yml$
 ^pkgdown$
-# vignettes/articles/ is pkgdown's "article, not a real vignette"
-# convention -- rendered for the docs site only, not built into the
-# package (no VignetteBuilder needed, R CMD check should never see it).
+# vignettes/articles/: pkgdown's own "article, not a real vignette" path.
+# Site-only content, not a package vignette, no VignetteBuilder needed.
 ^vignettes/articles$
