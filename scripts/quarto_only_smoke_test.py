@@ -47,7 +47,11 @@ EXAMPLES = [
     {
         "name": "demo-report",
         "dir": REPO_ROOT / "examples" / "demo-report",
-        "extra_files": ["references.bib"],
+        # scripts/01_analysis.R is needed even in this no-R/no-reportifyr
+        # path: report.qmd's Analysis Code appendix embeds it via Quarto's
+        # own native `{{< include >}}` shortcode, resolved by `quarto
+        # render` itself, not by executing any R.
+        "extra_files": ["references.bib", "scripts/01_analysis.R"],
         "expect_present": ["Population Pharmacokinetics of Theophylline"],
     },
     {
@@ -80,6 +84,7 @@ def _render_one(example: dict) -> list[tuple[str, bool]]:
         if (project_dir / "assets").exists():
             shutil.copytree(project_dir / "assets", work_dir / "assets")
         for extra in example["extra_files"]:
+            (work_dir / extra).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(project_dir / extra, work_dir / extra)
 
         output_docx = work_dir / "shell.docx"

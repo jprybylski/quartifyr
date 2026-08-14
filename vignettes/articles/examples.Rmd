@@ -19,8 +19,12 @@ A small PK-style report built from `Theoph`, exercising every piece of
 the toolkit: dynamic title page, draft/final status stamp,
 contributor/approver signature pages, table of contents (including the
 title page), list of figures, list of tables, only-used abbreviations, a
-citeproc-driven bibliography, a numbered appendix, and a real
-`reportifyr` fill pass.
+citeproc-driven bibliography, two numbered appendices, and a real
+`reportifyr` fill pass. The second appendix embeds the analysis script
+itself with real syntax highlighting via Quarto's own native
+`{{< include >}}` shortcode nested in a fenced code block -- not a
+quartifyr feature, just plain Quarto -- so it's demonstrated here rather
+than documented as toolkit behavior.
 
 **Quick look (Quarto only, no R/Python)**: renders the shell with
 `{rpfy}:` placeholders left literal:
@@ -48,11 +52,20 @@ Rendered output from a real `report/final/report-final.docx`:
 <div><img src="../man/figures/demo-report-synopsis.png" alt="demo-report synopsis page, showing synopsis-style: inline -- Title/Objectives/Methods/Results labels running into their first value line, with an inline embedded figure in the Results row" width="330" loading="lazy"><p style="text-align:center; font-size:0.85em;">Synopsis</p></div>
 <div><img src="../man/figures/demo-report-body.png" alt="demo-report body page showing the filled per-participant PK summary table with a live caption, source footnote, and abbreviations line" width="330" loading="lazy"><p style="text-align:center; font-size:0.85em;">Filled body (PK summary table)</p></div>
 <div><img src="../man/figures/demo-report-appendix.png" alt="demo-report numbered appendix page, Appendix A, generated via a Word SEQ field" width="330" loading="lazy"><p style="text-align:center; font-size:0.85em;">Numbered appendix</p></div>
+<div><img src="../man/figures/demo-report-analysis-code.png" alt="demo-report second appendix, Appendix B, showing the analysis script embedded and syntax-highlighted via Quarto's native include shortcode" width="330" loading="lazy"><p style="text-align:center; font-size:0.85em;">Analysis code appendix</p></div>
 </div>
 
 The synopsis above uses `synopsis-style: inline`; see [Quarto
 extension](quarto-extension.html#synopsis) for a side-by-side comparison
 of all four layout options.
+
+Download the real rendered file:
+<!-- pkgdown copies man/figures/ to docs/reference/figures/ (confirmed via
+     a local pkgdown::build_site() run) and auto-rewrites <img> src
+     paths accordingly, but NOT plain markdown link hrefs -- an
+     `../man/figures/...` link here would 404 on the built site, so this
+     points straight at the real built location. -->
+[`demo-report-final.docx`](../reference/figures/demo-report-final.docx).
 
 Verify it worked with the bundled smoke test, which asserts on the
 actual rendered content (no leftover `{rpfy}:` strings, tables/figures
@@ -86,6 +99,9 @@ Rscript render.R --final
 <div><img src="../man/figures/memo-example-cover.png" alt="memo-example cover page, showing a left-aligned MEMORANDUM banner and To/From/Date/Re/Cc grid, no table of contents" width="330" loading="lazy"><p style="text-align:center; font-size:0.85em;">Memo cover</p></div>
 <div><img src="../man/figures/memo-example-body.png" alt="memo-example body page showing the filled budget-timeline figure with a live caption and hyperlinked crossref" width="330" loading="lazy"><p style="text-align:center; font-size:0.85em;">Filled body (figure)</p></div>
 </div>
+
+Download the real rendered file:
+[`memo-example-final.docx`](../reference/figures/memo-example-final.docx).
 
 ```bash
 python3 examples/memo-example/smoke_test.py

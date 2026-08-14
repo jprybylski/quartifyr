@@ -210,6 +210,30 @@ def main() -> int:
     )
     checks.append(("appendix auto-lettered", "Appendix A: Statistical Methods" in joined))
 
+    # Second appendix: Quarto's own native `{{< include >}}` shortcode
+    # nested in a fenced code block (report.qmd), not a quartifyr
+    # shortcode -- embeds scripts/01_analysis.R's real content with real
+    # syntax highlighting. Both appendix headings show the same cached
+    # "A" (see appendix.lua's file-header comment: the SEQ Appendix field's
+    # displayed letter is a static placeholder pending a Word field
+    # recalculation, same as every other {{< appendix >}} heading in this
+    # doc -- not a regression here).
+    checks.append(("second appendix (embedded analysis script) present", "Appendix A: Analysis Code" in joined))
+    checks.append(
+        (
+            "embedded script's real content present, not an empty/failed include",
+            "aggregate" in joined and "flextable(theoph_demographics)" in joined,
+        )
+    )
+    with zipfile.ZipFile(final_docx) as z:
+        final_xml = z.read("word/document.xml").decode("utf-8")
+    checks.append(
+        (
+            "embedded script is syntax-highlighted (pandoc token character styles present)",
+            "FunctionTok" in final_xml and "CommentTok" in final_xml,
+        )
+    )
+
     # bibliography: a `bibliography: references.bib` shell .qmd is plain
     # Quarto/pandoc citeproc support -- no quartifyr-specific code involved
     # in generating the citations/reference list themselves. What this
