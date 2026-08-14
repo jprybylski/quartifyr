@@ -419,16 +419,16 @@ incomplete rather than papered over:
   [`_extensions/quartifyr/README.md`](_extensions/quartifyr/README.md#bibliography--references)'s
   "Known limitation" note.
 
-## vs. pharmtex
+## vs. pharmtex and onbrand
 
-| | pharmtex (LaTeX) | quartifyr |
-| --- | --- | --- |
-| Toolchain | Full LaTeX distribution + custom packages | Quarto + R + Python, all mainstream, cross-platform installers |
-| Org styling | LaTeX template files, org-specific macros | One YAML file per org |
-| Failure mode | Obscure LaTeX compile errors, package resolution | Ordinary Quarto/R/Python errors with normal stack traces |
-| Output format | PDF | `.docx`; reviewers use Word's own track-changes/comments |
-| Learning curve | Steep (LaTeX syntax, package ecosystem) | A `.qmd` is Markdown + YAML frontmatter |
-| Report fill | Custom | `reportifyr` today; pass-2 is a pluggable fill step, not fixed to it |
+| | pharmtex (LaTeX) | [onbrand](https://onbrand.ubiquity.tools/) (officer) | quartifyr |
+| --- | --- | --- | --- |
+| Toolchain | Full LaTeX distribution + custom packages | R + `officer` (CRAN) | Quarto + R + Python, all mainstream, cross-platform installers |
+| Org styling | LaTeX template files, org-specific macros | Hand-built Word/PowerPoint file, mapped to human-readable names via YAML | One YAML file per org, no hand-built template at all |
+| Failure mode | Obscure LaTeX compile errors, package resolution | Ordinary R errors, but silent breakage if the mapping YAML drifts from the hand-edited template | Ordinary Quarto/R/Python errors with normal stack traces |
+| Output format | PDF | `.docx` / `.pptx` | `.docx`; reviewers use Word's own track-changes/comments |
+| Learning curve | Steep (LaTeX syntax, package ecosystem) | R + `officer` conventions | A `.qmd` is Markdown + YAML frontmatter |
+| Report fill | Custom | Imperative R calls (`report_add_doc_content()`/`report_add_slide()`) in the same script that generates content, no shell/fill separation | `reportifyr` today; pass-2 is a pluggable fill step, not fixed to it |
 
 ## License
 
