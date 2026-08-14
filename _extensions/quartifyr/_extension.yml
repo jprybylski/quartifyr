@@ -1,0 +1,54 @@
+title: Quartifyr
+author: jprybylski
+version: 0.1.0
+license: GPL-3.0-or-later
+quarto-required: ">=1.6.36"
+contributes:
+  shortcodes:
+    - appendix.lua
+    - body_start.lua
+  filters:
+    # Order matters here -- each listed file runs as a complete pass
+    # (its own Meta stage, then its own Pandoc stage) over the whole
+    # document before the next file starts, so a later filter always
+    # sees an earlier filter's *already-modified* metadata/AST, never
+    # the original. Three independent reasons this list's order is
+    # load-bearing:
+    #
+    # 1. title_page.lua's Meta stage sets meta.title = nil (to suppress
+    #    pandoc's own auto title-block). synopsis.lua (which also reads
+    #    meta.title, for its "Title" row) MUST run before title_page.lua,
+    #    or it sees title already nulled out. Confirmed: listing it after
+    #    produced an empty Title row.
+    #
+    # 2. For the same reason, memo_cover.lua MUST also run before
+    #    title_page.lua: its Meta stage reads the still-live meta.title
+    #    to detect a misconfigured project that set both `title:` and
+    #    `memo:` (see memo_cover.lua's file-header comment for why that
+    #    combination has to be rejected, not just visually deduplicated)
+    #    -- if title_page.lua ran first, meta.title would already be nil
+    #    by the time memo_cover.lua checked it, and the guard would never
+    #    fire.
+    #
+    # 3. signature_page.lua, memo_cover.lua, and title_page.lua all
+    #    prepend their content at position 1, so their relative order is
+    #    the REVERSE of final page order: signature_page runs first and
+    #    pushes itself to the front, then memo_cover runs and pushes
+    #    itself in front of that, then title_page runs last and pushes
+    #    itself in front of that again -- yielding cover page (memo or
+    #    title, whichever actually rendered), then signature/approval
+    #    pages, then the rest of the document. See signature_page.lua for
+    #    details. (In practice only one of memo_cover.lua/title_page.lua
+    #    ever renders anything for a given project -- see their own
+    #    guards -- so this reversal only matters for which one wins the
+    #    front position in the misconfigured both-set case.)
+    # bibliography.lua only sets a `csl:` default in Meta if the project
+    # hasn't set its own -- independent of the ordering constraints above,
+    # since none of synopsis/signature_page/memo_cover/title_page read or
+    # write meta.csl. Listed first only for visibility, not because it has
+    # to run before the others.
+    - bibliography.lua
+    - synopsis.lua
+    - signature_page.lua
+    - memo_cover.lua
+    - title_page.lua

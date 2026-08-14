@@ -102,8 +102,10 @@ python3 examples/demo-report/smoke_test.py
 # orchestration)
 python3 scripts/bare_bones_integration_test.py
 
-# Check the demo's physical extension copy hasn't drifted from the
-# repo-root canonical one (Quarto doesn't follow symlinks for extensions)
+# Check every physical extension copy (both examples' + the repo-root
+# one, see "Quarto extension host" below) hasn't drifted from the
+# inst/extensions/quartifyr/ canonical one (Quarto doesn't follow
+# symlinks for extensions)
 python3 scripts/sync_demo_extension.py --check
 python3 scripts/sync_demo_extension.py   # re-sync if it has drifted
 
@@ -115,6 +117,11 @@ python3 scripts/check_template_freshness.py   # rebuild if it has drifted
 # Quarto-render-only path (no R, no reportifyr, no Python venv) for both
 # examples, against the committed reference-doc -- only needs `quarto`
 python3 scripts/quarto_only_smoke_test.py
+
+# Proves `quarto add jprybylski/quartifyr` itself works (see "Quarto
+# extension host" below) by running it against a zip of the current
+# commit instead of GitHub -- only needs `quarto` and `git`
+python3 scripts/quarto_add_smoke_test.py
 
 # Unit-style check of synopsis.lua's synopsis-style: options (definition-list/
 # inline/table/false) against a small standalone fixture -- needs `quarto`
@@ -173,6 +180,21 @@ not a quartifyr invention.** The Lua filters emit them (e.g.
 external) resolves them from `OUTPUTS/figures/`/`OUTPUTS/tables/`. A
 plain `quarto render` alone leaves the literal `{rpfy}:...` text visible;
 that's expected, not a bug, until pass 2 runs.
+
+**Quarto extension host: `_extensions/quartifyr/` at the repo root is a
+third physical copy, not the canonical one.** `inst/extensions/quartifyr/`
+stays the source of truth (what the R package bundles and installs via
+`install_quartifyr_extension()`); the repo-root copy exists solely so
+`quarto add jprybylski/quartifyr` (issue #16) finds a valid extension the
+way it would in any GitHub-hosted extension repo -- `quarto add` scans a
+downloaded repo zip for a root-level `_extension.yml` or `_extensions/*/
+_extension.yml` and errors ("Found 0 extensions") without one; it doesn't
+know or care about `inst/`. Excluded from the R package build via
+`.Rbuildignore`'s `^_extensions$`. Kept in sync (alongside both examples'
+own copies) by `scripts/sync_demo_extension.py --check`, and validated
+end-to-end by `scripts/quarto_add_smoke_test.py`, which runs `quarto add`
+against a zip of the current commit rather than waiting for a push to
+GitHub to find out it broke.
 
 **pStyle ID vs. display name: easy to get backwards, fails silently in
 opposite directions.** Raw OOXML injected by the Lua filters

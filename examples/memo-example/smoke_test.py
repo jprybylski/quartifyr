@@ -50,9 +50,9 @@ def main() -> int:
         return 0
 
     # Same drift check examples/demo-report/smoke_test.py runs -- the
-    # script covers every examples/*/_extensions/quartifyr/ physical copy
-    # (see scripts/sync_demo_extension.py), so this one call validates
-    # this project's copy too, not just demo-report's.
+    # script covers every physical copy of the extension, both examples'
+    # and the repo-root one (see scripts/sync_demo_extension.py), so this
+    # one call validates this project's copy too, not just demo-report's.
     sync_check = subprocess.run(
         ["python3", str(REPO_ROOT / "scripts" / "sync_demo_extension.py"), "--check"],
         capture_output=True,

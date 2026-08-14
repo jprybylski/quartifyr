@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Keep every examples/*/_extensions/quartifyr/ in sync with the
-canonical inst/extensions/quartifyr/ (the R package's bundled copy,
-installed via install_quartifyr_extension() -- see R/install-extension.R).
+"""Keep every physical copy of the extension in sync with the canonical
+inst/extensions/quartifyr/ (the R package's bundled copy, installed via
+install_quartifyr_extension() -- see R/install-extension.R): both
+bundled examples' _extensions/quartifyr/, and the repo-root
+_extensions/quartifyr/ that makes `quarto add jprybylski/quartifyr`
+work (see scripts/quarto_add_smoke_test.py and CLAUDE.md's "Quarto
+extension host" note -- issue #16).
 
 Quarto's extension loader doesn't follow symlinks (confirmed: `quarto
 render` fails outright with a symlinked _extensions/quartifyr/), so each
-example project has to carry a real, physical copy rather than a link
-that would guarantee sync by construction. This script is the
-alternative: run with --check (used by each example's smoke_test.py, and
-safe to wire into CI) to fail loudly on drift, or with no args to re-copy
-and fix it.
+of these has to carry a real, physical copy rather than a link that
+would guarantee sync by construction. This script is the alternative:
+run with --check (used by each example's smoke_test.py, and safe to wire
+into CI) to fail loudly on drift, or with no args to re-copy and fix it.
 
 Usage:
     python3 scripts/sync_demo_extension.py          # re-sync (fixes drift)
@@ -28,6 +31,10 @@ SOURCE = REPO_ROOT / "inst" / "extensions" / "quartifyr"
 DESTS = [
     REPO_ROOT / "examples" / "demo-report" / "_extensions" / "quartifyr",
     REPO_ROOT / "examples" / "memo-example" / "_extensions" / "quartifyr",
+    # Not shipped in the R package (see .Rbuildignore's `^_extensions$`)
+    # -- exists solely so `quarto add jprybylski/quartifyr` finds a valid
+    # extension at the repo root, the way GitHub-hosted extensions work.
+    REPO_ROOT / "_extensions" / "quartifyr",
 ]
 
 
