@@ -183,14 +183,16 @@ test_that("orchestrates quarto render -> apply-layout -> build_report() for stat
   expect_identical(record$apply_layout$status, "draft")
   expect_identical(normalizePath(record$apply_layout$docx), normalizePath(result$shell))
 
-  expect_identical(
-    record$build_report$figures_path,
-    file.path(normalizePath(fixture$project_dir), "OUTPUTS", "figures")
-  )
-  expect_identical(
-    record$build_report$tables_path,
-    file.path(normalizePath(fixture$project_dir), "OUTPUTS", "tables")
-  )
+  # Mirror render_report()'s own expression exactly (dirname() of the
+  # *normalized* shell_qmd) rather than normalizing project_dir
+  # independently -- on Windows the two don't produce identical slash
+  # styles (confirmed via a real CI run: normalizePath(shell_qmd) then
+  # dirname() yields forward slashes throughout, while normalizing
+  # project_dir on its own doesn't), so only the identical call sequence
+  # is guaranteed to match.
+  expected_dir <- dirname(normalizePath(fixture$shell_qmd, mustWork = TRUE))
+  expect_identical(record$build_report$figures_path, file.path(expected_dir, "OUTPUTS", "figures"))
+  expect_identical(record$build_report$tables_path, file.path(expected_dir, "OUTPUTS", "tables"))
   expect_identical(record$build_report$standard_footnotes_yaml, fixture$standard_footnotes_yaml)
   expect_identical(record$build_report$config_yaml, fixture$config_yaml)
 
