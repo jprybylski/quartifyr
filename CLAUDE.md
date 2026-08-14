@@ -78,8 +78,10 @@ Rscript -e 'devtools::load_all(".")'
 
 # Install for real use (into a report project's own renv library, run
 # from that project's directory so it lands in the right place -- see
-# "A calling project's R package library" note below)
-Rscript -e 'renv::install("local::/path/to/quartifyr")'
+# "A calling project's R package library" note below). "local::..." only
+# for testing an uncommitted local checkout (matches ci.yml/action.yml's
+# own usage) -- a real report project should install from GitHub instead:
+Rscript -e 'renv::install("jprybylski/quartifyr")'
 
 # As an R function
 Rscript -e 'quartifyr::render_report("/path/to/project/report.qmd", status = "draft")'
@@ -150,7 +152,10 @@ R/uv setup; proof the Quarto-only render path has no R or Python
 dependency of its own. The root `quartifyr` R package itself is **not**
 renv-managed (see "A calling project's R package library" below); CI
 installs it into each example's own renv library via `renv::install
-("local::...")`, mirroring `action.yml`'s identical step.
+("local::...")` -- pointed at the checked-out working copy rather than
+GitHub specifically so a PR's changes get tested before they're merged,
+unlike `action.yml`'s own install step (which installs from GitHub, per
+its actual released/default-branch state, not this checkout).
 
 ## Architecture notes that span files
 
@@ -222,16 +227,18 @@ importable if the R session never activated that project's
 **not** renv-managed (no `renv.lock` at the package root -- see
 `../deckifyr`'s identical convention), so every report project needs it
 installed into *its own* renv library explicitly:
-`renv::install("local::/path/to/quartifyr")`, run with the project
-directory as cwd. `examples/demo-report/render.R`'s own subprocess call
-and `action.yml`'s composite steps all run with cwd already set to the
-*project's* directory for exactly this reason (`library(quartifyr)`
-needs the project's own renv-activated library path). Don't "simplify"
-one of these call sites to run from the quartifyr checkout root instead
--- it'll fail to find `reportifyr`/`pyro`, since quartifyr's own
-(non-renv) library and a project's `renv.lock`-pinned library are
-entirely separate (see `action.yml`'s "renv restore (calling project)"
-and "Install the quartifyr R package" steps).
+`renv::install("jprybylski/quartifyr")` (or `"local::/path/to/quartifyr"`
+when testing an uncommitted checkout, as `ci.yml` does), run with the
+project directory as cwd. `examples/demo-report/render.R`'s own
+subprocess call and `action.yml`'s composite steps all run with cwd
+already set to the *project's* directory for exactly this reason
+(`library(quartifyr)` needs the project's own renv-activated library
+path). Don't "simplify" one of these call sites to run from the
+quartifyr checkout root instead -- it'll fail to find
+`reportifyr`/`pyro`, since quartifyr's own (non-renv) library and a
+project's `renv.lock`-pinned library are entirely separate (see
+`action.yml`'s "renv restore (calling project)" and "Install the
+quartifyr R package" steps).
 
 **The `report/shell` → `report/draft`/`report/final` directory
 convention is load-bearing for `render_report()`, not just a naming

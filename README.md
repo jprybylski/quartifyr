@@ -15,7 +15,7 @@ below).
 quartifyr is an installable R package:
 
 ```r
-pak::pkg_install("local::/path/to/quartifyr")   # or remotes::install_local()
+pak::pak("jprybylski/quartifyr")   # or remotes::install_github("jprybylski/quartifyr")
 ```
 
 `quartifyr::render_report()` is the orchestration driver: it chains a

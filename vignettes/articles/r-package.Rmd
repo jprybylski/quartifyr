@@ -29,7 +29,7 @@ calling the three pieces yourself instead.
 ```r
 # Install the package into a report project's own renv library, run from
 # that project's directory
-renv::install("local::/path/to/quartifyr")
+renv::install("jprybylski/quartifyr")
 
 # Provision the project's quartifyr Python dependency group (once per
 # project, alongside reportifyr::initialize_report_project())

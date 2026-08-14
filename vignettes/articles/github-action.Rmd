@@ -53,7 +53,8 @@ expects one that's already a proper quartifyr + `reportifyr` project
 - Its own `renv.lock` (with `reportifyr`/`pyro` pinned, same shape as
   [`examples/demo-report/renv.lock`](https://github.com/jprybylski/quartifyr/blob/main/examples/demo-report/renv.lock))
   -- the action installs `quartifyr` itself into *this* project's renv
-  library (`renv::install("local::...")`), it does **not** bring its own
+  library (`renv::install("jprybylski/quartifyr")`, from GitHub, not
+  from this action's own checkout), it does **not** bring its own
   separate one. Whatever analysis packages produced
   `OUTPUTS/figures/`/`OUTPUTS/tables/` belong in this lockfile too,
   since the action runs `renv::restore()` against it before rendering.
@@ -61,9 +62,9 @@ expects one that's already a proper quartifyr + `reportifyr` project
   (`reportifyr::initialize_report_project()`'s usual output).
 
 The action does *not* need `inst/extensions/`, `inst/templates/`, or
-`inst/python/` checked out in the calling repo -- it brings its own copy
-of all of those from its own release, resolved via `github.action_path`
-and installed into the calling project's renv library.
+`inst/python/` checked out in the calling repo -- installing the
+`quartifyr` R package (above) brings all of those along as bundled
+package data.
 
 ## Inputs
 
@@ -87,9 +88,13 @@ step (or any other step) to consume.
 2. Restores the calling project's own `renv.lock` (its `reportifyr`/
    `pyro`, plus whatever else its analysis needs).
 3. Installs the `quartifyr` R package itself into the calling project's
-   renv library, via `renv::install("local::${{ github.action_path }}")`
-   -- pulling in `pyro`/`reportifyr` transitively via `quartifyr`'s own
-   `DESCRIPTION` `Imports:` if not already present.
+   renv library, via `renv::install("jprybylski/quartifyr")` -- pulling
+   in `pyro`/`reportifyr` transitively via `quartifyr`'s own
+   `DESCRIPTION` `Imports:` if not already present. Note this installs
+   from GitHub's default branch, not necessarily the same ref this
+   action itself was invoked at (`uses: jprybylski/quartifyr@X`) -- fine
+   while there's no tagged release yet, but worth knowing if a caller has
+   pinned the action to a stable tag and expects the R package to match.
 4. Runs `reportifyr::initialize_report_project()` (unless
    `initialize-project: false`) and
    `quartifyr::initialize_quartifyr_project()`.

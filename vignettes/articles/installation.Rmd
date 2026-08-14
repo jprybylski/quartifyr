@@ -55,7 +55,7 @@ for its subcommands.
 ## 3. The `quartifyr` R package
 
 ```r
-pak::pkg_install("local::/path/to/quartifyr")   # or remotes::install_local()
+pak::pak("jprybylski/quartifyr")   # or remotes::install_github("jprybylski/quartifyr")
 ```
 
 Pulls in [`reportifyr`](https://github.com/A2-ai/reportifyr) and
@@ -71,7 +71,7 @@ into each report project's own `renv` library explicitly, from that
 project's directory:
 
 ```r
-renv::install("local::/path/to/quartifyr")
+renv::install("jprybylski/quartifyr")   # or "local::/path/to/quartifyr" for an uncommitted checkout
 ```
 
 ## Full toolchain, end to end

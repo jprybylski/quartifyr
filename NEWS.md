@@ -28,7 +28,7 @@
     `reportifyr::initialize_report_project()`).
   * The `quartifyr` R package itself is not `renv`-managed (no
     `renv.lock` at the package root); install it into a report project's
-    own renv library with `renv::install("local::/path/to/quartifyr")`.
+    own renv library with `renv::install("jprybylski/quartifyr")`.
   * `templates/org-reference.docx` moved to `inst/templates/`.
 * Docs site moved from a hand-authored Jekyll site (`docs/` as source) to
   [pkgdown](https://pkgdown.r-lib.org/): narrative pages are now

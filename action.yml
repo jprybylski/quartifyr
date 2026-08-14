@@ -132,27 +132,23 @@ runs:
       working-directory: ${{ steps.project.outputs.dir }}
       run: Rscript -e 'renv::restore()'
 
-    # Installed into the calling project's own renv library (not this
-    # action's checkout) via renv::install("local::...") so it lands
-    # wherever the later `Render report` step's renv-activated session can
-    # find it -- renv isolates the library path when active, so a package
-    # installed anywhere else wouldn't be visible there. Pulls in
-    # pyro/reportifyr transitively via quartifyr's own DESCRIPTION
-    # Imports:; resolves against a2-ai.r-universe.dev via the calling
-    # project's own .Rprofile (every quartifyr report project has one --
-    # see examples/demo-report/.Rprofile), same as local dev.
-    # QUARTIFYR_SRC goes through env, not inlined into the -e string
-    # directly: github.action_path is backslash-separated on Windows, and
-    # R's string-literal parser treats an embedded substitution's
-    # backslashes as escape sequences -- Sys.getenv() sidesteps that
-    # entirely since env var values aren't escape-parsed (see ci.yml's
-    # identically-named steps for this confirmed the hard way in CI).
+    # Installed from GitHub (not this action's own checkout) into the
+    # calling project's own renv library, via renv's standard "owner/repo"
+    # remote spec -- so it lands wherever the later `Render report` step's
+    # renv-activated session can find it (renv isolates the library path
+    # when active). Pulls in pyro/reportifyr transitively via quartifyr's
+    # own DESCRIPTION Imports:; resolves against a2-ai.r-universe.dev via
+    # the calling project's own .Rprofile (every quartifyr report project
+    # has one -- see examples/demo-report/.Rprofile), same as local dev.
+    # Always installs the default branch, not the ref this action itself
+    # was invoked at (`uses: jprybylski/quartifyr@X`) -- fine while there's
+    # no tagged release yet; pin this to a specific ref/tag once there is
+    # one, so a caller pinning the action to a stable tag isn't silently
+    # exposed to whatever's newest on main.
     - name: Install the quartifyr R package
       shell: bash
       working-directory: ${{ steps.project.outputs.dir }}
-      env:
-        QUARTIFYR_SRC: ${{ github.action_path }}
-      run: Rscript -e 'renv::install(paste0("local::", Sys.getenv("QUARTIFYR_SRC")))'
+      run: Rscript -e 'renv::install("jprybylski/quartifyr")'
 
     - name: Initialize reportifyr project
       if: inputs.initialize-project == 'true'
