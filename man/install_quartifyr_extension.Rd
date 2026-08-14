@@ -28,3 +28,10 @@ physical copy is required -- the same reason
 \code{scripts/sync_demo_extension.py} keeps the two bundled examples'
 copies in sync with this package's own canonical one.
 }
+\details{
+Also runs \code{\link[=check_quarto_extensions]{check_quarto_extensions()}} (\code{error = FALSE}) afterward as a
+courtesy nudge -- quartifyr's own extension layers on top of
+\code{quarto-plus}'s ToC/List of Tables/List of Figures/abbreviations
+machinery, which this function doesn't install itself (it isn't
+bundled in this R package the way quartifyr's own extension is).
+}

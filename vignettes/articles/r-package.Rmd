@@ -73,20 +73,25 @@ load-bearing, not just a naming convention.
 
 ## What `render_report()` actually does
 
-1. Regenerates `abbreviations.tex` next to `shell_qmd` from the
+1. Checks `check_quarto_extensions()` against `quartifyr_quarto_extensions`
+   (currently just `A2-ai/quarto-plus`), erroring with a clickable
+   `quarto::quarto_add_extension()` suggestion if a required one is
+   missing -- before spending time rendering into a failure Quarto itself
+   reports far less specifically.
+2. Regenerates `abbreviations.tex` next to `shell_qmd` from the
    project's `standard_footnotes.yaml`, via `styling_build_abbreviations_tex()`.
-2. Renders `shell_qmd` with Quarto against the package's bundled
+3. Renders `shell_qmd` with Quarto against the package's bundled
    `inst/templates/org-reference.docx` (or a `reference_doc` you pass
    explicitly), passing `-M document-status:DRAFT` or `:FINAL` depending
    on `status`.
-3. Runs `styling_apply_layout()` on the rendered shell.
-4. Runs `reportifyr::build_report()` to fill in tables/figures/footnotes
+4. Runs `styling_apply_layout()` on the rendered shell.
+5. Runs `reportifyr::build_report()` to fill in tables/figures/footnotes
    from `OUTPUTS/`, producing `report/draft/<name>-draft.docx`.
-5. When `status = "final"`, also runs `reportifyr::finalize_document()`,
+6. When `status = "final"`, also runs `reportifyr::finalize_document()`,
    producing `report/final/<name>-final.docx`.
-6. Optionally (`resolve_same_page_crossrefs = TRUE`, default off), runs
+7. Optionally (`resolve_same_page_crossrefs = TRUE`, default off), runs
    `styling_resolve_same_page_crossrefs()` on each produced docx.
-7. Optionally (`recalculate_fields = TRUE`, default off), runs
+8. Optionally (`recalculate_fields = TRUE`, default off), runs
    `styling_recalculate_fields()` on each produced docx.
 
 See `vignette("styling")` for what each of those `styling_*()` calls

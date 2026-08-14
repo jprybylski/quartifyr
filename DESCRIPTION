@@ -17,7 +17,9 @@ BugReports: https://github.com/jprybylski/quartifyr/issues
 Depends:
     R (>= 4.1.0)
 Imports:
+    cli,
     jsonlite,
+    quarto,
     withr,
     processx,
     pyro,

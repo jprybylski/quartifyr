@@ -12,6 +12,12 @@
 #' `scripts/sync_demo_extension.py` keeps the two bundled examples'
 #' copies in sync with this package's own canonical one.
 #'
+#' Also runs [check_quarto_extensions()] (`error = FALSE`) afterward as a
+#' courtesy nudge -- quartifyr's own extension layers on top of
+#' `quarto-plus`'s ToC/List of Tables/List of Figures/abbreviations
+#' machinery, which this function doesn't install itself (it isn't
+#' bundled in this R package the way quartifyr's own extension is).
+#'
 #' @param path Target project directory. Defaults to the current directory.
 #' @param force Overwrite an existing `_extensions/quartifyr/` in `path`.
 #'   Default `FALSE` (errors if one already exists and differs).
@@ -44,6 +50,8 @@ install_quartifyr_extension <- function(path = ".", force = FALSE) {
   if (!isTRUE(ok)) {
     stop("Failed to copy the quartifyr extension into ", dest_dir, call. = FALSE)
   }
+
+  check_quarto_extensions(path, error = FALSE)
 
   invisible(dest_dir)
 }

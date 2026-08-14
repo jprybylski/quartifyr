@@ -1,5 +1,21 @@
 # quartifyr
 
+# quartifyr (development version)
+
+## Added
+
+* `check_quarto_extensions()`, checking a project's installed Quarto
+  extensions (via `quarto::quarto_list_extensions()`) against a new
+  formal registry, `quartifyr_quarto_extensions` -- currently just
+  `A2-ai/quarto-plus`, but a one-line addition away from covering any
+  future required/suggested extension. Reports anything missing with a
+  clickable `quarto::quarto_add_extension()` suggestion.
+  `render_report()` now calls this itself before rendering (erroring on
+  a missing *required* extension, with a specific actionable message,
+  instead of Quarto's own much less specific "could not find executable"
+  filter failure); `install_quartifyr_extension()` calls it too, as a
+  non-fatal warning-only nudge.
+
 # quartifyr 0.2.0
 
 ## Changed

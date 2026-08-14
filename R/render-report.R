@@ -130,6 +130,13 @@ render_report <- function(
 
   shell_qmd <- normalizePath(shell_qmd, mustWork = TRUE)
 
+  # Fail fast with an actionable message (which Quarto extension is
+  # missing, and the exact quarto::quarto_add_extension() call to fix it)
+  # instead of the much less specific "could not find executable" error
+  # `quarto render` itself raises when a filters:/shortcodes: entry in the
+  # .qmd's frontmatter resolves to a missing _extensions/ directory.
+  check_quarto_extensions(project_dir)
+
   # Regenerate abbreviations.tex next to the shell .qmd -- that's where
   # quarto-plus's terms_and_abbreviations.lua looks for it by default -- so
   # it's always in sync with standard_footnotes.yaml rather than a

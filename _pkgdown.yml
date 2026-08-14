@@ -49,6 +49,8 @@ reference:
     contents:
       - initialize_quartifyr_project
       - install_quartifyr_extension
+      - check_quarto_extensions
+      - quartifyr_quarto_extensions
   - title: Styling engine (pyro bridge)
     desc: >-
       Thin R wrappers around the bundled Python engine

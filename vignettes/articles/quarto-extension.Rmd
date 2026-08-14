@@ -19,7 +19,9 @@ quarto add jprybylski/quartifyr
 ```
 
 Or, if the `quartifyr` R package is installed: `quarto add A2-ai/quarto-plus`
-plus `quartifyr::install_quartifyr_extension()`.
+plus `quartifyr::install_quartifyr_extension()` (which also runs
+`check_quarto_extensions()` as a nudge if `quarto-plus` is still
+missing). `render_report()` checks for it too, before rendering.
 
 ## Quick look
 
