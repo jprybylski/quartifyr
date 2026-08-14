@@ -1,0 +1,34 @@
+Type: Package
+Package: quartifyr
+Title: Code-First Regulated Document Shells with Quarto
+Version: 0.1.0
+Description: Generates styled, structurally-complete docx "shells" (title
+    page, signature pages, ToC, synopsis, numbered appendices) for
+    scientific/regulated reports from Quarto, emitting {rpfy}: magic-string
+    placeholders for reportifyr (external, pass 2) to fill with real
+    tables/figures/footnotes. render_report() is a thin orchestration
+    facade: docx reference-template generation, layout post-processing, and
+    abbreviations-bridge logic live in the bundled Python engine under
+    inst/python/quartifyr_styling/, invoked via 'pyro'. See README.md at
+    the repository root for the full two-pass architecture.
+Authors@R: person("John", "Prybylski", email = "jprybylski@gmail.com", role = c("aut", "cre"))
+URL: https://github.com/jprybylski/quartifyr, https://jprybylski.github.io/quartifyr/
+BugReports: https://github.com/jprybylski/quartifyr/issues
+Depends:
+    R (>= 4.1.0)
+Imports:
+    jsonlite,
+    withr,
+    processx,
+    pyro,
+    reportifyr
+Suggests:
+    testthat (>= 3.0.0),
+    rmarkdown,
+    pkgdown
+Config/testthat/edition: 3
+License: GPL (>= 3)
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Additional_repositories: https://a2-ai.r-universe.dev
+Config/roxygen2/version: 8.1.0

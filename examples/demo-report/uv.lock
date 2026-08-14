@@ -8,6 +8,10 @@ version = "0.0.1"
 source = { virtual = "." }
 
 [package.dev-dependencies]
+quartifyr = [
+    { name = "python-docx" },
+    { name = "pyyaml" },
+]
 reportifyr = [
     { name = "pillow" },
     { name = "python-docx" },
@@ -17,6 +21,10 @@ reportifyr = [
 [package.metadata]
 
 [package.metadata.requires-dev]
+quartifyr = [
+    { name = "python-docx" },
+    { name = "pyyaml" },
+]
 reportifyr = [
     { name = "pillow", specifier = "==11.1.0" },
     { name = "python-docx", specifier = "==1.1.2" },

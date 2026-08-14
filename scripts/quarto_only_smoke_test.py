@@ -41,7 +41,7 @@ import zipfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-TEMPLATE = REPO_ROOT / "templates" / "org-reference.docx"
+TEMPLATE = REPO_ROOT / "inst" / "templates" / "org-reference.docx"
 
 EXAMPLES = [
     {

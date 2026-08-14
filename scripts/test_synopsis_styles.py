@@ -28,7 +28,7 @@ import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-TEMPLATE = REPO_ROOT / "templates" / "org-reference.docx"
+TEMPLATE = REPO_ROOT / "inst" / "templates" / "org-reference.docx"
 FIXTURE = REPO_ROOT / "scripts" / "fixtures" / "synopsis_style.qmd"
 
 
@@ -232,7 +232,7 @@ def main() -> int:
     checks: list[tuple[str, bool]] = []
     with tempfile.TemporaryDirectory(prefix="quartifyr-synopsis-styles-") as tmp:
         work_dir = Path(tmp)
-        shutil.copytree(REPO_ROOT / "_extensions" / "quartifyr", work_dir / "_extensions" / "quartifyr")
+        shutil.copytree(REPO_ROOT / "inst" / "extensions" / "quartifyr", work_dir / "_extensions" / "quartifyr")
         shutil.copy(FIXTURE, work_dir / "synopsis_style.qmd")
 
         _check_definition_list(work_dir, checks)

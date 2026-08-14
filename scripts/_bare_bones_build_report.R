@@ -21,7 +21,7 @@
 #' via a real CI failure: "there is no package called 'reportifyr'").
 #' reportifyr/pyro also locate their Python venv and project config by
 #' walking up from R's current working directory (see
-#' r/R/render_report.R's own comment on this), which this satisfies too.
+#' `R/render-report.R`'s own comment on this), which this satisfies too.
 #'
 #' A separate .R file (not inlined `Rscript -e` string in the Python
 #' caller) so paths pass through as plain command-line arguments instead

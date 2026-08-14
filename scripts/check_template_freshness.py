@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Keep the committed templates/org-reference.docx in sync with
-styling/styles/default.yaml.
+"""Keep the committed inst/templates/org-reference.docx in sync with
+inst/python/styles/default.yaml.
 
-templates/org-reference.docx is checked into the repo (not just a build
-artifact) so the two bundled examples -- and anyone trying quartifyr for
-the first time -- have a working docx reference-template without needing
-the styling/ Python venv set up first; see examples/demo-report/README.md
+inst/templates/org-reference.docx is checked into the repo (not just a
+build artifact) so the two bundled examples -- and anyone trying quartifyr
+for the first time -- have a working docx reference-template without
+needing the Python venv set up first; see examples/demo-report/README.md
 and the repo-root README's "Style YAML and reference-doc" section.
 
 That convenience creates the same drift risk scripts/sync_demo_extension.py
 already guards against for the Lua extension: nothing stops
-styling/styles/default.yaml or build_template.py from changing without
+inst/python/styles/default.yaml or build_template.py from changing without
 the committed docx being regenerated to match. This script is that guard,
 run with --check (used by each example's smoke_test.py, safe to wire into
 CI) to fail loudly on drift, or with no args to rebuild and fix it.
@@ -35,8 +35,8 @@ import zipfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-STYLE_YAML = REPO_ROOT / "styling" / "styles" / "default.yaml"
-COMMITTED_DOCX = REPO_ROOT / "templates" / "org-reference.docx"
+STYLE_YAML = REPO_ROOT / "inst" / "python" / "styles" / "default.yaml"
+COMMITTED_DOCX = REPO_ROOT / "inst" / "templates" / "org-reference.docx"
 _VENV_SUBDIR = "Scripts" if sys.platform == "win32" else "bin"
 _EXE_SUFFIX = ".exe" if sys.platform == "win32" else ""
 QUARTIFYR_STYLING_BIN = REPO_ROOT / ".venv" / _VENV_SUBDIR / f"quartifyr-styling{_EXE_SUFFIX}"
@@ -74,8 +74,8 @@ def main() -> int:
 
     if not QUARTIFYR_STYLING_BIN.exists():
         print(
-            f"error: {QUARTIFYR_STYLING_BIN} not found -- set up the styling/ venv first: "
-            'uv venv .venv --python 3.12 && uv pip install -e "./styling[dev]"',
+            f"error: {QUARTIFYR_STYLING_BIN} not found -- set up the Python venv first: "
+            "uv venv .venv --python 3.12 && uv pip install -e '.[dev]'",
             file=sys.stderr,
         )
         return 1

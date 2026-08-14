@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Keep every examples/*/_extensions/quartifyr/ in sync with the
-canonical _extensions/quartifyr/ at the repo root.
+canonical inst/extensions/quartifyr/ (the R package's bundled copy,
+installed via install_quartifyr_extension() -- see R/install-extension.R).
 
 Quarto's extension loader doesn't follow symlinks (confirmed: `quarto
 render` fails outright with a symlinked _extensions/quartifyr/), so each
@@ -23,7 +24,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SOURCE = REPO_ROOT / "_extensions" / "quartifyr"
+SOURCE = REPO_ROOT / "inst" / "extensions" / "quartifyr"
 DESTS = [
     REPO_ROOT / "examples" / "demo-report" / "_extensions" / "quartifyr",
     REPO_ROOT / "examples" / "memo-example" / "_extensions" / "quartifyr",

@@ -1,0 +1,142 @@
+---
+title: "The R Package"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+`quartifyr` is a single installable R package: `render_report()` runs the
+full two-pass pipeline (Quarto shell render → `reportifyr` fill) in one
+call. `reportifyr` and `pyro` are pulled straight from
+`a2-ai.r-universe.dev` since neither has a CRAN release. The Python
+engine behind `styling_*()` (docx generation/layout) is bundled inside
+the package (`inst/python/`) and called via a `pyro` bridge rather than
+reimplemented in R -- see `vignette("architecture")` for the two-pass
+split this reflects. The package itself is **not** `renv`-managed (no
+`renv.lock` at the package root); install it into each report project's
+own `renv` library explicitly.
+
+This is a convenience wrapper, not a requirement: `render_report()`
+chains `quarto render`, `styling_apply_layout()`, and
+`reportifyr::build_report()` together and adopts a specific
+`report/shell`/`report/draft`/`report/final` directory convention. See
+`vignette("architecture")`'s "Using the pieces directly" section for
+calling the three pieces yourself instead.
+
+## Setup
+
+```r
+# Install the package into a report project's own renv library, run from
+# that project's directory
+renv::install("local::/path/to/quartifyr")
+
+# Provision the project's quartifyr Python dependency group (once per
+# project, alongside reportifyr::initialize_report_project())
+quartifyr::initialize_quartifyr_project(getwd())
+
+# Install the Quarto extension into the project
+quartifyr::install_quartifyr_extension()
+```
+
+See `vignette("installation")`.
+
+## Usage
+
+As an R function:
+
+```r
+library(quartifyr)
+
+result <- render_report(
+  shell_qmd = "/path/to/project/report.qmd",
+  status = "draft"   # or "final"
+)
+# result$shell, result$draft, result$final (NULL unless status == "final")
+```
+
+`examples/*/render.R` is a thin CLI wrapper around the same call:
+
+```bash
+Rscript render.R
+Rscript render.R --final
+```
+
+<img src="../man/figures/render-pipeline.gif" alt="Terminal recording of Rscript render.R running the full two-pass pipeline on the demo report, then Rscript render.R --final, producing report/draft and report/final docx files" width="700" loading="lazy">
+
+`shell_qmd` lives at the project root alongside `_extensions/`. The
+project's `_quarto.yml` must set `project: {output-dir: report/shell}`,
+since `reportifyr::make_doc_dirs()` derives `report/draft/` and
+`report/final/` output paths by substring-replacing "shell" in the
+*rendered docx's* containing directory, not the qmd's, so this is
+load-bearing, not just a naming convention.
+
+## What `render_report()` actually does
+
+1. Regenerates `abbreviations.tex` next to `shell_qmd` from the
+   project's `standard_footnotes.yaml`, via `styling_build_abbreviations_tex()`.
+2. Renders `shell_qmd` with Quarto against the package's bundled
+   `inst/templates/org-reference.docx` (or a `reference_doc` you pass
+   explicitly), passing `-M document-status:DRAFT` or `:FINAL` depending
+   on `status`.
+3. Runs `styling_apply_layout()` on the rendered shell.
+4. Runs `reportifyr::build_report()` to fill in tables/figures/footnotes
+   from `OUTPUTS/`, producing `report/draft/<name>-draft.docx`.
+5. When `status = "final"`, also runs `reportifyr::finalize_document()`,
+   producing `report/final/<name>-final.docx`.
+6. Optionally (`resolve_same_page_crossrefs = TRUE`, default off), runs
+   `styling_resolve_same_page_crossrefs()` on each produced docx.
+7. Optionally (`recalculate_fields = TRUE`, default off), runs
+   `styling_recalculate_fields()` on each produced docx.
+
+See `vignette("styling")` for what each of those `styling_*()` calls
+does on its own.
+
+## A load-bearing detail: working directory
+
+`reportifyr`/`pyro` locate their Python venv and project config by
+walking **up from R's current working directory** looking for a
+`.*_init.json` marker; they ignore path arguments for this.
+`render_report()` derives the actual project root from `shell_qmd` and
+wraps every `reportifyr::` call in `withr::with_dir(project_dir, ...)`,
+so it's safe to call from an R session rooted anywhere. Calling
+`reportifyr` functions directly without that scoping, from an R session
+whose working directory isn't the target project, has been observed to
+silently resolve the *wrong* project and seed a stray
+`pyproject.toml`/`.venv`/`.rpfy-logs/` wherever the session happened to
+be.
+
+**A stricter version of the same trap applies to `pyro` itself.**
+`pyro::get_proj_dir()` (`getOption("venv_dir") %||% here::here()`)
+caches its result for the life of an R session, independent of
+`withr::with_dir()` -- confirmed directly: calling it from two different
+`with_dir()`-scoped directories in the same session returns the
+*first*-resolved directory both times. Rendering two different projects
+in one R session can otherwise write the second project's Python
+dependency group into the *first* project's `pyproject.toml`.
+`render_report()`'s internal bridge (`.run_quartifyr_styling_cli()`)
+works around this by setting `venv_dir` explicitly via
+`withr::local_options()` rather than relying on `pyro`'s cwd-based
+default; `initialize_quartifyr_project()` passes `venv_dir`/
+`pyproject_dir` explicitly to `pyro::write_group_to_pyproject()`/
+`pyro::initialize_python()` for the same reason. This only matters if
+you're calling `pyro::` directly yourself -- `render_report()` and the
+`styling_*()`/`initialize_quartifyr_project()` functions already handle
+it.
+
+## Word field recalculation (optional, off by default)
+
+Quarto/pandoc docx output contains native Word field codes (`TOC`,
+`SEQ`, `REF`) that don't self-populate. For anyone opening the delivered
+docx in real Microsoft Word, this is already handled for free: the
+reference-doc sets `<w:updateFields w:val="true"/>`, which tells Word to
+recalculate every field automatically on open. This doesn't help a
+headless pipeline or LibreOffice running non-interactively; see
+`vignette("styling")`'s `recalculate-fields` section for the
+experimental step that covers that case, and its known reliability
+caveat.
+
+Known coverage gap even when it *does* work: LibreOffice only recognizes
+the main document ToC as an updatable index. `quarto-plus`'s List of
+Figures/List of Tables and plain `REF`-style cross-references aren't
+recalculated by this step and still need a manual Word update.

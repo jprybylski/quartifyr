@@ -1,0 +1,141 @@
+---
+title: "Styling"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+`quartifyr_styling` (the Python engine bundled at `inst/python/`) is
+code-first generation of the docx `reference-doc` used when rendering a
+quartifyr shell with Quarto, the abbreviations YAML →
+`abbreviations.tex` bridge consumed by `quarto-plus`, and headless Word
+field/cross-reference post-processing via LibreOffice. Called from R via
+a `pyro` bridge (the `styling_*()` functions below), or standalone via
+the `quartifyr-styling` CLI:
+
+```bash
+uv venv .venv --python 3.12   # from a checkout of the repo
+source .venv/bin/activate
+uv pip install -e '.[dev]'
+```
+
+## `build`: style YAML → reference-doc
+
+```r
+quartifyr::styling_build_reference_docx(
+  style = "inst/python/styles/default.yaml",
+  out = "org-reference.docx"
+)
+```
+
+```bash
+quartifyr-styling build \
+  --style inst/python/styles/default.yaml \
+  --out org-reference.docx
+```
+
+<img src="../man/figures/styling-build.gif" alt="Terminal recording of quartifyr-styling build generating a docx reference-doc from a style YAML file" width="700" loading="lazy">
+
+Add `override`/`--override` with just the keys that differ from the
+default preset (fonts, colors, page setup, ...) to brand a new
+organization; see `inst/python/styles/default.yaml` for the full schema
+and `inst/python/quartifyr_styling/schema.py` for validation rules (hex
+colors, positive sizes, valid page sizes, ...).
+
+`style`/`override`/`out` are plain file paths, not fixed locations. An
+org can keep its style YAML anywhere, and most project authors never
+need to run `build` at all: reuse an already-built `.docx`, distributed
+however your org already shares binary artifacts.
+
+The generated reference-doc also sets `<w:updateFields w:val="true"/>`
+in `word/settings.xml`, so real Word automatically recalculates every
+field (ToC, `SEQ`, `REF`, `PAGE`, ...) the moment a delivered document is
+opened; no manual "select all, F9", no LibreOffice involved for that
+case.
+
+## `abbrevs`: footnotes YAML → abbreviations bridge
+
+```r
+quartifyr::styling_build_abbreviations_tex(
+  footnotes = "report/standard_footnotes.yaml",
+  out = "report/shell/abbreviations.tex"
+)
+```
+
+Converts a project's `standard_footnotes.yaml` (`reportifyr`'s own
+format) into the `abbreviations.tex` that `quarto-plus` reads to render
+a "only abbreviations actually used via `\gls{}`" list.
+
+## `apply-layout`: header/footer + page-number split
+
+```r
+quartifyr::styling_apply_layout(
+  docx = "report/shell/report.docx",
+  qmd = "report.qmd",
+  status = "draft"
+)
+```
+
+Run on the shell docx right after the Quarto render, before
+`reportifyr`'s pass-2 fill. Reads the `.qmd`'s frontmatter for
+`header-format:` and applies it to a two-zone page header (template flush
+left, draft/final status flush right). Also reads `confidentiality:` for
+the footer's left zone, and, if the `.qmd` uses `{{< body-start >}}`,
+splits the rendered docx into title-page/front-matter/body OOXML
+sections so the whole front matter numbers in lowercase roman (starting
+at "i") and the body restarts at arabic "1". A `.qmd` with neither
+`header-format:` nor `{{< body-start >}}` is left untouched; both are
+opt-in.
+
+Also reads `crossref-hyperlinks:` (default `true`); `false` strips the
+`\h` hyperlink switch from every figure/table/appendix cross-reference's
+`REF` field, document-wide. `"same-page"` can't be resolved here (no
+real pagination exists yet on the pass-1 shell); it just marks each
+crossref for the next command.
+
+## `resolve-same-page-crossrefs`: post-fill crossref resolution
+
+```r
+quartifyr::styling_resolve_same_page_crossrefs("report/draft/report-draft.docx")
+```
+
+Resolves the markers `apply-layout`'s `crossref-hyperlinks: "same-page"`
+left behind, now that `reportifyr`'s pass 2 has filled in real content
+and pagination means something; run on the *filled* draft/final docx,
+not the shell. A no-op (skips LibreOffice entirely) if the document has
+no same-page markers. Read-only with respect to LibreOffice: it drives a
+headless-LibreOffice macro only to read page numbers, never to re-save
+the docx.
+
+**Experimental.** Inherits the same intermittent-hang behavior
+documented for `recalculate-fields` below. Off by default in
+`render_report()`.
+
+## `recalculate-fields`: headless ToC/field recalculation
+
+```r
+quartifyr::styling_recalculate_fields("path/to/report-final.docx")
+```
+
+Drives headless LibreOffice to recalculate a docx's Word ToC (page
+numbers, entries) in place; for non-interactive pipelines that never
+open the file in an application at all. Real Word already recalculates
+fields automatically on open (via the reference-doc's own
+`updateFields` setting above), so this is only needed for headless
+consumers.
+
+**Experimental and known-flaky.** Real-world runs against the same
+document have produced three different outcomes: it hangs, it exits
+cleanly as a silent no-op, or it actually succeeds. Reproduced both
+sandboxed and in a plain native terminal, ruling out sandboxing as the
+cause. Off by default (`render_report(..., recalculate_fields = FALSE)`).
+When it does fail, it only produces a warning, not a render failure;
+the document is still fully usable, just needs a manual "select all,
+F9" in Word.
+
+## Tests
+
+```bash
+cd /path/to/quartifyr && python -m pytest tests/python -v
+```

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate docs/assets/img/*.png from the two examples' final rendered docx.
+"""Regenerate man/figures/*.png from the two examples' final rendered docx.
 
 Run after re-rendering examples/demo-report and examples/memo-example (via
 `Rscript render.R --final` in each), whenever their visible content changes,
@@ -19,7 +19,7 @@ import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-IMG_DIR = REPO_ROOT / "docs" / "assets" / "img"
+IMG_DIR = REPO_ROOT / "man" / "figures"
 
 # (source docx, page index, output filename)
 JOBS = [

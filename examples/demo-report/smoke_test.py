@@ -7,7 +7,7 @@ resulting docx: no leftover reportifyr magic strings, the expected tables/
 images/abbreviations are present, and appendix numbering resolved.
 
 Requires the full toolchain: R (with this repo's renv-managed packages),
-Quarto, and the styling/ venv. Run from anywhere:
+Quarto, and the Python venv. Run from anywhere:
 
     python3 examples/demo-report/smoke_test.py
 """
@@ -64,9 +64,9 @@ def main() -> int:
         print(sync_check.stderr, file=sys.stderr)
         return 1
 
-    # templates/org-reference.docx is committed (see scripts/
+    # inst/templates/org-reference.docx is committed (see scripts/
     # check_template_freshness.py's docstring for why) -- fail fast if it's
-    # drifted from styling/styles/default.yaml, before wasting time on a
+    # drifted from inst/python/styles/default.yaml, before wasting time on a
     # render that would only prove the *old* styling still works.
     template_check = subprocess.run(
         ["python3", str(REPO_ROOT / "scripts" / "check_template_freshness.py"), "--check"],
@@ -74,7 +74,7 @@ def main() -> int:
         text=True,
     )
     if template_check.returncode != 0:
-        print("FAIL: templates/org-reference.docx has drifted from styling/styles/default.yaml", file=sys.stderr)
+        print("FAIL: inst/templates/org-reference.docx has drifted from inst/python/styles/default.yaml", file=sys.stderr)
         print(template_check.stdout, file=sys.stderr)
         print(template_check.stderr, file=sys.stderr)
         return 1
@@ -268,7 +268,7 @@ def main() -> int:
     # pk_summary started life as a plain data frame (.csv), so reportifyr's
     # add_tables() ran its own format_flextable() on it, which hardcodes
     # Arial Narrow regardless of this doc's actual body font (Times New
-    # Roman, per styling/styles/default.yaml). The demographics table
+    # Roman, per inst/python/styles/default.yaml). The demographics table
     # started life as an already-built `flextable` object (.rds), which
     # add_tables() inserts as-is instead of reformatting it. Checked here
     # against the real rendered docx, not just asserted by construction.
@@ -508,8 +508,8 @@ def main() -> int:
     # crossref-hyperlinks: left at its default (true) in this demo -- both
     # quarto-plus's {{< crossref "TblPkSummary" >}} and this extension's
     # own {{< appendix_crossref "StatisticalMethods" >}} stay hyperlinked.
-    # "false" and "same-page" are exercised by styling/tests/test_layout.py
-    # and styling/tests/test_same_page_crossrefs.py instead of here, since
+    # "false" and "same-page" are exercised by tests/python/test_layout.py
+    # and tests/python/test_same_page_crossrefs.py instead of here, since
     # this demo's render.R doesn't run the separate, opt-in
     # resolve-same-page-crossrefs step "same-page" needs to mean anything
     # beyond the default -- see report.qmd's comment for why.
