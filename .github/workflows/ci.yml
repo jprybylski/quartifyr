@@ -193,7 +193,18 @@ jobs:
           test -f "${{ steps.render.outputs.shell-docx }}"
           test -f "${{ steps.render.outputs.draft-docx }}"
           test -f "${{ steps.render.outputs.final-docx }}"
-          if unzip -p "${{ steps.render.outputs.draft-docx }}" word/document.xml | grep -q '{rpfy}:'; then
-            echo "Leftover {rpfy}: magic string in rendered draft docx" >&2
+          # reportifyr::build_report() (draft) intentionally leaves {rpfy}:
+          # magic strings in place -- as their own visible-text paragraph
+          # (per render_report.R's "Known upstream gotcha" section) and as
+          # [hash:...]-suffixed image/table descr/tblDescription attributes
+          # for change detection on re-renders -- and only strips the
+          # visible-text ones via finalize_document() (see reportifyr's own
+          # ?finalize_document: "removing magic strings and bookmarks"). So
+          # this must check the *final* docx, and only its visible <w:t>
+          # text -- the [hash:...] description attributes are reportifyr's
+          # own tracking metadata and persist by design even in report/final/.
+          if unzip -p "${{ steps.render.outputs.final-docx }}" word/document.xml \
+            | grep -oP '<w:t[^>]*>[^<]*</w:t>' | grep -q '{rpfy}:'; then
+            echo "Leftover {rpfy}: magic string in rendered final docx" >&2
             exit 1
           fi
