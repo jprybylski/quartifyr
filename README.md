@@ -1,5 +1,8 @@
 # quartifyr <img src="man/figures/logo.png" align="right" height="139" alt="" />
 
+[![CI](https://github.com/jprybylski/quartifyr/actions/workflows/ci.yml/badge.svg)](https://github.com/jprybylski/quartifyr/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/jprybylski/quartifyr/graph/badge.svg)](https://codecov.io/gh/jprybylski/quartifyr)
+
 A code-first system for generating standardized scientific/regulated
 documents with [Quarto](https://quarto.org): an org's docx styling and a
 document's title/signature/ToC/abbreviations front matter come from YAML

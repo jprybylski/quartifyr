@@ -26,6 +26,7 @@ Imports:
     reportifyr
 Suggests:
     testthat (>= 3.0.0),
+    covr,
     rmarkdown,
     pkgdown
 Config/testthat/edition: 3
