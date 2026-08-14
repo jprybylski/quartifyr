@@ -32,6 +32,7 @@
 ^dev$
 ^_pkgdown\.yml$
 ^pkgdown$
+^logo-files$
 # vignettes/articles/: pkgdown's own "article, not a real vignette" path.
 # Site-only content, not a package vignette, no VignetteBuilder needed.
 ^vignettes/articles$

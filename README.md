@@ -1,4 +1,4 @@
-# quartifyr
+# quartifyr <img src="man/figures/logo.png" align="right" height="139" alt="" />
 
 A code-first system for generating standardized scientific/regulated
 documents with [Quarto](https://quarto.org): an org's docx styling and a
