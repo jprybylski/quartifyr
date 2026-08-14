@@ -141,10 +141,18 @@ runs:
     # Imports:; resolves against a2-ai.r-universe.dev via the calling
     # project's own .Rprofile (every quartifyr report project has one --
     # see examples/demo-report/.Rprofile), same as local dev.
+    # QUARTIFYR_SRC goes through env, not inlined into the -e string
+    # directly: github.action_path is backslash-separated on Windows, and
+    # R's string-literal parser treats an embedded substitution's
+    # backslashes as escape sequences -- Sys.getenv() sidesteps that
+    # entirely since env var values aren't escape-parsed (see ci.yml's
+    # identically-named steps for this confirmed the hard way in CI).
     - name: Install the quartifyr R package
       shell: bash
       working-directory: ${{ steps.project.outputs.dir }}
-      run: Rscript -e 'renv::install("local::${{ github.action_path }}")'
+      env:
+        QUARTIFYR_SRC: ${{ github.action_path }}
+      run: Rscript -e 'renv::install(paste0("local::", Sys.getenv("QUARTIFYR_SRC")))'
 
     - name: Initialize reportifyr project
       if: inputs.initialize-project == 'true'

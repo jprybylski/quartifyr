@@ -146,14 +146,24 @@ jobs:
       # one) via renv::install("local::...") so render.R's `library(quartifyr)`
       # finds it once renv activates that project's own .Rprofile -- renv
       # isolates the library path when active, same reasoning as action.yml's
-      # identically-named step.
+      # identically-named step. QUARTIFYR_SRC is passed via env, not inlined
+      # into the -e string directly: github.workspace is backslash-separated
+      # on Windows, and R's string-literal parser treats an embedded
+      # `${{ github.workspace }}` substitution's backslashes as escape
+      # sequences (confirmed via a real CI run: "'\q' is an unrecognized
+      # escape in character string") -- Sys.getenv() sidesteps that
+      # entirely since env var values aren't escape-parsed.
       - name: Install quartifyr (examples/demo-report)
         working-directory: examples/demo-report
-        run: Rscript -e 'renv::install("local::${{ github.workspace }}")'
+        env:
+          QUARTIFYR_SRC: ${{ github.workspace }}
+        run: Rscript -e 'renv::install(paste0("local::", Sys.getenv("QUARTIFYR_SRC")))'
 
       - name: Install quartifyr (examples/memo-example)
         working-directory: examples/memo-example
-        run: Rscript -e 'renv::install("local::${{ github.workspace }}")'
+        env:
+          QUARTIFYR_SRC: ${{ github.workspace }}
+        run: Rscript -e 'renv::install(paste0("local::", Sys.getenv("QUARTIFYR_SRC")))'
 
       - name: Initialize reportifyr project (demo-report, fresh clone -- .report_init.json is gitignored)
         working-directory: examples/demo-report
