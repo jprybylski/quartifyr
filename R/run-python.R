@@ -49,7 +49,32 @@
   # entirely rather than relying on it.
   withr::local_options(venv_dir = getwd())
   paths <- pyro::get_venv_uv_paths()
-  cli_args <- c("run", "-m", "quartifyr_styling", "--json", args)
+
+  # `--all-groups` is load-bearing, not optional flourish. The
+  # "quartifyr" dependency group `initialize_quartifyr_project()` writes
+  # (via `pyro::write_group_to_pyproject()`) is a PEP 735
+  # `[dependency-groups]` entry -- opt-in, not part of the project's base
+  # `[project.dependencies]` or `uv`'s default sync set. `uv run` restricts
+  # the environment it syncs to *exactly* the groups/extras requested by
+  # that invocation, dropping any others already present: a bare
+  # `uv run -m quartifyr_styling ...` with no group flag resyncs the venv
+  # down to zero groups (silently uninstalling python-docx/pyyaml), and
+  # `--group quartifyr` alone is just as broken the other direction --
+  # it resyncs to *only* "quartifyr", silently uninstalling whatever
+  # `reportifyr::initialize_report_project()` already provisioned under
+  # its own "reportifyr" group in this same shared venv/pyproject.toml,
+  # since this project's `[dependency-groups]` table holds both tools'
+  # groups side by side. Confirmed the hard way in CI against a fully
+  # fresh .venv (not reproduced in a long-lived local dev session, where
+  # repeated init/test calls kept re-adding whichever group got dropped
+  # often enough to mask it): first `initialize_quartifyr_project()` then
+  # `styling_build_abbreviations_tex()` succeeded, but the *next*
+  # `reportifyr::build_report()` call failed with "validate-docx returned
+  # no output" -- reportifyr's own pyro-bridged Python step, silently
+  # missing its dependencies because this call's `--group quartifyr` had
+  # just resynced them away. `--all-groups` is the only invocation that
+  # doesn't clobber whichever other tool's group already exists here.
+  cli_args <- c("run", "--all-groups", "-m", "quartifyr_styling", "--json", args)
 
   stderr_lines <- character(0)
   capture_stderr <- function(chunk, proc) {
@@ -101,10 +126,16 @@
         call. = FALSE
       )
     }
+    # cat() straight to stderr rather than folding the subprocess's full
+    # stderr into stop()'s own condition message -- R's default top-level
+    # handler truncates printed error messages to getOption("warning.length")
+    # (1000 chars), which has silently cut off the actual failure reason
+    # here before (see R/render-report.R's same workaround for the
+    # `quarto render` subprocess call, and CLAUDE.md).
+    cat(stderr_text, file = stderr())
     stop(
       "quartifyr-styling ", args[[1]], " failed and did not produce a ",
-      "parseable error payload.\n  command: ", command_desc,
-      "\n  stderr: ", stderr_text,
+      "parseable error payload (see stderr above).\n  command: ", command_desc,
       call. = FALSE
     )
   }
