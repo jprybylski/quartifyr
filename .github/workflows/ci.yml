@@ -57,6 +57,13 @@ jobs:
       - name: Run Quarto-only shell-render check (no R, no Python venv)
         run: python3 scripts/quarto_only_smoke_test.py
 
+      # Also here, not after R/uv setup: proves `quarto add
+      # jprybylski/quartifyr` (the README's standalone install path,
+      # issue #16) actually works against this PR's own tree, using
+      # nothing but `quarto` and `git`.
+      - name: Run quarto add smoke test (repo-root extension host)
+        run: python3 scripts/quarto_add_smoke_test.py
+
       - uses: r-lib/actions/setup-r@v2
         with:
           r-version: "release"

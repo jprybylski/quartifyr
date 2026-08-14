@@ -10,6 +10,12 @@
 # comment line below self-contained and free of unbalanced regex
 # metacharacters -- no line-spanning parens/brackets/quotes.
 ^examples$
+# _extensions: repo-root physical copy of inst/extensions/quartifyr/,
+# kept in sync by scripts/sync_demo_extension.py, that exists solely so
+# `quarto add jprybylski/quartifyr` finds a valid extension (issue #16).
+# Not part of the R package -- the package installs from
+# inst/extensions/quartifyr/ via install_quartifyr_extension().
+^_extensions$
 ^docs$
 ^scripts$
 ^tests/python$
