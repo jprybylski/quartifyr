@@ -1904,37 +1904,6 @@
       "RemoteRef": "HEAD",
       "RemoteSha": "66065c19a9aad1cf2cc4718aee9da013e6a3209f"
     },
-    "quartifyr": {
-      "Package": "quartifyr",
-      "Version": "0.1.0",
-      "Source": "Local",
-      "Type": "Package",
-      "Title": "Code-First Regulated Document Shells with Quarto",
-      "Description": "Generates styled, structurally-complete docx \"shells\" (title page, signature pages, ToC, synopsis, numbered appendices) for scientific/regulated reports from Quarto, emitting {rpfy}: magic-string placeholders for reportifyr (external, pass 2) to fill with real tables/figures/footnotes. render_report() is a thin orchestration facade: docx reference-template generation, layout post-processing, and abbreviations-bridge logic live in the bundled Python engine under inst/python/quartifyr_styling/, invoked via 'pyro'. See README.md at the repository root for the full two-pass architecture.",
-      "Authors@R": "person(\"John\", \"Prybylski\", email = \"jprybylski@gmail.com\", role = c(\"aut\", \"cre\"))",
-      "Imports": [
-        "here",
-        "yaml",
-        "jsonlite",
-        "withr",
-        "processx",
-        "pyro",
-        "reportifyr"
-      ],
-      "Suggests": [
-        "testthat (>= 3.0.0)"
-      ],
-      "Config/testthat/edition": "3",
-      "License": "GPL (>= 3)",
-      "Encoding": "UTF-8",
-      "Roxygen": "list(markdown = TRUE)",
-      "RoxygenNote": "7.3.2",
-      "Additional_repositories": "https://a2-ai.r-universe.dev",
-      "Author": "John Prybylski [aut, cre]",
-      "Maintainer": "John Prybylski <jprybylski@gmail.com>",
-      "RemoteType": "local",
-      "RemoteUrl": "/Users/jprybylski/quartifyr"
-    },
     "ragg": {
       "Package": "ragg",
       "Version": "1.5.2",
