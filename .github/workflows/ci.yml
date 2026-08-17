@@ -42,7 +42,7 @@ jobs:
       # the Quarto-only check right below) -- Linux/macOS runner images
       # already have one, but Windows' hosted image doesn't reliably
       # provide `python3` (only `python`) without this.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
