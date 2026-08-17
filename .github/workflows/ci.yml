@@ -14,7 +14,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: astral-sh/setup-uv@v5
         with:
@@ -36,7 +36,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Guarantees a `python3` on PATH before any venv exists (needed by
       # the Quarto-only check right below) -- Linux/macOS runner images
@@ -219,7 +219,7 @@ jobs:
     # straight from that job.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Render examples/demo-report via the composite action
         id: render
