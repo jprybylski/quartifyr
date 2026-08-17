@@ -213,12 +213,12 @@ def main() -> int:
     # Second appendix: Quarto's own native `{{< include >}}` shortcode
     # nested in a fenced code block (report.qmd), not a quartifyr
     # shortcode -- embeds scripts/01_analysis.R's real content with real
-    # syntax highlighting. Both appendix headings show the same cached
-    # "A" (see appendix.lua's file-header comment: the SEQ Appendix field's
-    # displayed letter is a static placeholder pending a Word field
-    # recalculation, same as every other {{< appendix >}} heading in this
-    # doc -- not a regression here).
-    checks.append(("second appendix (embedded analysis script) present", "Appendix A: Analysis Code" in joined))
+    # syntax highlighting. Its SEQ Appendix field's cached placeholder is
+    # "B" (each appendix's is pre-computed to its actual position, per
+    # appendix.lua's file-header comment -- not left hardcoded to "A", which
+    # used to make the ToC show the wrong letter for every appendix past
+    # the first).
+    checks.append(("second appendix (embedded analysis script) present", "Appendix B: Analysis Code" in joined))
     checks.append(
         (
             "embedded script's real content present, not an empty/failed include",

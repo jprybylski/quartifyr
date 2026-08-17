@@ -14,6 +14,16 @@
   file that wasn't copied over) could previously surface here as a
   deeply nested, extensions-unrelated-looking error.
 
+* Appendices past the first now show their correct letter in the ToC.
+  `{{< appendix >}}`'s native Word `SEQ Appendix \* ALPHABETIC` field
+  always cached its placeholder result as "A", so a document's ToC
+  (positioned earlier than the appendices, and built from each heading's
+  already-resolved text during a single field-update pass) could pick up
+  that stale "A" for appendix B, C, ... even though the heading itself
+  recalculated correctly. Each appendix's cached placeholder is now
+  pre-computed to its actual letter, so the ToC and the heading agree
+  even before any field recalculation happens.
+
 # quartifyr 0.2.2
 
 ## Fixed

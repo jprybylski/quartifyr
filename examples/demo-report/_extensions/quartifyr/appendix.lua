@@ -7,7 +7,25 @@
 -- B", ...) via a native Word SEQ field, so adding/removing/reordering
 -- appendices never requires manual renumbering -- just recalculate fields
 -- (Quarto's docx output flags fields dirty; see the repo-root README for
--- the field-recalculation step). It uses the "Heading 1" style (referenced
+-- the field-recalculation step).
+--
+-- The field's cached result (the text between its `separate` and `end`
+-- fldChar, shown until the next recalculation) is pre-computed here to
+-- match this appendix's actual position, not hardcoded to "A" -- confirmed
+-- via a real Word test that a hardcoded "A" breaks the *ToC* (though never
+-- the heading itself) for every appendix past the first: Word's ToC field
+-- is positioned earlier in the document than the appendices, so a single
+-- whole-document field-update pass builds ToC entries from each heading's
+-- *current* text before that heading's own SEQ field has been recalculated
+-- further down -- the heading ends up correct (Word recalculates it later
+-- in the same pass), but the ToC entry keeps whatever was cached on disk.
+-- Baking the correct letter in up front means both agree even before any
+-- recalculation happens at all, sidestepping the ordering issue rather
+-- than depending on Word to resolve it. The live SEQ field is untouched,
+-- so reordering/adding/removing appendices by hand in Word afterward still
+-- auto-reletters on the next recalculation as designed.
+--
+-- It uses the "Heading 1" style (referenced
 -- by its style ID, "Heading1" with no space -- NOT its display name
 -- "Heading 1" with a space; using the display name renders visually fine
 -- but Word's ToC field silently fails to recognize the paragraph as a
@@ -41,11 +59,30 @@ local function alloc_id()
   return next_id
 end
 
+-- Appendix position, tracked independently of alloc_id() (whose numbers
+-- are bookmark ids, not appendix order). Mirrors Word's own SEQ \*
+-- ALPHABETIC output: 1=A, ..., 26=Z, 27=AA, 28=AB, ... (bijective base-26,
+-- same scheme as spreadsheet column letters).
+local appendix_count = 0
+
+local function next_appendix_letter()
+  appendix_count = appendix_count + 1
+  local n = appendix_count
+  local letters = ""
+  while n > 0 do
+    local remainder = (n - 1) % 26
+    letters = string.char(65 + remainder) .. letters
+    n = math.floor((n - 1) / 26)
+  end
+  return letters
+end
+
 return {
   ["appendix"] = function(args, _kwargs, _meta)
     local bookmark_id = (args[1] or "defaultAppendixId"):gsub("%s+", "")
     local title = args[2] or "If you see this, you did not provide an appendix title."
     local id = alloc_id()
+    local letter = next_appendix_letter()
 
     local ooxml = string.format(
       [[
@@ -67,7 +104,7 @@ return {
         <w:fldChar w:fldCharType="separate"/>
       </w:r>
       <w:r>
-        <w:t>A</w:t>
+        <w:t>%s</w:t>
       </w:r>
       <w:r>
         <w:fldChar w:fldCharType="end"/>
@@ -80,6 +117,7 @@ return {
     ]],
       id,
       utils.escape_xml(bookmark_id),
+      letter,
       id,
       utils.escape_xml(title)
     )
