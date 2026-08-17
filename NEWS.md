@@ -1,5 +1,19 @@
 # quartifyr
 
+# quartifyr (development version)
+
+## Fixed
+
+* `initialize_quartifyr_project()` no longer fails with uv's "Empty field
+  is not allowed for PEP508" on a project where it's the first `pyro`-
+  based initializer to run (i.e. before
+  `reportifyr::initialize_report_project()`). The failure came from an
+  upstream `pyro` quirk: seeding a brand-new `pyproject.toml` for an
+  unrecognized dependency-group name (`"quartifyr"` isn't one of `pyro`'s
+  own bundled groups) rendered that group with a single spurious
+  empty-string dependency. `initialize_quartifyr_project()` now seeds a
+  minimal `pyproject.toml` itself first, so `pyro` never has to.
+
 # quartifyr 0.2.1
 
 ## Added

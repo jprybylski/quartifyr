@@ -21,6 +21,7 @@ initialize_quartifyr_project <- function(directory = ".") {
   # same issue and a longer explanation). A bare withr::with_dir() around
   # this call is not sufficient on its own.
   directory <- normalizePath(directory, mustWork = TRUE)
+  .seed_pyproject_stub(directory)
   pyro::write_group_to_pyproject(
     name = "quartifyr",
     deps = c("python-docx", "pyyaml"),
@@ -32,6 +33,63 @@ initialize_quartifyr_project <- function(directory = ".") {
     pyproject_dir = directory,
     groups = "quartifyr"
   ))
+}
+
+#' Pre-seed a minimal pyproject.toml before pyro can seed it incorrectly
+#'
+#' `pyro::write_group_to_pyproject()` is a no-op when `pyproject.toml`
+#' doesn't exist yet (it only edits an existing file). On a project where
+#' `reportifyr::initialize_report_project()` hasn't already created that
+#' file, that leaves `pyro::initialize_python(groups = "quartifyr")` --
+#' called right after -- to seed it instead, via `pyro`'s own
+#' `seed_pyproject()`. `"quartifyr"` isn't one of the group names in
+#' `pyro`'s *bundled* spec (only `reportifyr`/`presentifyr` are), and
+#' `pyro`'s seeding falls back to `character()` deps for unrecognized
+#' groups -- which its `render_subgroup()` then renders as a single
+#' spurious empty-string entry (`quartifyr = [\n    "",\n]`) due to an
+#' R `paste0()` recycling quirk (`paste0("x", character(0))` returns
+#' `"x"`, not `character(0)`). `uv` rejects that as "Empty field is not
+#' allowed for PEP508", breaking `initialize_quartifyr_project()` on a
+#' project where it's the first `pyro`-based initializer to run.
+#' Confirmed directly against the installed `pyro` package (0.1.1); see
+#' `tests/testthat/test-initialize.R`.
+#'
+#' Writing a minimal, valid `pyproject.toml` here -- before
+#' `write_group_to_pyproject()`/`initialize_python()` run -- ensures the
+#' file already exists by the time `pyro::initialize_python()` checks, so
+#' it skips its own (buggy, for unrecognized group names) seeding step
+#' entirely; `write_group_to_pyproject()` is what ends up creating the
+#' `quartifyr` group instead, with the real, non-empty deps this package
+#' controls. `requires-python = ">=3.12"` matches `pyro`'s own bundled
+#' spec (not this repo's separate, looser `>=3.10` for the standalone
+#' `quartifyr-styling` Python package) so the constraint is the same
+#' regardless of whether this or `reportifyr::initialize_report_project()`
+#' seeds the shared venv's `pyproject.toml` first.
+#'
+#' @param directory Target project directory (already normalized).
+#' @return `TRUE` if the file was created, `FALSE` if it already existed
+#'   (invisibly).
+#' @keywords internal
+.seed_pyproject_stub <- function(directory) {
+  toml_path <- file.path(directory, "pyproject.toml")
+  if (file.exists(toml_path)) {
+    return(invisible(FALSE))
+  }
+  proj_name <- gsub("[^A-Za-z0-9._-]+", "-", basename(directory))
+  proj_name <- sub("^[._-]+", "", proj_name)
+  if (!nzchar(proj_name)) {
+    proj_name <- "project"
+  }
+  writeLines(
+    c(
+      "[project]",
+      sprintf("name = \"%s\"", proj_name),
+      "version = \"0.0.1\"",
+      "requires-python = \">=3.12\""
+    ),
+    toml_path
+  )
+  invisible(TRUE)
 }
 
 #' Ensure a project's pyproject.toml defaults every dependency group on
