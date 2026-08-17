@@ -86,6 +86,20 @@ test_that("finds an installed extension even when read.table's column-shift bug 
   expect_true(result$installed[result$id == "A2-ai/quarto-plus"])
 })
 
+test_that("re-raises a quarto_list_extensions() CLI failure with an actionable message", {
+  local_mocked_bindings(
+    quarto_list_extensions = function() {
+      stop("Uncaught (in promise) Error: Include directive failed.\ncould not find file scripts/01_analysis.R")
+    },
+    .package = "quarto"
+  )
+
+  expect_error(
+    check_quarto_extensions(withr::local_tempdir()),
+    "Quarto CLI failed while listing extensions"
+  )
+})
+
 test_that("matches on the short id (owner/repo suffix) too", {
   local_mocked_bindings(
     quarto_list_extensions = function() {

@@ -59,6 +59,20 @@ quartifyr_quarto_extensions <- data.frame(
 #' function instead searches every cell *and* row name of the returned
 #' data frame, so the column shift doesn't matter.
 #'
+#' @section A `quarto list extensions` project-resolution gotcha:
+#' The `quarto list extensions` CLI command resolves the *entire*
+#' project's markdown (crawling every `.qmd`'s `{{< include >}}`
+#' directives and other resource paths) as a side effect of building its
+#' project file list -- not just its own installed-extensions output.
+#' Confirmed the hard way: a report project missing a file an included
+#' `.qmd` points at (e.g. copying `report.qmd` out of
+#' `examples/demo-report/` without also copying its `scripts/`
+#' directory) makes this command fail with an error about that missing
+#' file, with no mention of extensions at all. This function catches
+#' that and re-raises with a pointer back to the underlying Quarto error
+#' rather than letting Quarto's raw (and, over `quarto_render()`'s R
+#' wrapper, deeply nested) failure propagate uninterpreted.
+#'
 #' @param path Project directory to check (the one containing, or that
 #'   should contain, `_extensions/`). Defaults to the current directory.
 #' @param extensions Registry to check against. Defaults to
@@ -73,7 +87,25 @@ quartifyr_quarto_extensions <- data.frame(
 #'   (invisibly).
 #' @export
 check_quarto_extensions <- function(path = ".", extensions = quartifyr_quarto_extensions, error = TRUE) {
-  installed <- withr::with_dir(path, quarto::quarto_list_extensions())
+  installed <- tryCatch(
+    withr::with_dir(path, quarto::quarto_list_extensions()),
+    error = function(e) {
+      cli::cli_abort(
+        c(
+          "x" = "Quarto CLI failed while listing extensions in {.path {path}}.",
+          "!" = paste(
+            "{.code quarto list extensions} resolves the whole project, not just",
+            "installed extensions -- a {{< include >}} (or other resource path)",
+            "that a .qmd file in this project points at a missing file can surface",
+            "here, even though the error below won't mention extensions at all."
+          ),
+          "i" = "Underlying error: {conditionMessage(e)}"
+        ),
+        call = NULL,
+        parent = e
+      )
+    }
+  )
 
   installed_text <- character(0)
   if (is.data.frame(installed) && nrow(installed) > 0) {
