@@ -3,14 +3,12 @@
 # creates/refreshes a GitHub release and tag, and syncs DESCRIPTION/NEWS.md
 # to match VERSION.
 #
-# Ported from ../xpose.xtras's .github/workflows/release.yaml, with two
-# adaptations: `main` here isn't a protected branch (no ruleset, no repo
-# secrets configured as of this port), so the deploy-key/SSH push dance
-# xpose.xtras needs to get past its master ruleset is dropped entirely --
-# this workflow just commits and pushes with the default GITHUB_TOKEN. If
-# main is ever branch-protected the same way, that mechanism (a
-# `RELEASE_DEPLOY_KEY` deploy-key secret on the ruleset's bypass list) will
-# need to be reintroduced; see xpose.xtras's version for the exact pattern.
+# Ported from ../xpose.xtras's .github/workflows/release.yaml. `main` is now
+# a protected branch (a "basic" ruleset requiring changes via PR, added
+# 2026-08-16), so the default GITHUB_TOKEN can't push the metadata-sync
+# commit/tag directly -- the deploy-key/SSH push steps below go over SSH
+# using a deploy key (`RELEASE_DEPLOY_KEY`) that's on the ruleset's bypass
+# list, same as xpose.xtras's own master ruleset.
 on:
   push:
     branches: [main]
@@ -41,6 +39,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # main is protected (requires a PR); the default GITHUB_TOKEN can't
+      # push to it directly, so the metadata commit and tag moves below go
+      # over SSH using a deploy key that's on the ruleset's bypass list.
+      - name: Load deploy key
+        if: env.DRY_RUN != 'true'
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
+
+      - name: Push over SSH via the deploy key
+        if: env.DRY_RUN != 'true'
+        run: |
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
+          git remote set-url origin "git@github.com:${{ github.repository }}.git"
 
       - name: Configure git identity
         run: |
