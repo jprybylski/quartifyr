@@ -55,3 +55,19 @@ function instead searches every cell \emph{and} row name of the returned
 data frame, so the column shift doesn't matter.
 }
 
+\section{A \verb{quarto list extensions} project-resolution gotcha}{
+
+The \verb{quarto list extensions} CLI command resolves the \emph{entire}
+project's markdown (crawling every \code{.qmd}'s \verb{\{\{< include >\}\}}
+directives and other resource paths) as a side effect of building its
+project file list -- not just its own installed-extensions output.
+Confirmed the hard way: a report project missing a file an included
+\code{.qmd} points at (e.g. copying \code{report.qmd} out of
+\verb{examples/demo-report/} without also copying its \verb{scripts/}
+directory) makes this command fail with an error about that missing
+file, with no mention of extensions at all. This function catches
+that and re-raises with a pointer back to the underlying Quarto error
+rather than letting Quarto's raw (and, over \code{quarto_render()}'s R
+wrapper, deeply nested) failure propagate uninterpreted.
+}
+
