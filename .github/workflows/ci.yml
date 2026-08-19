@@ -4,10 +4,17 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch: # manual re-run for a dependabot/combined-prs branch skipped below
 
 jobs:
   styling-tests:
     name: styling pytest (${{ matrix.os }})
+    # Dependabot PRs and the github/combine-prs-generated combined PR (see
+    # combine-prs.yml) don't get automatic checks -- individually, they're
+    # too numerous to burn the full matrix on for a routine dependency
+    # bump; the combined PR runs manually (workflow_dispatch above) before
+    # merge instead. Any other PR is untouched.
+    if: github.event_name != 'pull_request' || (!startsWith(github.head_ref, 'dependabot/') && github.head_ref != 'combined-prs-branch')
     strategy:
       fail-fast: false
       matrix:
@@ -30,6 +37,8 @@ jobs:
 
   full-pipeline:
     name: full pipeline (${{ matrix.os }})
+    # See styling-tests' identical condition above.
+    if: github.event_name != 'pull_request' || (!startsWith(github.head_ref, 'dependabot/') && github.head_ref != 'combined-prs-branch')
     strategy:
       fail-fast: false
       matrix:
@@ -217,6 +226,9 @@ jobs:
     # full-pipeline above -- this job's job is to prove the action's own
     # wiring (inputs/outputs/steps), which is OS-agnostic logic lifted
     # straight from that job.
+    #
+    # See styling-tests' identical condition above.
+    if: github.event_name != 'pull_request' || (!startsWith(github.head_ref, 'dependabot/') && github.head_ref != 'combined-prs-branch')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
