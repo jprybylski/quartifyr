@@ -19,6 +19,14 @@ test_that("styling_example_template() overwrite = TRUE replaces the destination"
   expect_no_error(styling_example_template(dir = dest_dir, overwrite = TRUE))
 })
 
+test_that("styling_example_template() creates dir when it doesn't exist", {
+  dest_dir <- file.path(withr::local_tempdir(), "nested", "sub")
+  expect_false(dir.exists(dest_dir))
+  path <- styling_example_template(dir = dest_dir)
+  expect_true(dir.exists(dest_dir))
+  expect_true(file.exists(path))
+})
+
 # styling_example_style() -- pyro bridge, mocked.
 
 test_that("styling_example_style() forwards args and returns the parsed style", {
@@ -96,6 +104,20 @@ test_that("styling_save_overrides() includes --no-deconvolute when deconvolute =
   styling_save_overrides(list(a = 1), deconvolute = FALSE, base = "default.yaml")
 
   expect_true("--no-deconvolute" %in% captured_args)
+})
+
+test_that("styling_save_overrides() includes --overwrite when requested", {
+  captured_args <- NULL
+  local_mocked_bindings(
+    .run_quartifyr_styling_cli = function(args) {
+      captured_args <<- args
+      list(status = "ok", overrides = list())
+    }
+  )
+
+  styling_save_overrides(list(a = 1), overwrite = TRUE, base = "default.yaml")
+
+  expect_true("--overwrite" %in% captured_args)
 })
 
 # styling_update_style() -- pyro bridge, mocked.
