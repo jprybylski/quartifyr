@@ -181,6 +181,25 @@ external) resolves them from `OUTPUTS/figures/`/`OUTPUTS/tables/`. A
 plain `quarto render` alone leaves the literal `{rpfy}:...` text visible;
 that's expected, not a bug, until pass 2 runs.
 
+**Scoped figure/table numbering (`appendix_fig_caption`/`section_fig_caption`/
+`subsection_fig_caption` etc., `appendix.lua`) needs an explicit
+`section_break`/`subsection_break` marker rather than resetting
+automatically at each native `#`/`##` heading.** Quarto's shortcode
+processing and its `filters:` list (where a `Header`-AST-tracking filter
+would have to live) are separate passes with no guaranteed relative
+ordering against each other, so a `Header` handler can't reliably reset a
+counter *before* an earlier caption shortcode in the same document
+already used it. `{{< appendix >}}`'s own boundary sidesteps this
+naturally -- it emits raw OOXML directly, never a real `#` heading, so
+it's already part of the same shortcode pass as the captions it scopes.
+`section_break`/`subsection_break` extend that same trick to ordinary
+headings: a lightweight marker shortcode placed next to the `#`/`##`
+itself, author-placed and unenforced (same trust model as
+`appendix_crossref`'s bookmark target already has). Independent of
+`number-sections: true` (plain pandoc, numbers heading *text*) for the
+same reason -- the two can visibly disagree if a `section_break` is
+missed, which is expected, not a bug.
+
 **Quarto extension host: `_extensions/quartifyr/` at the repo root is a
 third physical copy, not the canonical one.** `inst/extensions/quartifyr/`
 stays the source of truth (what the R package bundles and installs via

@@ -615,22 +615,13 @@ say when a new section/subsection starts:
 ```
 
 `section_break`/`subsection_break` render nothing themselves -- they only
-advance an internal counter. Not tied to `number-sections: true` (above)
-at all: that's pandoc's own separate mechanism for numbering visible
-heading *text*, computed by walking real `Header` nodes. This extension's
-counters are independent, since a `Header`-tracking filter and the
-shortcode pass that resolves captions are separate passes with no
-ordering guarantee against each other -- a `Header` handler couldn't
-reliably reset a counter before an earlier caption in the same document
-had already used it (`{{< appendix >}}` sidesteps this by not being a
-real heading at all: it's raw OOXML, not a `#`, so its own boundary is
-naturally part of the same shortcode pass). Call `section_break`/
-`subsection_break` exactly once per section/subsection you want reflected
-in scoped numbering, in the same order they appear -- if that doesn't
-match `number-sections:`'s own count (e.g. a section with no scoped
-captions in it, so no reason to call `section_break` there), the two
-numbers will disagree; that's expected, not a bug, given the two are
-unrelated in cause.
+advance an internal counter, independently of `number-sections: true`
+(above), which numbers visible heading *text* by a different, unrelated
+mechanism (see the repo-root CLAUDE.md for why the two can't be tied
+together). Call `section_break`/`subsection_break` exactly once per
+section/subsection you want reflected in scoped numbering, in the same
+order they appear -- skip one and the scoped numbers and
+`number-sections:`'s own will visibly disagree.
 
 `scoped_crossref "BookmarkId"` resolves any of the six caption
 shortcodes' bookmarks (auto-detecting figure vs. table the same way

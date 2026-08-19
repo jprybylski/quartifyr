@@ -71,19 +71,10 @@
 --
 -- Why section/subsection scope needs an explicit `{{< section_break >}}`/
 -- `{{< subsection_break >}}` marker rather than just resetting
--- automatically at each native `#`/`##` heading: Quarto's shortcode
--- processing and its `filters:` list (a native-Header-AST-tracking filter
--- would need to be one of the latter) are separate passes with no
--- guaranteed relative ordering against each other -- a `Header` handler
--- couldn't reliably reset a counter *before* a caption shortcode earlier
--- in the same pass had already used it. Appendix headings sidestep this
--- entirely by not being native headings at all (`appendix` emits raw
--- OOXML directly, no `#` involved), so its boundary is naturally part of
--- the same shortcode pass. `section_break`/`subsection_break` extend that
--- same approach to ordinary headings: place one right after (or before)
--- the `#`/`##` heading itself. Not validated or enforced -- placement is
--- the author's responsibility, same as `appendix_crossref`'s bookmark
--- target today.
+-- automatically at each native `#`/`##` heading: see the repo-root
+-- CLAUDE.md's "Architecture notes that span files" section. Not validated
+-- or enforced -- placement is the author's responsibility, same as
+-- `appendix_crossref`'s bookmark target today.
 --
 -- KNOWN LIMITATION: none of the scoped captions show up in a
 -- `.list_of_figures`/`.list_of_tables` div (quarto-plus's

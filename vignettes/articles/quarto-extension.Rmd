@@ -233,6 +233,14 @@ field: reordering, adding, or removing appendices never requires manual
 relettering, just a field recalculation. Reference one from body text
 with `{{< appendix_crossref "BookmarkId" >}}`.
 
+The designator style is configurable document-wide:
+
+```yaml
+appendix-numbering: alphabetic   # default -- A, B, C, ...
+appendix-numbering: arabic       # 1, 2, 3, ...
+appendix-numbering: roman        # I, II, III, ...
+```
+
 ## Figures, tables, and cross-references
 
 `quarto-plus`'s own machinery, not something this extension adds:
@@ -256,6 +264,31 @@ crossref-hyperlinks: "same-page"   # hyperlink only when the target is on a diff
 `true`/`false` are handled by `quartifyr-styling apply-layout` /
 `styling_apply_layout()`. `"same-page"` needs a further opt-in
 post-`reportifyr` step; see [Styling](styling.html).
+
+## Scoped figure/table numbering
+
+An additive alternative to `fig_caption`/`tbl_caption` above, for when
+figure/table numbering should restart within an appendix, section, or
+subsection instead of running continuously through the document:
+
+```
+{{< appendix "SupplementaryFigures" "Supplementary Figures" >}}
+
+{{< appendix_fig_caption "FigResiduals" "Residual plot" >}}
+
+See {{< scoped_crossref "FigResiduals" >}}.
+```
+
+Numbers "Figure A1" -- the appendix's own letter directly followed by a
+number that restarts at each `{{< appendix >}}`.
+`section_fig_caption`/`subsection_fig_caption` (with table equivalents)
+do the same for ordinary headings, numbered "Figure 3.1"/"Figure 3.2.1";
+since a `#`/`##` heading isn't a shortcode, each needs an explicit
+`{{< section_break >}}`/`{{< subsection_break >}}` placed next to it to
+mark where numbering restarts. `scoped_crossref` resolves any of these
+six shortcodes' bookmarks. See the extension's own README for the full
+shortcode list and known limitations (not shown in a `.list_of_figures`/
+`.list_of_tables` div).
 
 ## Page header/footer and page numbering
 
