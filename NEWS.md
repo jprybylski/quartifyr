@@ -4,6 +4,22 @@
 
 ## New features
 
+* `{{< appendix >}}`'s designator style is now configurable document-wide
+  via `appendix-numbering:` frontmatter (`alphabetic` (default) / `arabic`
+  / `roman`), instead of always lettering A/B/C (#26).
+* New scoped figure/table caption shortcodes --
+  `appendix_fig_caption`/`appendix_tbl_caption`,
+  `section_fig_caption`/`section_tbl_caption` (with a new `section_break`
+  marker), and `subsection_fig_caption`/`subsection_tbl_caption` (with a
+  new `subsection_break` marker) -- number "Figure A1"/"Figure 3.1"/
+  "Figure 3.2.1" respectively, restarting within their scope instead of
+  running continuously through the whole document like `quarto-plus`'s
+  own `fig_caption`/`tbl_caption`. A new `scoped_crossref` shortcode
+  resolves any of the six. Additive: nothing here changes `quarto-plus`'s
+  own shortcodes, and an author can mix scoped and continuous captions
+  freely. See `inst/extensions/quartifyr/README.md`'s "Scoped
+  figure/table numbering" section, including its known List of
+  Figures/Tables limitation (#26).
 * Style YAML: new `code:` section (`font_size`, `background_color`,
   `padding_pt`) styles pandoc's `Source Code`/`Verbatim Char` docx styles
   for fenced code blocks/inline code, using `fonts.monospace` (previously
