@@ -22,3 +22,17 @@ venv to run against. Call this once per report project, alongside
 \code{render_report()} itself, since re-provisioning on every render would be
 wasteful.
 }
+\section{A stale-venv gotcha in existing reportifyr projects}{
+
+On a project already initialized by reportifyr \emph{before} it depended on
+pyro (reportifyr < 0.4.0), this can fail with an opaque error from
+\code{pyro::initialize_python()}'s underlying \verb{uv sync} call -- that
+project's Python environment predates pyro/uv and isn't necessarily
+something \code{uv} can adopt as-is. Run
+\code{reportifyr::initialize_report_project(project_dir = directory)} first
+(safe to re-run) to bring the environment up to a pyro-compatible
+state before calling this function. This function catches that failure
+and re-raises with a pointer to the same fix, instead of letting
+pyro/uv's raw error propagate uninterpreted.
+}
+

@@ -168,6 +168,26 @@ test_that("initialize_quartifyr_project() writes the quartifyr dependency group 
   expect_identical(result, "initialized")
 })
 
+test_that("initialize_quartifyr_project() re-raises a pyro::initialize_python() failure with an actionable message (#46)", {
+  # Reproduces the reported failure: on an existing reportifyr project
+  # created before reportifyr 0.4.0 added its own pyro dependency, its
+  # pre-pyro Python environment isn't necessarily something `uv sync` can
+  # adopt as-is -- pyro::initialize_python() surfaces that as a raw,
+  # uv-internal error with no mention of quartifyr or reportifyr at all.
+  project_dir <- withr::local_tempdir()
+
+  local_mocked_bindings(
+    write_group_to_pyproject = function(...) invisible(NULL),
+    initialize_python = function(...) stop("uv sync failed: not a valid virtual environment"),
+    .package = "pyro"
+  )
+
+  expect_error(
+    initialize_quartifyr_project(project_dir),
+    "pyro failed to provision a Python environment"
+  )
+})
+
 test_that("initialize_quartifyr_project() adds default-groups = \"all\" to an existing pyproject.toml", {
   project_dir <- withr::local_tempdir()
   writeLines(c("[tool.uv]", "index-strategy = \"unsafe-best-match\""), file.path(project_dir, "pyproject.toml"))
