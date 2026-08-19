@@ -22,6 +22,7 @@ from .abbreviations import AbbreviationsError, build_abbreviations_tex
 from .build_template import build_reference_docx
 from .layout import LayoutError, apply_layout_from_qmd
 from .recalculate_fields import FieldRecalculationError, recalculate_fields
+from .reportifyr_sync import ReportifyrSyncError, sync_reportifyr_config
 from .same_page_crossrefs import SamePageCrossrefError, resolve_same_page_crossrefs
 from .schema import StyleConfig, StyleConfigError
 
@@ -80,10 +81,42 @@ def _cmd_resolve_same_page_crossrefs(args: argparse.Namespace) -> int:
 
 def _cmd_apply_layout(args: argparse.Namespace) -> int:
     try:
-        output_path = apply_layout_from_qmd(args.docx, args.qmd, status=args.status)
-    except (LayoutError, FileNotFoundError) as exc:
+        equation_font = None
+        if args.style is not None:
+            equation_font = StyleConfig.load(args.style, args.override).equation.font
+        output_path = apply_layout_from_qmd(args.docx, args.qmd, status=args.status, equation_font=equation_font)
+    except (LayoutError, StyleConfigError, FileNotFoundError) as exc:
         return _err(args, exc)
     return _ok(args, f"applied layout to {output_path}", path=str(output_path))
+
+
+def _cmd_sync_reportifyr_config(args: argparse.Namespace) -> int:
+    def _no_interactive_prompt(_message: str) -> str:
+        # Reached only when sync_reportifyr_config() found real changes and
+        # assume_yes is False -- with --json (the R pyro bridge's own
+        # invocation, always non-interactive/piped) there's no live stdin
+        # to read a confirmation from, so fail clearly instead of hanging
+        # on input() or silently treating EOF as "no".
+        raise ReportifyrSyncError(
+            "found changes but --yes was not given; interactive confirmation isn't "
+            "available with --json -- pass --yes to confirm non-interactively"
+        )
+
+    try:
+        config = StyleConfig.load(args.style, args.override)
+        changed = sync_reportifyr_config(
+            config, args.config,
+            assume_yes=args.yes,
+            prompt=_no_interactive_prompt if args.json else input,
+            # --json mode's stdout must be pure JSON (the R pyro bridge
+            # parses it as such) -- the diff summary is diagnostic-only,
+            # so it goes to stderr there instead of polluting stdout.
+            out=sys.stderr if args.json else sys.stdout,
+        )
+    except (StyleConfigError, ReportifyrSyncError, FileNotFoundError) as exc:
+        return _err(args, exc)
+    message = f"synced {args.config}" if changed else f"{args.config} already in sync"
+    return _ok(args, message, path=str(args.config), changed=changed)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -134,7 +167,22 @@ def build_parser() -> argparse.ArgumentParser:
     layout.add_argument("--docx", required=True, help="Path to the rendered docx (modified in place)")
     layout.add_argument("--qmd", required=True, help="Path to the shell .qmd (read for header-format: and its placeholders)")
     layout.add_argument("--status", required=True, choices=["draft", "final", "DRAFT", "FINAL"], help="Resolved draft/final status")
+    layout.add_argument(
+        "--style", default=None,
+        help="Optional style YAML -- when given, applies its equation.font to the rendered docx's default math font",
+    )
+    layout.add_argument("--override", default=None, help="Optional per-org/per-project style YAML, deep-merged over --style")
     layout.set_defaults(func=_cmd_apply_layout)
+
+    sync = subparsers.add_parser(
+        "sync-reportifyr-config",
+        help="Update reportifyr's report/config.yaml footnotes_font/footnotes_font_size to match a style YAML",
+    )
+    sync.add_argument("--style", default="styles/default.yaml", help="Base style YAML (default: styles/default.yaml)")
+    sync.add_argument("--override", default=None, help="Optional per-org/per-project style YAML, deep-merged over --style")
+    sync.add_argument("--config", default="report/config.yaml", help="Path to reportifyr's config.yaml (default: report/config.yaml)")
+    sync.add_argument("--yes", action="store_true", help="Write without an interactive confirmation prompt")
+    sync.set_defaults(func=_cmd_sync_reportifyr_config)
 
     return parser
 

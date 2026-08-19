@@ -22,6 +22,7 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 from docx.styles.style import BaseStyle
 
+from ._ooxml_settings import insert_settings_child
 from .schema import StyleConfig
 
 _PAGE_SIZES_IN = {
@@ -42,7 +43,7 @@ def _rgb(hex_color: str) -> RGBColor:
 
 
 def _set_font(style: BaseStyle, name: str, size_pt: float, *, color: str | None = None,
-              bold: bool | None = None, italic: bool | None = None) -> None:
+              bold: bool | None = None, italic: bool | None = None, caps: bool | None = None) -> None:
     font = style.font
     font.name = name
     font.size = Pt(size_pt)
@@ -52,6 +53,10 @@ def _set_font(style: BaseStyle, name: str, size_pt: float, *, color: str | None 
         font.bold = bold
     if italic is not None:
         font.italic = italic
+    if caps is not None:
+        # Visual-only transform (OOXML w:caps) -- the run's actual text
+        # content is untouched, unlike an upstream string .upper().
+        font.all_caps = caps
 
     # East-Asian/complex-script run properties fall back to Word's own theme
     # fonts unless set explicitly, which produces a mismatched font in Word's
@@ -247,6 +252,53 @@ def _style_synopsis(doc: DocumentObject, config: StyleConfig) -> None:
     _set_font(inline_label, config.fonts.body, config.fonts.sizes.body + 1, color=config.colors.text, bold=True)
 
 
+def _style_source_code(doc: DocumentObject, config: StyleConfig) -> None:
+    """Create/configure the 'Source Code' (paragraph)/'Verbatim Char'
+    (character) styles pandoc's docx writer applies to fenced code
+    blocks/inline code.
+
+    Neither exists in python-docx's bundled default template (confirmed:
+    absent from its styles.xml), so without this pandoc silently injects
+    its *own* built-in defaults (Consolas 11pt, "#F1F3F5" shading, no
+    padding) at render time -- config.code's own defaults match those
+    exactly, so leaving code: untouched in a style YAML doesn't change
+    existing rendered output. Per-token syntax-highlight character styles
+    (KeywordTok etc.) are pandoc built-ins based on "Verbatim Char" and,
+    like "Source Code"/"Verbatim Char" themselves, only auto-injected when
+    absent from the reference-doc -- they inherit font/size/background
+    from this style without needing to be touched individually.
+
+    fonts.monospace is applied here -- previously parsed into StyleConfig
+    but never actually used anywhere.
+    """
+    paragraph_style = _get_or_add_style(doc, "Source Code", WD_STYLE_TYPE.PARAGRAPH, base="Normal")
+    char_style = _get_or_add_style(doc, "Verbatim Char", WD_STYLE_TYPE.CHARACTER, base="Default Paragraph Font")
+
+    for style in (paragraph_style, char_style):
+        _set_font(style, config.fonts.monospace, config.code.font_size, color=config.colors.text)
+
+    # Shading lives on rPr for the character style, pPr for the paragraph
+    # style -- OxmlElement instances can't be shared between two parents,
+    # so build one per target rather than reusing a single element.
+    def _add_shading(target_pr) -> None:
+        shd = OxmlElement("w:shd")
+        shd.set(qn("w:val"), "clear")
+        shd.set(qn("w:color"), "auto")
+        shd.set(qn("w:fill"), config.code.background_color.lstrip("#").upper())
+        target_pr.append(shd)
+
+    _add_shading(paragraph_style.element.get_or_add_pPr())
+    _add_shading(char_style.element.get_or_add_rPr())
+
+    # "Padding": OOXML paragraph shading has no horizontal-padding concept
+    # -- this is vertical spacing around the shaded block only.
+    _set_paragraph_format(
+        paragraph_style,
+        space_before_pt=config.code.padding_pt,
+        space_after_pt=config.code.padding_pt,
+    )
+
+
 def _style_hyperlink(doc: DocumentObject, config: StyleConfig) -> None:
     """Create/configure the 'Hyperlink' character style pandoc's citeproc
     output applies (via rStyle) to each in-text citation when
@@ -315,40 +367,6 @@ def _add_page_number_footer(doc: DocumentObject, config: StyleConfig) -> None:
     _field_run("PAGE")
 
 
-# Elements CT_Settings's schema (ECMA-376) requires to come *after*
-# w:updateFields, in order -- copied from python-docx's own
-# docx.oxml.settings.CT_Settings._tag_seq (not importable: that module
-# deletes the name off the class after using it internally), starting
-# right after "w:updateFields" itself. Used to find the correct insertion
-# point among whatever settings python-docx's bundled default template
-# (which this reference-doc is built on top of) happens to already
-# contain -- appending blindly to the end would put it after elements the
-# schema requires to precede it.
-_SETTINGS_AFTER_UPDATE_FIELDS = (
-    "w:hdrShapeDefaults",
-    "w:footnotePr",
-    "w:endnotePr",
-    "w:compat",
-    "w:docVars",
-    "w:rsids",
-    "m:mathPr",
-    "w:attachedSchema",
-    "w:themeFontLang",
-    "w:clrSchemeMapping",
-    "w:doNotIncludeSubdocsInStats",
-    "w:doNotAutoCompressPictures",
-    "w:forceUpgrade",
-    "w:captions",
-    "w:readModeInkLockDown",
-    "w:smartTagType",
-    "sl:schemaLibrary",
-    "w:shapeDefaults",
-    "w:doNotEmbedSmartTags",
-    "w:decimalSymbol",
-    "w:listSeparator",
-)
-
-
 def _enable_update_fields_on_open(doc: DocumentObject) -> None:
     """Sets ``<w:updateFields w:val="true"/>`` in the reference-doc's
     ``word/settings.xml``, so Word automatically recalculates every field
@@ -371,18 +389,9 @@ def _enable_update_fields_on_open(doc: DocumentObject) -> None:
     docx writer carries the reference-doc's ``settings.xml`` through
     largely as-is.
     """
-    settings = doc.settings.element
     update_fields = OxmlElement("w:updateFields")
     update_fields.set(qn("w:val"), "true")
-
-    successor = next(
-        (child for child in settings if child.tag in {qn(tag) for tag in _SETTINGS_AFTER_UPDATE_FIELDS}),
-        None,
-    )
-    if successor is not None:
-        successor.addprevious(update_fields)
-    else:
-        settings.append(update_fields)
+    insert_settings_child(doc.settings.element, update_fields)
 
 
 def build_reference_docx(config: StyleConfig, output_path: str | Path) -> Path:
@@ -435,6 +444,7 @@ def build_reference_docx(config: StyleConfig, output_path: str | Path) -> Path:
             config.fonts.sizes.heading.get(level),
             color=config.colors.heading,
             bold=config.heading.bold,
+            caps=config.heading.all_caps,
         )
         _set_paragraph_format(
             style,
@@ -452,6 +462,7 @@ def build_reference_docx(config: StyleConfig, output_path: str | Path) -> Path:
     _style_table_grid(doc, config)
     _style_synopsis(doc, config)
     _style_bibliography(doc, config)
+    _style_source_code(doc, config)
     _style_hyperlink(doc, config)
     _style_header(doc, config)
     _add_page_number_footer(doc, config)

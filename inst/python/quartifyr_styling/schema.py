@@ -189,6 +189,7 @@ class HeadingStyle:
     space_before_pt: float
     space_after_pt: float
     keep_with_next: bool
+    all_caps: bool
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "HeadingStyle":
@@ -197,6 +198,11 @@ class HeadingStyle:
             space_before_pt=_require_positive(d["space_before_pt"], "heading.space_before_pt"),
             space_after_pt=_require_positive(d["space_after_pt"], "heading.space_after_pt"),
             keep_with_next=bool(d["keep_with_next"]),
+            # Visual transform only (OOXML w:caps) -- the underlying heading
+            # text/string is untouched, so ToC entries/crossrefs still read
+            # back the author's real casing. Default False preserves
+            # existing rendered output for anyone not opting in.
+            all_caps=bool(d.get("all_caps", False)),
         )
 
 
@@ -260,6 +266,54 @@ class FooterStyle:
 
 
 @dataclass
+class CodeStyle:
+    """Governs pandoc's own ``Source Code`` (paragraph)/``Verbatim Char``
+    (character) docx styles for fenced code blocks/inline code -- see
+    ``build_template.py``'s ``_style_source_code()``. Without this,
+    pandoc's docx writer falls back to its own built-in defaults (Consolas
+    11pt, ``#F1F3F5`` background, no padding) since quartifyr's
+    reference-doc doesn't otherwise define those two style names.
+    """
+
+    font_size: float
+    background_color: str
+    padding_pt: float
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "CodeStyle":
+        return cls(
+            font_size=_require_positive(d["font_size"], "code.font_size"),
+            background_color=_require_hex(d["background_color"], "code.background_color"),
+            # Applied as paragraph space-before/after around the shaded
+            # code block -- OOXML paragraph shading has no horizontal-
+            # padding concept, so this is vertical spacing only, not true
+            # CSS box padding.
+            padding_pt=_require_nonnegative(d["padding_pt"], "code.padding_pt"),
+        )
+
+
+@dataclass
+class EquationStyle:
+    """Governs the docx-wide default math font (``word/settings.xml``'s
+    ``m:mathPr/m:mathFont``) applied post-render by ``layout.py`` --
+    pandoc's docx writer doesn't carry this setting through from a
+    reference-doc, so it can't be set in ``build_template.py`` (see that
+    module's own note). Font family only: an OOXML math run with no
+    explicit run properties inherits its *size* from the surrounding
+    paragraph, so there's no separate equation font size to configure.
+    """
+
+    font: str
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "EquationStyle":
+        font = d["font"]
+        if not isinstance(font, str) or not font:
+            raise StyleConfigError(f"equation.font must be a non-empty string, got: {font!r}")
+        return cls(font=font)
+
+
+@dataclass
 class Identity:
     org_name: str
     logo_path: str
@@ -280,6 +334,8 @@ class StyleConfig:
     synopsis: SynopsisStyle
     title_page: TitlePageStyle
     footer: FooterStyle
+    code: CodeStyle
+    equation: EquationStyle
     identity: Identity
 
     @classmethod
@@ -295,6 +351,8 @@ class StyleConfig:
                 synopsis=SynopsisStyle.from_dict(d["synopsis"]),
                 title_page=TitlePageStyle.from_dict(d["title_page"]),
                 footer=FooterStyle.from_dict(d["footer"]),
+                code=CodeStyle.from_dict(d["code"]),
+                equation=EquationStyle.from_dict(d["equation"]),
                 identity=Identity.from_dict(d.get("identity", {})),
             )
         except KeyError as exc:

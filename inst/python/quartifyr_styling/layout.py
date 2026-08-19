@@ -102,6 +102,7 @@ from ._ooxml_fields import (
     match_ref_field_run_group,
     strip_hyperlink_switch,
 )
+from ._ooxml_settings import insert_settings_child
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?\n)---\s*\n", re.DOTALL)
 _FRONT_MATTER_START_BOOKMARK = "quartifyr-front-matter-start"
@@ -390,6 +391,41 @@ def _insert_section_break(bookmark_p, final_sectPr) -> None:
     pPr.append(new_sectPr)
 
 
+def _set_equation_font(document, font_name: str) -> None:
+    """Sets ``word/settings.xml``'s ``m:mathPr/m:mathFont`` -- the
+    document-wide default font Word applies to any OOXML math run
+    (``m:r``) that carries no explicit run properties of its own, which is
+    every equation quarto/pandoc emits (confirmed: neither inline nor
+    display equations get an ``m:rPr``).
+
+    This can't be set on the reference-doc template instead
+    (``build_template.py``): confirmed empirically that pandoc's docx
+    writer does not carry a reference-doc's own ``m:mathPr`` through into
+    the rendered output at all, even though python-docx's bundled default
+    template (which the reference-doc is built on) already has one. So
+    this has to be re-applied to the *rendered* docx, post-render, same as
+    every other reason ``apply-layout`` exists (see this module's own
+    docstring and CLAUDE.md's "requires editing docx package parts
+    directly" note).
+
+    Font family only -- an unstyled math run inherits its *size* from the
+    surrounding paragraph, so there's no separate size to set here.
+    """
+    settings = document.settings.element
+    math_pr = settings.find(qn("m:mathPr"))
+    if math_pr is None:
+        math_pr = OxmlElement("m:mathPr")
+        insert_settings_child(settings, math_pr, after_tag="m:mathPr")
+        math_font = OxmlElement("m:mathFont")
+        math_pr.append(math_font)
+    else:
+        math_font = math_pr.find(qn("m:mathFont"))
+        if math_font is None:
+            math_font = OxmlElement("m:mathFont")
+            math_pr.insert(0, math_font)
+    math_font.set(qn("m:val"), font_name)
+
+
 def apply_layout(
     docx_path: str | Path,
     *,
@@ -398,6 +434,7 @@ def apply_layout(
     confidential_label: str = "",
     show_page_numbers: bool = True,
     crossref_hyperlinks: bool | str = True,
+    equation_font: str | None = None,
 ) -> Path:
     """Applies header/footer + page-numbering layout to ``docx_path``, in place.
 
@@ -518,6 +555,9 @@ def apply_layout(
     elif crossref_hyperlink_mode == "same-page":
         _mark_crossrefs_for_same_page_resolution(document)
 
+    if equation_font is not None:
+        _set_equation_font(document, equation_font)
+
     document.save(str(docx_path))
     return docx_path
 
@@ -527,12 +567,19 @@ def apply_layout_from_qmd(
     qmd_path: str | Path,
     *,
     status: str,
+    equation_font: str | None = None,
 ) -> Path:
     """Convenience wrapper: reads ``qmd_path``'s frontmatter, resolves
     ``header-format:`` against it and ``status``, resolves the footer's
     confidentiality label from ``confidentiality:``, resolves
     ``crossref-hyperlinks:`` (default ``True`` -- ``True``/``False``/
     ``"same-page"``), and applies the layout.
+
+    ``equation_font`` (default ``None``, no change): a style YAML's
+    ``equation.font``, resolved by the caller (``cli.py``'s ``layout``
+    subcommand, from its own optional ``--style``/``--override``) since
+    unlike ``header-format:``/``confidentiality:`` this isn't read from
+    the ``.qmd`` frontmatter at all.
     """
     frontmatter = read_qmd_frontmatter(qmd_path)
     header_left_text = resolve_header_left_text(frontmatter, status)
@@ -544,4 +591,5 @@ def apply_layout_from_qmd(
         status=status,
         confidential_label=confidential_label,
         crossref_hyperlinks=crossref_hyperlinks,
+        equation_font=equation_font,
     )

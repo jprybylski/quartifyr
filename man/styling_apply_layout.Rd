@@ -4,7 +4,7 @@
 \alias{styling_apply_layout}
 \title{Apply header/footer and body-start layout to a rendered docx}
 \usage{
-styling_apply_layout(docx, qmd, status)
+styling_apply_layout(docx, qmd, status, style = NULL, override = NULL)
 }
 \arguments{
 \item{docx}{Path to the rendered docx (modified in place).}
@@ -13,6 +13,13 @@ styling_apply_layout(docx, qmd, status)
 placeholders).}
 
 \item{status}{\code{"draft"} or \code{"final"}.}
+
+\item{style}{Optional path to a style YAML -- when given, applies its
+\code{equation.font} to the rendered docx's default math font (\code{NULL},
+the default, leaves it untouched).}
+
+\item{override}{Optional per-org/per-project style YAML, deep-merged
+over \code{style}. Ignored unless \code{style} is also given.}
 }
 \value{
 The docx path (invisibly).

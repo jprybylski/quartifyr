@@ -1,5 +1,32 @@
 # quartifyr
 
+# quartifyr (development version)
+
+## New features
+
+* Style YAML: new `code:` section (`font_size`, `background_color`,
+  `padding_pt`) styles pandoc's `Source Code`/`Verbatim Char` docx styles
+  for fenced code blocks/inline code, using `fonts.monospace` (previously
+  declared but never actually applied anywhere -- now wired up). Defaults
+  match pandoc's own previous built-in fallback, so existing renders are
+  unaffected unless a style YAML opts into non-default values (#29).
+* Style YAML: new `equation.font` sets the docx-wide default math font
+  (applied by `styling_apply_layout()`/`render_report()`'s new `style`/
+  `override` arguments post-render, since pandoc's docx writer doesn't
+  carry this setting through from the reference-doc template). Font
+  family only -- an unstyled math run inherits its size from the
+  surrounding paragraph (#29).
+* Style YAML: new `heading.all_caps` applies an all-caps *visual*
+  transform (OOXML `w:caps`) to `Heading 1`-`6`, leaving the underlying
+  heading text untouched (#29).
+* New `styling_sync_reportifyr_config()` (`quartifyr-styling
+  sync-reportifyr-config`) updates reportifyr's own `report/config.yaml`
+  `footnotes_font`/`footnotes_font_size` to match a style YAML's
+  `fonts.body`/`fonts.sizes.footnote` -- previously only kept in sync by
+  hand, per both bundled examples' own `config.yaml` comments. Requires
+  an interactive confirmation unless `yes = TRUE` is passed; not run
+  automatically by `render_report()` (#29).
+
 # quartifyr 0.2.4
 
 ## Fixed

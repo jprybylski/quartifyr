@@ -149,6 +149,57 @@ def _build_docx_with_bookmarks(path: Path, *, include_front_matter_bookmark: boo
     document.save(str(path))
 
 
+def test_apply_layout_sets_equation_font(tmp_path):
+    # python-docx's own bundled default template already ships an
+    # m:mathPr/m:mathFont (Cambria Math, confirmed directly) -- this
+    # exercises the "already present, update in place" branch of
+    # _set_equation_font(), the realistic case for a docx built on that
+    # template (as quartifyr's own reference-doc is).
+    docx_path = tmp_path / "test.docx"
+    document = docx.Document()
+    document.add_paragraph("Body para")
+    document.save(str(docx_path))
+    assert document.settings.element.find(qn("m:mathPr")) is not None, "test assumption: template ships m:mathPr"
+
+    apply_layout(docx_path, equation_font="Courier New")
+
+    document = docx.Document(str(docx_path))
+    math_fonts = document.settings.element.findall(f".//{qn('m:mathFont')}")
+    assert len(math_fonts) == 1
+    assert math_fonts[0].get(qn("m:val")) == "Courier New"
+
+
+def test_apply_layout_creates_equation_font_when_absent(tmp_path):
+    docx_path = tmp_path / "test.docx"
+    document = docx.Document()
+    document.add_paragraph("Body para")
+    document.settings.element.remove(document.settings.element.find(qn("m:mathPr")))
+    document.save(str(docx_path))
+    assert document.settings.element.find(qn("m:mathPr")) is None
+
+    apply_layout(docx_path, equation_font="Courier New")
+
+    document = docx.Document(str(docx_path))
+    math_pr = document.settings.element.find(qn("m:mathPr"))
+    assert math_pr is not None
+    math_font = math_pr.find(qn("m:mathFont"))
+    assert math_font is not None
+    assert math_font.get(qn("m:val")) == "Courier New"
+
+
+def test_apply_layout_leaves_equation_font_untouched_when_not_given(tmp_path):
+    docx_path = tmp_path / "test.docx"
+    document = docx.Document()
+    document.add_paragraph("Body para")
+    document.save(str(docx_path))
+
+    apply_layout(docx_path)
+
+    document = docx.Document(str(docx_path))
+    math_font = document.settings.element.find(qn("m:mathPr")).find(qn("m:mathFont"))
+    assert math_font.get(qn("m:val")) == "Cambria Math"
+
+
 def test_apply_layout_three_sections_with_title_page_bookmark(tmp_path):
     docx_path = tmp_path / "test.docx"
     _build_docx_with_bookmarks(docx_path, include_front_matter_bookmark=True)

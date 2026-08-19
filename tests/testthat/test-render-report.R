@@ -140,8 +140,8 @@ test_that("orchestrates quarto render -> apply-layout -> build_report() for stat
       assign("abbrevs", list(footnotes = footnotes, out = out), envir = record)
       invisible(out)
     },
-    styling_apply_layout = function(docx, qmd, status) {
-      assign("apply_layout", list(docx = docx, qmd = qmd, status = status), envir = record)
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) {
+      assign("apply_layout", list(docx = docx, qmd = qmd, status = status, style = style, override = override), envir = record)
       invisible(docx)
     }
   )
@@ -207,7 +207,7 @@ test_that("also runs finalize_document() and returns a final path for status = '
   local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
   local_mocked_bindings(
     styling_build_abbreviations_tex = function(...) invisible(NULL),
-    styling_apply_layout = function(docx, qmd, status) invisible(docx)
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) invisible(docx)
   )
   local_mocked_bindings(run = .mock_quarto_run(record), .package = "processx")
   local_mocked_bindings(
@@ -239,7 +239,7 @@ test_that("also runs finalize_document() and returns a final path for status = '
   local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL), .env = parent.frame())
   local_mocked_bindings(
     styling_build_abbreviations_tex = function(...) invisible(NULL),
-    styling_apply_layout = function(docx, qmd, status) invisible(docx),
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) invisible(docx),
     .env = parent.frame()
   )
   local_mocked_bindings(run = .mock_quarto_run(record), .package = "processx", .env = parent.frame())

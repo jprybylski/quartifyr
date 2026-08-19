@@ -30,6 +30,15 @@
 #'   the one bundled with this package (`inst/templates/org-reference.docx`,
 #'   built from `inst/python/styles/default.yaml` -- see
 #'   `styling_build_reference_docx()` to build a custom one).
+#' @param style,override Optional style YAML paths -- when `style` is
+#'   given, its `equation.font` is applied to the rendered shell's default
+#'   math font via `styling_apply_layout()` (see that function; pandoc's
+#'   docx writer doesn't carry this setting through from `reference_doc`
+#'   itself, so it has to be reapplied here, after rendering). Independent
+#'   of `reference_doc` -- if `reference_doc` was itself built from a style
+#'   YAML (`styling_build_reference_docx()`), pass the same path here to
+#'   keep the two in sync. `NULL` (default) leaves the rendered docx's math
+#'   font untouched.
 #' @param standard_footnotes_yaml,config_yaml,figures_path,tables_path
 #'   Passed through to reportifyr; default to the standard project layout
 #'   `reportifyr::initialize_report_project()` creates, alongside `shell_qmd`.
@@ -75,6 +84,8 @@ render_report <- function(
   shell_qmd,
   status = c("draft", "final"),
   reference_doc = system.file("templates", "org-reference.docx", package = "quartifyr"),
+  style = NULL,
+  override = NULL,
   standard_footnotes_yaml = file.path(dirname(shell_qmd), "report", "standard_footnotes.yaml"),
   config_yaml = file.path(dirname(shell_qmd), "report", "config.yaml"),
   figures_path = file.path(dirname(shell_qmd), "OUTPUTS", "figures"),
@@ -184,7 +195,7 @@ render_report <- function(
   # header/footer/section structure is already in place when reportifyr
   # fills in tables/figures/footnotes.
   withr::with_dir(project_dir, {
-    styling_apply_layout(shell_docx, shell_qmd, status = status)
+    styling_apply_layout(shell_docx, shell_qmd, status = status, style = style, override = override)
   })
 
   # --- Pass 2: fill the shell with reportifyr -----------------------------
