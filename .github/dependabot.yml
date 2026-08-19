@@ -32,6 +32,19 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    # python-docx/pyyaml appear in two dependency-groups here: pinned exact
+    # in reportifyr's own group, unpinned in quartifyr's (see
+    # quartifyr::initialize_quartifyr_project()). Dependabot's uv updater
+    # probes a version bump by rewriting the target entry to a wildcard
+    # (e.g. "python-docx*"), which isn't valid PEP 508 -- uv then rejects
+    # the whole project as having "malformed dependency groups". Confirmed
+    # via a real failed update run (2026-08-19): both packages failed with
+    # this error, while pillow (only in the reportifyr group, not
+    # duplicated) bumped successfully in the same run. Ignoring them here
+    # leaves pillow and everything else on the normal update cadence.
+    ignore:
+      - dependency-name: "python-docx"
+      - dependency-name: "pyyaml"
 
   - package-ecosystem: "uv"
     directory: "/examples/memo-example"
@@ -47,6 +60,12 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    # See examples/demo-report's identical ignore rule above -- same
+    # pinned-vs-unpinned python-docx/pyyaml duplication across the
+    # reportifyr/quartifyr dependency-groups here too.
+    ignore:
+      - dependency-name: "python-docx"
+      - dependency-name: "pyyaml"
 
   - package-ecosystem: "github-actions"
     directory: "/"
