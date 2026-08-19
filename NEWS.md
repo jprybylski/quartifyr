@@ -26,6 +26,18 @@
   hand, per both bundled examples' own `config.yaml` comments. Requires
   an interactive confirmation unless `yes = TRUE` is passed; not run
   automatically by `render_report()` (#29).
+* New `inst/python/styles/schema.json` -- a machine-readable JSON Schema
+  for the style YAML, for editor autocomplete/inline validation
+  (`default.yaml` now carries a `# yaml-language-server: $schema=...`
+  header pointing at it). Guarded against drifting from `schema.py` by
+  `tests/python/test_schema_json.py` (#28).
+
+## Breaking changes
+
+* Removed the style YAML's `identity.org_name`/`identity.logo_path` keys
+  -- confirmed dead: nothing read them (the actual title-page logo comes
+  from the `.qmd`'s own `logo:` frontmatter). Delete them from any style
+  YAML that set them; they're a no-op removal otherwise (#28).
 
 # quartifyr 0.2.4
 

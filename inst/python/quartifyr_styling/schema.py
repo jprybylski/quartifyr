@@ -314,16 +314,6 @@ class EquationStyle:
 
 
 @dataclass
-class Identity:
-    org_name: str
-    logo_path: str
-
-    @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Identity":
-        return cls(org_name=d.get("org_name", ""), logo_path=d.get("logo_path", ""))
-
-
-@dataclass
 class StyleConfig:
     fonts: Fonts
     colors: Colors
@@ -336,7 +326,6 @@ class StyleConfig:
     footer: FooterStyle
     code: CodeStyle
     equation: EquationStyle
-    identity: Identity
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "StyleConfig":
@@ -353,7 +342,6 @@ class StyleConfig:
                 footer=FooterStyle.from_dict(d["footer"]),
                 code=CodeStyle.from_dict(d["code"]),
                 equation=EquationStyle.from_dict(d["equation"]),
-                identity=Identity.from_dict(d.get("identity", {})),
             )
         except KeyError as exc:
             raise StyleConfigError(f"style YAML is missing required key: {exc}") from exc

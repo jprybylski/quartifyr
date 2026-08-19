@@ -30,9 +30,43 @@ quartifyr-styling build \
 
 Add `--override /path/to/<org>.yaml` with just the keys that differ
 from the default preset (fonts, colors, page setup, ...) to brand a new
-organization; see `styles/default.yaml` for the full schema and
-`quartifyr_styling/schema.py` for validation rules (hex colors, positive
-sizes, etc.).
+organization; see "Customizing the style YAML" below for what every key
+controls, `styles/schema.json` for a machine-readable schema (types,
+enums, hex-color/positive-number constraints), and
+`quartifyr_styling/schema.py` for the validation those constraints
+enforce at load time.
+
+### Customizing the style YAML
+
+`styles/default.yaml` carries a
+`# yaml-language-server: $schema=./schema.json` header, so an editor with
+the [YAML language server](https://github.com/redhat-developer/yaml-language-server)
+(the VS Code YAML extension bundles it) gets autocomplete/inline
+validation against `styles/schema.json` automatically; point an org
+override YAML at the same schema (adjust the relative path to wherever
+you copied it, e.g. the installed package's `inst/python/styles/schema.json`)
+to get the same for it. An override, being a partial file by design (only
+the keys that differ from the base), will still show the editor's
+"missing required property" warnings for whatever it deliberately leaves
+out -- expected for a deep-merge override, not a sign anything's wrong;
+those keys just aren't required to be present in that specific file, only
+in the merged result `StyleConfig.load()` actually validates.
+
+Top-level sections, matching `schema.py`'s dataclasses:
+
+| Key | Controls |
+| --- | --- |
+| `fonts` | Body/heading/monospace font family and every font size (title, subtitle, per-heading-level, caption, footnote, ToC). `monospace` styles code blocks (see `code` below). |
+| `colors` | Every hex color the reference-doc uses: body/heading/title/caption text, table header fill, table border, and the rule under the title. |
+| `page` | Page size (`letter`/`a4`) and margins. |
+| `paragraph` | Body text line spacing, space-after, and alignment. |
+| `heading` | Bold, spacing before/after, keep-with-next, and `all_caps` (a visual-only transform, not a string mutation) for `Heading 1`-`6`. |
+| `table` | The `Table Grid` style's border style, header bold, and banding. |
+| `synopsis` | The synopsis section's definition-list look (label/value spacing, value indent, optional alignment override). |
+| `title_page` | Whether to show a rule under the title, and which fields appear (as an ordered list -- see `styles/default.yaml`'s own comment on why this is a list, not a map). |
+| `footer` | Page number visibility and optional static footer text. |
+| `code` | Fenced-code-block/inline-code font size, background color, and padding (vertical spacing only -- see `code.padding_pt`'s own description in `schema.json`). |
+| `equation` | The docx-wide default math font (applied post-render by `apply-layout`, not `build` -- see that command's own docs above). |
 
 `--style`/`--override`/`--out` are plain file paths, not fixed locations.
 See the repo-root README's "Style YAML and reference-doc" section for how

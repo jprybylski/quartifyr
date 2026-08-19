@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jprybylski/quartifyr/inst/python/styles/schema.json",
+  "title": "quartifyr style YAML",
+  "description": "Schema for the style YAML consumed by quartifyr_styling.schema.StyleConfig -- a base YAML (normally styles/default.yaml) optionally deep-merged with a per-org/per-project override YAML. Kept in sync with schema.py by tests/python/test_schema_json.py; edit both together.",
+  "type": "object",
+  "properties": {
+    "fonts": {
+      "type": "object",
+      "properties": {
+        "body": { "type": "string", "minLength": 1 },
+        "heading": { "type": "string", "minLength": 1 },
+        "monospace": { "type": "string", "minLength": 1 },
+        "sizes": {
+          "type": "object",
+          "properties": {
+            "body": { "type": "number", "exclusiveMinimum": 0 },
+            "title": { "type": "number", "exclusiveMinimum": 0 },
+            "subtitle": { "type": "number", "exclusiveMinimum": 0 },
+            "heading": {
+              "description": "Font size (pt) per heading level. A level deeper than any key here falls back to the smallest defined level (HeadingSizes.get()).",
+              "type": "object",
+              "propertyNames": { "pattern": "^[0-9]+$" },
+              "additionalProperties": { "type": "number", "exclusiveMinimum": 0 },
+              "minProperties": 1
+            },
+            "caption": { "type": "number", "exclusiveMinimum": 0 },
+            "footnote": { "type": "number", "exclusiveMinimum": 0 },
+            "toc": { "type": "number", "exclusiveMinimum": 0 }
+          },
+          "required": ["body", "title", "subtitle", "heading", "caption", "footnote", "toc"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["body", "heading", "monospace", "sizes"],
+      "additionalProperties": false
+    },
+    "colors": {
+      "description": "Every value is a '#RRGGBB' hex color.",
+      "type": "object",
+      "properties": {
+        "text": { "$ref": "#/$defs/hexColor" },
+        "heading": { "$ref": "#/$defs/hexColor" },
+        "title": { "$ref": "#/$defs/hexColor" },
+        "caption": { "$ref": "#/$defs/hexColor" },
+        "table_header_fill": { "$ref": "#/$defs/hexColor" },
+        "table_border": { "$ref": "#/$defs/hexColor" },
+        "rule": { "$ref": "#/$defs/hexColor" }
+      },
+      "required": ["text", "heading", "title", "caption", "table_header_fill", "table_border", "rule"],
+      "additionalProperties": false
+    },
+    "page": {
+      "type": "object",
+      "properties": {
+        "size": { "type": "string", "enum": ["letter", "a4"] },
+        "margins_in": {
+          "type": "object",
+          "properties": {
+            "top": { "type": "number", "exclusiveMinimum": 0 },
+            "bottom": { "type": "number", "exclusiveMinimum": 0 },
+            "left": { "type": "number", "exclusiveMinimum": 0 },
+            "right": { "type": "number", "exclusiveMinimum": 0 }
+          },
+          "required": ["top", "bottom", "left", "right"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["size", "margins_in"],
+      "additionalProperties": false
+    },
+    "paragraph": {
+      "type": "object",
+      "properties": {
+        "line_spacing": { "type": "number", "exclusiveMinimum": 0 },
+        "space_after_pt": { "type": "number", "exclusiveMinimum": 0 },
+        "alignment": { "$ref": "#/$defs/alignment" }
+      },
+      "required": ["line_spacing", "space_after_pt", "alignment"],
+      "additionalProperties": false
+    },
+    "heading": {
+      "type": "object",
+      "properties": {
+        "bold": { "type": "boolean" },
+        "space_before_pt": { "type": "number", "exclusiveMinimum": 0 },
+        "space_after_pt": { "type": "number", "exclusiveMinimum": 0 },
+        "keep_with_next": { "type": "boolean" },
+        "all_caps": {
+          "description": "Visual-only transform (OOXML w:caps) -- the underlying heading text is untouched. Defaults to false.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": ["bold", "space_before_pt", "space_after_pt", "keep_with_next"],
+      "additionalProperties": false
+    },
+    "table": {
+      "type": "object",
+      "properties": {
+        "style": { "type": "string", "minLength": 1 },
+        "header_bold": { "type": "boolean" },
+        "banding": { "type": "boolean" }
+      },
+      "required": ["style", "header_bold", "banding"],
+      "additionalProperties": false
+    },
+    "synopsis": {
+      "type": "object",
+      "properties": {
+        "label_space_before_pt": { "type": "number", "exclusiveMinimum": 0 },
+        "label_space_after_pt": { "type": "number", "exclusiveMinimum": 0 },
+        "value_space_after_pt": { "type": "number", "exclusiveMinimum": 0 },
+        "value_indent_in": { "type": "number", "minimum": 0 },
+        "alignment": {
+          "description": "Omit to inherit paragraph.alignment instead of overriding it just for synopsis values.",
+          "$ref": "#/$defs/alignment"
+        }
+      },
+      "required": ["label_space_before_pt", "label_space_after_pt", "value_space_after_pt", "value_indent_in"],
+      "additionalProperties": false
+    },
+    "title_page": {
+      "type": "object",
+      "properties": {
+        "show_rule_under_title": { "type": "boolean" },
+        "fields": {
+          "description": "A list, not a map -- pandoc's Lua metadata tables don't preserve map key order, so this stays a list to keep field order reliable across renders.",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["show_rule_under_title", "fields"],
+      "additionalProperties": false
+    },
+    "footer": {
+      "type": "object",
+      "properties": {
+        "show_page_number": { "type": "boolean" },
+        "text": { "type": "string", "default": "" }
+      },
+      "required": ["show_page_number"],
+      "additionalProperties": false
+    },
+    "code": {
+      "description": "Styles pandoc's own 'Source Code'/'Verbatim Char' docx styles for fenced code blocks/inline code.",
+      "type": "object",
+      "properties": {
+        "font_size": { "type": "number", "exclusiveMinimum": 0 },
+        "background_color": { "$ref": "#/$defs/hexColor" },
+        "padding_pt": {
+          "description": "Applied as paragraph space-before/after around the shaded code block -- OOXML paragraph shading has no horizontal-padding concept, so this is vertical spacing only, not true CSS box padding.",
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": ["font_size", "background_color", "padding_pt"],
+      "additionalProperties": false
+    },
+    "equation": {
+      "description": "Docx-wide default math font, applied post-render (pandoc's docx writer doesn't carry this setting through from the reference-doc template). Font family only -- an unstyled math run inherits its size from the surrounding paragraph.",
+      "type": "object",
+      "properties": {
+        "font": { "type": "string", "minLength": 1 }
+      },
+      "required": ["font"],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "fonts", "colors", "page", "paragraph", "heading", "table",
+    "synopsis", "title_page", "footer", "code", "equation"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "hexColor": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}$"
+    },
+    "alignment": {
+      "type": "string",
+      "enum": ["left", "justify", "center", "right"]
+    }
+  }
+}

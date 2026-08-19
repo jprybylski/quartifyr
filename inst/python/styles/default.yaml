@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=./schema.json
+#
 # Default quartifyr style preset: Times New Roman, black text, flat/neutral
 # tables — a plain "professional industrial" look with no brand color baked
 # in. Per-org looks are a second YAML deep-merged over this one (see
@@ -111,7 +113,3 @@ code:
 # inherits its size from the surrounding paragraph.
 equation:
   font: "Cambria Math"
-
-identity:
-  org_name: ""
-  logo_path: ""
