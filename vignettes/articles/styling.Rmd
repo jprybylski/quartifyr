@@ -134,6 +134,50 @@ When it does fail, it only produces a warning, not a render failure;
 the document is still fully usable, just needs a manual "select all,
 F9" in Word.
 
+## Pulling and editing a project's own style YAML
+
+```r
+# Copy the bundled default template/style into a project
+quartifyr::styling_example_template(dir = "templates")
+style <- quartifyr::styling_example_style(dir = ".")
+
+# Edit in place ...
+style$heading$all_caps <- TRUE
+style$colors$heading <- "#0054AD"
+
+# ... and save back out as just the diff from the default
+quartifyr::styling_save_overrides(style, file = "overrides.yaml")
+```
+
+```yaml
+# overrides.yaml
+heading:
+  all_caps: true
+colors:
+  heading: "#0054AD"
+```
+
+That override YAML is what `style`/`override` (or `--style`/`--override`)
+take everywhere else in this article -- `styling_build_reference_docx()`
+deep-merges it onto the base at load time, so it's a diff to keep in a
+project, not a second full style YAML to maintain by hand.
+
+For a narrower, one-off edit to an *existing* style YAML (not
+necessarily one just pulled via `styling_example_style()`):
+
+```r
+quartifyr::styling_update_style(
+  list(code = list(background_color = "#FFF3CD")),
+  file = "overrides.yaml",
+  yes = TRUE
+)
+```
+
+Deep-merges the update onto `file`'s content, in place -- a
+`modifyList()`-style edit without hand-copying the rest of the file.
+`yes = TRUE` is required: this rewrites the whole file, so any comments
+it had are lost.
+
 ## Tests
 
 ```bash

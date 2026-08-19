@@ -176,6 +176,39 @@ since there's no interactive stdin to confirm over in that non-interactive
 invocation). A no-op if already in sync. Rewrites the whole file via
 `yaml.safe_dump`, so any comments/formatting `config.yaml` had are lost.
 
+```bash
+quartifyr-styling example-style --base styles/default.yaml --out style.yaml
+```
+
+Copies a base style YAML (default: the bundled `default.yaml`) into a
+project, printing (`--json`: returning as a field) its parsed content --
+a working copy to hand-edit, or edit as an R list
+(`quartifyr::styling_example_style()`) and hand to `save-overrides`
+below. `--overwrite` to replace an existing `--out`.
+
+```bash
+quartifyr-styling save-overrides --base styles/default.yaml --style-json edited.json --out overrides.yaml
+```
+
+Saves a (possibly edited) style dict -- as JSON, since a full nested
+style doesn't fit as CLI args; the R wrapper handles this transparently
+-- back out to `--out`, by default (`--no-deconvolute` to disable) as
+just the keys that differ from `--base`: an override YAML meant to be
+deep-merged back onto that same base at load time
+(`StyleConfig.load(base, override)`), not a second full style YAML to
+keep in sync by hand.
+
+```bash
+quartifyr-styling update-style --file style.yaml --updates-json changes.json --yes
+```
+
+Deep-merges the JSON at `--updates-json` onto `--file`'s existing
+content, in place -- a `modifyList()`-style edit of one section of a
+style YAML without hand-copying the rest of the file. Requires `--yes`
+(there's no interactive prompt with `--json`, and the R wrapper's own
+`yes = TRUE` argument is the direct equivalent): rewrites the whole file
+via `yaml.safe_dump`, so any comments/formatting it had are lost.
+
 ## Tests
 
 ```bash

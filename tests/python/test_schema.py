@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from quartifyr_styling.schema import StyleConfig, StyleConfigError, deep_merge
+from quartifyr_styling.schema import StyleConfig, StyleConfigError, deep_merge, diff_from_base
 
 DEFAULT_YAML = Path(__file__).parent.parent.parent / "inst" / "python" / "styles" / "default.yaml"
 
@@ -14,6 +14,29 @@ def test_deep_merge_replaces_scalars_and_merges_dicts():
     assert merged == {"a": 1, "b": {"c": 20, "d": 3}, "e": 5}
     # base is untouched
     assert base == {"a": 1, "b": {"c": 2, "d": 3}}
+
+
+def test_diff_from_base_is_inverse_of_deep_merge():
+    base = {"a": 1, "b": {"c": 2, "d": 3}}
+    target = {"a": 1, "b": {"c": 20, "d": 3}, "e": 5}
+    diff = diff_from_base(base, target)
+    assert diff == {"b": {"c": 20}, "e": 5}
+    assert deep_merge(base, diff) == target
+
+
+def test_diff_from_base_is_empty_when_target_equals_base():
+    base = {"a": 1, "b": {"c": 2}}
+    assert diff_from_base(base, dict(base)) == {}
+
+
+def test_diff_from_base_against_real_default_yaml_round_trips(tmp_path):
+    import yaml
+
+    base = yaml.safe_load(DEFAULT_YAML.read_text(encoding="utf-8"))
+    target = deep_merge(base, {"heading": {"all_caps": True}, "colors": {"text": "#123456"}})
+    diff = diff_from_base(base, target)
+    assert diff == {"heading": {"all_caps": True}, "colors": {"text": "#123456"}}
+    assert deep_merge(base, diff) == target
 
 
 def test_default_yaml_loads_and_validates():

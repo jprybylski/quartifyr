@@ -4,6 +4,14 @@
 
 ## New features
 
+* New `styling_example_template()`/`styling_example_style()` pull the
+  bundled reference-doc/default style YAML into a project (the latter
+  also returning its parsed content as a list, ready to edit), and new
+  `styling_save_overrides()`/`styling_update_style()` save an edited
+  style back out -- by default as just its diff from the base style
+  YAML, an override ready to deep-merge back on at load time -- or
+  deep-merge a targeted change onto an existing style YAML in place.
+  Each also available as a `quartifyr-styling` CLI subcommand (#27).
 * `{{< appendix >}}`'s designator style is now configurable document-wide
   via `appendix-numbering:` frontmatter (`alphabetic` (default) / `arabic`
   / `roman`), instead of always lettering A/B/C (#26).

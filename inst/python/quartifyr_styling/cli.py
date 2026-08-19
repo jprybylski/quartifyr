@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from .abbreviations import AbbreviationsError, build_abbreviations_tex
 from .build_template import build_reference_docx
@@ -25,6 +26,7 @@ from .recalculate_fields import FieldRecalculationError, recalculate_fields
 from .reportifyr_sync import ReportifyrSyncError, sync_reportifyr_config
 from .same_page_crossrefs import SamePageCrossrefError, resolve_same_page_crossrefs
 from .schema import StyleConfig, StyleConfigError
+from .style_editing import StyleEditingError, copy_example_style, save_overrides, update_style
 
 
 def _ok(args: argparse.Namespace, message: str, **fields) -> int:
@@ -119,6 +121,51 @@ def _cmd_sync_reportifyr_config(args: argparse.Namespace) -> int:
     return _ok(args, message, path=str(args.config), changed=changed)
 
 
+def _cmd_example_style(args: argparse.Namespace) -> int:
+    try:
+        parsed = copy_example_style(args.base, args.out, overwrite=args.overwrite)
+    except (StyleEditingError, FileNotFoundError) as exc:
+        return _err(args, exc)
+    return _ok(args, f"wrote {args.out}", path=str(args.out), style=parsed)
+
+
+def _read_json_arg(path: str) -> dict:
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def _cmd_save_overrides(args: argparse.Namespace) -> int:
+    try:
+        style = _read_json_arg(args.style_json)
+        output = save_overrides(args.base, style, args.out, overwrite=args.overwrite, deconvolute=not args.no_deconvolute)
+    except (StyleEditingError, FileNotFoundError) as exc:
+        return _err(args, exc)
+    return _ok(args, f"wrote {args.out}", path=str(args.out), overrides=output)
+
+
+def _cmd_update_style(args: argparse.Namespace) -> int:
+    def _no_interactive_prompt(_message: str) -> str:
+        # Same reasoning as sync-reportifyr-config's identical guard: with
+        # --json (the R pyro bridge's own invocation) there's no live
+        # stdin to confirm over.
+        raise StyleEditingError(
+            "found changes but --yes was not given; interactive confirmation isn't "
+            "available with --json -- pass --yes to confirm non-interactively"
+        )
+
+    try:
+        updates = _read_json_arg(args.updates_json)
+        merged = update_style(
+            args.file,
+            updates,
+            assume_yes=args.yes,
+            prompt=_no_interactive_prompt if args.json else input,
+            out=sys.stderr if args.json else sys.stdout,
+        )
+    except (StyleEditingError, FileNotFoundError) as exc:
+        return _err(args, exc)
+    return _ok(args, f"updated {args.file}", path=str(args.file), style=merged)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="quartifyr-styling")
     parser.add_argument(
@@ -183,6 +230,35 @@ def build_parser() -> argparse.ArgumentParser:
     sync.add_argument("--config", default="report/config.yaml", help="Path to reportifyr's config.yaml (default: report/config.yaml)")
     sync.add_argument("--yes", action="store_true", help="Write without an interactive confirmation prompt")
     sync.set_defaults(func=_cmd_sync_reportifyr_config)
+
+    example_style = subparsers.add_parser(
+        "example-style",
+        help="Copy a base style YAML (default: the bundled default.yaml) to a project, returning its parsed content",
+    )
+    example_style.add_argument("--base", default="styles/default.yaml", help="Style YAML to copy (default: styles/default.yaml)")
+    example_style.add_argument("--out", default="style.yaml", help="Destination path (default: style.yaml)")
+    example_style.add_argument("--overwrite", action="store_true", help="Replace --out if it already exists")
+    example_style.set_defaults(func=_cmd_example_style)
+
+    save_overrides_p = subparsers.add_parser(
+        "save-overrides",
+        help="Save a (possibly edited) style dict to a YAML file, by default as just its diff from a base style YAML",
+    )
+    save_overrides_p.add_argument("--base", default="styles/default.yaml", help="Base style YAML to diff against (default: styles/default.yaml)")
+    save_overrides_p.add_argument("--style-json", required=True, help="Path to a JSON file holding the (possibly edited) full style dict")
+    save_overrides_p.add_argument("--out", default="overrides.yaml", help="Destination path (default: overrides.yaml)")
+    save_overrides_p.add_argument("--overwrite", action="store_true", help="Replace --out if it already exists")
+    save_overrides_p.add_argument("--no-deconvolute", action="store_true", help="Save the full style dict as-is instead of just its diff from --base")
+    save_overrides_p.set_defaults(func=_cmd_save_overrides)
+
+    update_style_p = subparsers.add_parser(
+        "update-style",
+        help="Deep-merge an update onto an existing style YAML, in place",
+    )
+    update_style_p.add_argument("--file", required=True, help="Style YAML to update in place")
+    update_style_p.add_argument("--updates-json", required=True, help="Path to a JSON file holding the updates to deep-merge onto --file")
+    update_style_p.add_argument("--yes", action="store_true", help="Write without an interactive confirmation prompt")
+    update_style_p.set_defaults(func=_cmd_update_style)
 
     return parser
 

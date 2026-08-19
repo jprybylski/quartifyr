@@ -38,6 +38,28 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
     return merged
 
 
+def diff_from_base(base: dict[str, Any], target: dict[str, Any]) -> dict[str, Any]:
+    """The inverse of ``deep_merge``: the smallest override dict that,
+    ``deep_merge``d onto ``base``, reproduces ``target``.
+
+    Used by ``styling_save_overrides()`` (issue #27) so a user can start
+    from ``styling_example_style()``'s full copy of the default style,
+    edit whatever they want in place, and save back out just the keys
+    that actually changed -- an override YAML, not a second full style
+    YAML to keep in sync by hand.
+    """
+    diff: dict[str, Any] = {}
+    for key, target_value in target.items():
+        base_value = base.get(key)
+        if isinstance(target_value, dict) and isinstance(base_value, dict):
+            nested = diff_from_base(base_value, target_value)
+            if nested:
+                diff[key] = nested
+        elif target_value != base_value:
+            diff[key] = target_value
+    return diff
+
+
 def _require_hex(value: str, field_name: str) -> str:
     if not isinstance(value, str) or not _HEX_COLOR_RE.match(value):
         raise StyleConfigError(
