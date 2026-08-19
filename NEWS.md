@@ -1,5 +1,19 @@
 # quartifyr
 
+# quartifyr (development version)
+
+## Fixed
+
+* `initialize_quartifyr_project()` now catches failures from
+  `pyro::initialize_python()` and re-raises them with an explanation,
+  instead of letting pyro/uv's raw internal error propagate
+  uninterpreted (#46). On a project already initialized by reportifyr
+  *before* it depended on pyro (reportifyr < 0.4.0), that project's
+  Python environment predates pyro/uv and isn't necessarily something
+  `uv sync` can adopt as-is -- the error now points at re-running
+  `reportifyr::initialize_report_project()` first to bring the
+  environment up to a pyro-compatible state.
+
 # quartifyr 0.2.3
 
 ## Fixed

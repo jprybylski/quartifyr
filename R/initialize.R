@@ -8,6 +8,18 @@
 #' `render_report()` itself, since re-provisioning on every render would be
 #' wasteful.
 #'
+#' @section A stale-venv gotcha in existing reportifyr projects:
+#' On a project already initialized by reportifyr *before* it depended on
+#' pyro (reportifyr < 0.4.0), this can fail with an opaque error from
+#' `pyro::initialize_python()`'s underlying `uv sync` call -- that
+#' project's Python environment predates pyro/uv and isn't necessarily
+#' something `uv` can adopt as-is. Run
+#' `reportifyr::initialize_report_project(project_dir = directory)` first
+#' (safe to re-run) to bring the environment up to a pyro-compatible
+#' state before calling this function. This function catches that failure
+#' and re-raises with a pointer to the same fix, instead of letting
+#' pyro/uv's raw error propagate uninterpreted.
+#'
 #' @param directory Target project directory. Defaults to the current
 #'   directory.
 #' @return Invisibly, the result of `pyro::initialize_python()`.
@@ -28,10 +40,33 @@ initialize_quartifyr_project <- function(directory = ".") {
     pyproject_dir = directory
   )
   .ensure_default_groups_all(file.path(directory, "pyproject.toml"))
-  invisible(pyro::initialize_python(
-    venv_dir = directory,
-    pyproject_dir = directory,
-    groups = "quartifyr"
+  invisible(tryCatch(
+    pyro::initialize_python(
+      venv_dir = directory,
+      pyproject_dir = directory,
+      groups = "quartifyr"
+    ),
+    error = function(e) {
+      cli::cli_abort(
+        c(
+          "x" = "pyro failed to provision a Python environment in {.path {directory}}.",
+          "!" = paste(
+            "This can happen in an existing reportifyr project created before",
+            "reportifyr 0.4.0 added its own pyro dependency -- its Python setup",
+            "predates pyro/uv, and pyro's {.code uv sync} against that stale",
+            "environment is what's failing below, not this function itself."
+          ),
+          "i" = paste(
+            "Run {.code reportifyr::initialize_report_project(project_dir = \"{directory}\")}",
+            "first (safe to re-run on an already-initialized project) to bring the",
+            "environment up to a pyro-compatible state, then retry."
+          ),
+          "i" = "Underlying error: {conditionMessage(e)}"
+        ),
+        call = NULL,
+        parent = e
+      )
+    }
   ))
 }
 
