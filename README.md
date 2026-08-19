@@ -108,6 +108,74 @@ together and adopts a specific `report/shell` →
 [Using the pieces directly](#using-the-pieces-directly) below for the
 three plain tool calls underneath it.
 
+## Quick start
+
+Want to see the shell before installing anything but Quarto? Both bundled
+examples ship a pre-built `inst/templates/org-reference.docx` (committed
+to the repo; see [Style YAML and reference-doc](#style-yaml-and-reference-doc-generating-locating-sharing)
+below), so this alone renders a real, styled shell (title page,
+signature pages, synopsis) with `{rpfy}:` placeholders still literal
+(pass 2 hasn't run):
+
+```bash
+cd examples/demo-report
+quarto render report.qmd --to docx --reference-doc ../../inst/templates/org-reference.docx \
+  -M document-status:DRAFT
+```
+
+`scripts/quarto_only_smoke_test.py` runs exactly this for both examples
+and asserts on the output; it's the first CI check to run, before any R
+or Python setup, as proof this path has no dependency on either.
+
+For the full two-pass pipeline (real tables/figures/footnotes filled in,
+not just the shell), you need the rest of the toolchain, once each
+(platform-specific instructions at each link):
+
+- [Quarto](https://quarto.org/docs/get-started/)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python tooling, used internally by `pyro`)
+- [renv](https://rstudio.github.io/renv/) (R package management for report *projects*; `install.packages("renv")`. The `quartifyr` R package itself isn't renv-managed -- see [Components](#components).)
+
+```bash
+# 1. Install the quartifyr R package itself (pulls in reportifyr/pyro
+#    transitively via its DESCRIPTION Imports:)
+Rscript -e 'pak::pkg_install("local::.")'   # from this checkout's root
+
+# 2. Run the demo end to end
+cd examples/demo-report
+Rscript -e 'renv::restore()'
+Rscript -e 'renv::install("local::../..")'   # installs quartifyr into this project's own renv library
+Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'   # first clone only
+Rscript -e 'quartifyr::initialize_quartifyr_project(getwd())'              # first clone only
+Rscript render.R --final
+# -> report/draft/report-draft.docx, report/final/report-final.docx
+```
+
+Or just run the demo's own smoke test, which does step 3 for you and
+asserts the output is actually correct: `python3
+examples/demo-report/smoke_test.py`.
+
+[`examples/memo-example/`](examples/memo-example/README.md) works the
+same way (`cd examples/memo-example` instead of `examples/demo-report`)
+and demonstrates the other end of the same pipeline: a memo cover page
+instead of a report title page, with no ToC/List of Figures/List of
+Tables/abbreviations/signature pages.
+
+## Components
+
+| Path | What it is |
+| --- | --- |
+| `R/`, `DESCRIPTION`, `NAMESPACE` | The installable `quartifyr` R package itself: `render_report()` (the pass-1+pass-2 orchestration driver), `initialize_quartifyr_project()`, `install_quartifyr_extension()`, and thin `pyro`-bridged `styling_*()` wrappers around the bundled Python engine. Pulls `reportifyr` and `pyro` straight from `a2-ai.r-universe.dev` (no CRAN release exists for either) as today's fill backend. |
+| [`inst/python/`](inst/python/README.md) | The bundled Python engine (`quartifyr_styling`): turns a style YAML (fonts, colors, page setup) into a docx `reference-doc`; the `standard_footnotes.yaml` → `abbreviations.tex` bridge; headless Word field recalculation via LibreOffice (experimental). Also independently pip/uv-installable (`quartifyr-styling` console script) -- see the repo-root `pyproject.toml`, which points at this same source tree. |
+| [`inst/extensions/quartifyr/`](inst/extensions/quartifyr/README.md) | Quarto extension, bundled in the R package and installable via `install_quartifyr_extension()` or `quarto add jprybylski/quartifyr`: dynamic title page + status stamp, a fax-cover-sheet-style memo cover page, contributor/approver signature pages, synopsis, numbered appendices, page header/footer with roman/arabic page numbering. Composes with [A2-ai's `quarto-plus`](https://github.com/A2-ai/quarto-plus) (ToC/List of Figures/List of Tables/abbreviations/captions) rather than duplicating it. |
+| [`examples/demo-report/`](examples/demo-report/README.md) | Complete, working example exercising every piece above, with an automated end-to-end smoke test: a reference to compare against, not the only way to start a project (see [Standing up a new project](#standing-up-a-new-project)). |
+| [`examples/memo-example/`](examples/memo-example/README.md) | The minimal end of the same pipeline: a memo cover page and a loose structure with no ToC/List of Figures/List of Tables/abbreviations/signature pages, also with its own smoke test. |
+| [`action.yml`](action.yml) | Reusable composite GitHub Action wrapping `render_report()` for use in another repo's own CI; see [Rendering in CI](#rendering-in-ci) below. |
+
+Each org overrides just the parts of the default look that differ
+(`inst/python/styles/default.yaml` is Times New Roman, black text, flat
+neutral tables, no brand color baked in) as a small YAML diff, not a
+round of clicking through Word's style pane.
+
 ## Using the pieces directly
 
 You don't need the `quartifyr` R package's orchestration driver or its
@@ -171,74 +239,6 @@ styling_resolve_same_page_crossrefs("report-filled.docx")` (or the CLI
 equivalent, `quartifyr-styling resolve-same-page-crossrefs`); see
 [`inst/python/README.md`](inst/python/README.md) for the underlying
 Python engine.
-
-## Components
-
-| Path | What it is |
-| --- | --- |
-| `R/`, `DESCRIPTION`, `NAMESPACE` | The installable `quartifyr` R package itself: `render_report()` (the pass-1+pass-2 orchestration driver), `initialize_quartifyr_project()`, `install_quartifyr_extension()`, and thin `pyro`-bridged `styling_*()` wrappers around the bundled Python engine. Pulls `reportifyr` and `pyro` straight from `a2-ai.r-universe.dev` (no CRAN release exists for either) as today's fill backend. |
-| [`inst/python/`](inst/python/README.md) | The bundled Python engine (`quartifyr_styling`): turns a style YAML (fonts, colors, page setup) into a docx `reference-doc`; the `standard_footnotes.yaml` → `abbreviations.tex` bridge; headless Word field recalculation via LibreOffice (experimental). Also independently pip/uv-installable (`quartifyr-styling` console script) -- see the repo-root `pyproject.toml`, which points at this same source tree. |
-| [`inst/extensions/quartifyr/`](inst/extensions/quartifyr/README.md) | Quarto extension, bundled in the R package and installable via `install_quartifyr_extension()` or `quarto add jprybylski/quartifyr`: dynamic title page + status stamp, a fax-cover-sheet-style memo cover page, contributor/approver signature pages, synopsis, numbered appendices, page header/footer with roman/arabic page numbering. Composes with [A2-ai's `quarto-plus`](https://github.com/A2-ai/quarto-plus) (ToC/List of Figures/List of Tables/abbreviations/captions) rather than duplicating it. |
-| [`examples/demo-report/`](examples/demo-report/README.md) | Complete, working example exercising every piece above, with an automated end-to-end smoke test: a reference to compare against, not the only way to start a project (see [Standing up a new project](#standing-up-a-new-project)). |
-| [`examples/memo-example/`](examples/memo-example/README.md) | The minimal end of the same pipeline: a memo cover page and a loose structure with no ToC/List of Figures/List of Tables/abbreviations/signature pages, also with its own smoke test. |
-| [`action.yml`](action.yml) | Reusable composite GitHub Action wrapping `render_report()` for use in another repo's own CI; see [Rendering in CI](#rendering-in-ci) below. |
-
-Each org overrides just the parts of the default look that differ
-(`inst/python/styles/default.yaml` is Times New Roman, black text, flat
-neutral tables, no brand color baked in) as a small YAML diff, not a
-round of clicking through Word's style pane.
-
-## Quick start
-
-Want to see the shell before installing anything but Quarto? Both bundled
-examples ship a pre-built `inst/templates/org-reference.docx` (committed
-to the repo; see [Style YAML and reference-doc](#style-yaml-and-reference-doc-generating-locating-sharing)
-below), so this alone renders a real, styled shell (title page,
-signature pages, synopsis) with `{rpfy}:` placeholders still literal
-(pass 2 hasn't run):
-
-```bash
-cd examples/demo-report
-quarto render report.qmd --to docx --reference-doc ../../inst/templates/org-reference.docx \
-  -M document-status:DRAFT
-```
-
-`scripts/quarto_only_smoke_test.py` runs exactly this for both examples
-and asserts on the output; it's the first CI check to run, before any R
-or Python setup, as proof this path has no dependency on either.
-
-For the full two-pass pipeline (real tables/figures/footnotes filled in,
-not just the shell), you need the rest of the toolchain, once each
-(platform-specific instructions at each link):
-
-- [Quarto](https://quarto.org/docs/get-started/)
-- [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python tooling, used internally by `pyro`)
-- [renv](https://rstudio.github.io/renv/) (R package management for report *projects*; `install.packages("renv")`. The `quartifyr` R package itself isn't renv-managed -- see [Components](#components).)
-
-```bash
-# 1. Install the quartifyr R package itself (pulls in reportifyr/pyro
-#    transitively via its DESCRIPTION Imports:)
-Rscript -e 'pak::pkg_install("local::.")'   # from this checkout's root
-
-# 2. Run the demo end to end
-cd examples/demo-report
-Rscript -e 'renv::restore()'
-Rscript -e 'renv::install("local::../..")'   # installs quartifyr into this project's own renv library
-Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'   # first clone only
-Rscript -e 'quartifyr::initialize_quartifyr_project(getwd())'              # first clone only
-Rscript render.R --final
-# -> report/draft/report-draft.docx, report/final/report-final.docx
-```
-
-Or just run the demo's own smoke test, which does step 3 for you and
-asserts the output is actually correct: `python3
-examples/demo-report/smoke_test.py`.
-
-[`examples/memo-example/`](examples/memo-example/README.md) works the
-same way (`cd examples/memo-example` instead of `examples/demo-report`)
-and demonstrates the other end of the same pipeline: a memo cover page
-instead of a report title page, with no ToC/List of Figures/List of
-Tables/abbreviations/signature pages.
 
 ## Standing up a new org
 
