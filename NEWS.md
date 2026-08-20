@@ -65,9 +65,13 @@
   mid-appendix never reads as though it belongs to the main body's own
   third section. A new `scoped_crossref` shortcode resolves any of the
   six. Additive: nothing here changes `quarto-plus`'s own shortcodes, and
-  an author can mix scoped and continuous captions freely. See
-  `inst/extensions/quartifyr/README.md`'s "Scoped figure/table numbering"
-  section (#26).
+  an author can mix scoped and continuous captions freely -- though a
+  plain (non-appendix) scoped number has no relationship to `quarto-plus`'s
+  own continuous numbering even when digits happen to match, so the first
+  use of plain `section_fig_caption`/`subsection_fig_caption` in a
+  document logs a one-time reminder about picking one convention per
+  figure/table type. See `inst/extensions/quartifyr/README.md`'s "Scoped
+  figure/table numbering" section (#26).
 * Style YAML: new `code:` section (`font_size`, `background_color`,
   `padding_pt`) styles pandoc's `Source Code`/`Verbatim Char` docx styles
   for fenced code blocks/inline code, using `fonts.monospace` (previously

@@ -167,6 +167,37 @@ local scopes = {
 -- populated by every scoped caption shortcode, read by scoped_crossref.
 local scoped_bookmarks = {}
 
+-- Fires once per document, the first time section_fig_caption/
+-- subsection_fig_caption produces a *plain* (not appendix-nested)
+-- composite number ("Figure 3.1"), since that's the one case where a
+-- reader could plausibly mistake it for being related to quarto-plus's
+-- own continuous fig_caption/tbl_caption ("Figure 1", "Figure 2", ...) --
+-- appendix-nested numbers ("Figure C.3.1") don't have this problem, the
+-- leading letter already marks them as a different sequence. Lua can't
+-- see whether continuous captions are *actually* used anywhere in this
+-- document (they're `quarto-plus`'s own shortcode, a separate extension
+-- with no shared state), so this can't detect real mixing -- it's a
+-- standing reminder every time plain scoped numbering is used at all.
+local warned_plain_scope_independence = false
+
+local function note_plain_scope_independence()
+  if warned_plain_scope_independence then
+    return
+  end
+  warned_plain_scope_independence = true
+  quarto.log.warning(
+    "section_fig_caption/section_tbl_caption/subsection_fig_caption/"
+      .. "subsection_tbl_caption number independently of quarto-plus's own "
+      .. "continuous fig_caption/tbl_caption (\"Figure 1\", \"Figure 2\", ...) "
+      .. "-- a \"Figure N.M\" caption here has no relationship to any "
+      .. "continuous \"Figure N\" caption elsewhere in the document, even one "
+      .. "with a matching number; each is its own separate counter. If both "
+      .. "appear in the same document, consider using one convention "
+      .. "consistently per figure/table type so a reader doesn't assume a "
+      .. "connection that isn't there."
+  )
+end
+
 -- Every level of a composite number joins onto the next with a period --
 -- see the file header comment for why (ISO 2145 / Word's own
 -- chapter-numbered-caption convention, and disambiguation against
@@ -196,6 +227,9 @@ local function scope_prefix(scope_key)
       )
       return "?"
     end
+    if not appendix_active then
+      note_plain_scope_independence()
+    end
     local parts = {}
     if appendix_active then
       table.insert(parts, current_appendix_designator)
@@ -208,6 +242,9 @@ local function scope_prefix(scope_key)
         "subsection_fig_caption/subsection_tbl_caption used before any {{< subsection_break >}} -- numbering will show '?'"
       )
       return "?"
+    end
+    if not appendix_active then
+      note_plain_scope_independence()
     end
     local parts = {}
     if appendix_active then

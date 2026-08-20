@@ -640,6 +640,29 @@ subsection counters back to 0 for exactly this reason, so the first
 nested numbering at ".1", not wherever the main body's (or an earlier
 appendix's) own section count happened to leave off.
 
+**Relationship to `quarto-plus`'s continuous numbering: none.** "Figure
+1"/"Figure 2" (`fig_caption`/`tbl_caption`, continuous) and "Figure
+3.1"/"Figure 3.2" (`section_fig_caption`, scoped) are two entirely
+separate counters -- a continuous "Figure 1" has no relationship
+whatsoever to a scoped caption that happens to also start with "1" (a
+scoped "Figure 1.1", or a *second* continuous "Figure 2" appearing near
+it -- neither implies anything about "section 1" or "section 2"; the
+continuous counter doesn't know section-scoped numbering exists, and vice
+versa). Nothing enforces this separation visually beyond the dot itself,
+so mixing the two conventions *for the same figure/table type* within one
+document is legal but can read as though the numbers relate when they
+don't -- a document is clearer picking one convention (continuous, or
+scoped) per figure/table type and using it throughout, the same way a
+real document wouldn't switch between "Figure 3" and "Figure 3.1"
+numbering schemes for the same series of figures. Appendix-scoped numbers
+("Figure C.1") don't have this problem -- the leading letter already
+marks them as a different sequence from any numeric continuous "Figure
+N"; the ambiguity is specific to *plain* (non-appendix) section-/
+subsection-scoped numbers, which is why the extension logs a one-time
+reminder (visible on a plain `quarto render`; not currently surfaced by
+`render_report()`'s own wrapped call, which only prints Quarto's
+stdout/stderr on a failed render) the first time one of those is used.
+
 `scoped_crossref "BookmarkId"` resolves any of the six caption
 shortcodes' bookmarks (auto-detecting figure vs. table the same way
 `quarto-plus`'s own `crossref` does, by the bookmark ID's `Fig`/`Tbl`

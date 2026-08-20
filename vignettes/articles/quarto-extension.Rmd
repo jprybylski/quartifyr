@@ -292,6 +292,16 @@ belongs to the main body's own third section. `scoped_crossref` resolves
 any of these six shortcodes' bookmarks. See the extension's own README
 for the full shortcode list.
 
+Continuous ("Figure 1") and scoped ("Figure 3.1") numbers are two
+entirely separate counters -- a continuous "Figure 2" has no
+relationship to a scoped "Figure 2.1" that happens to share a leading
+digit, or to any particular section. Mixing both conventions for the
+*same* figure/table type in one document is legal but reads as though
+the numbers relate when they don't; pick one convention per type and use
+it throughout. Appendix-scoped numbers ("Figure C.1") don't have this
+problem -- the letter already marks them as a different sequence. See
+the extension's own README for the full explanation.
+
 None of these six show up in `fig_caption`/`tbl_caption`'s own
 `.list_of_figures`/`.list_of_tables` div (above). For a combined list
 that does include them -- alongside the continuous captions, in true
