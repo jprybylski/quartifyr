@@ -146,7 +146,7 @@ def test_update_style_json_sourced_update_does_not_duplicate_int_keys(tmp_path):
     import json
 
     target = tmp_path / "style.yaml"
-    target.write_text(DEFAULT_YAML.read_text(encoding="utf-8"))
+    target.write_text(DEFAULT_YAML.read_text(encoding="utf-8"), encoding="utf-8")
     updates = json.loads(json.dumps({"fonts": {"sizes": {"heading": {"1": 99}}}}))
 
     merged = update_style(target, updates, assume_yes=True)
