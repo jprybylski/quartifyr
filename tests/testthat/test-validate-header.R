@@ -18,6 +18,20 @@ test_that(".read_qmd_frontmatter() returns an empty list when there's no frontma
   expect_identical(.read_qmd_frontmatter(path), list())
 })
 
+test_that(".read_qmd_frontmatter() returns an empty list when the opening `---` is never closed", {
+  dir <- withr::local_tempdir()
+  path <- file.path(dir, "report.qmd")
+  writeLines(c("---", 'title: "Test"', "no closing delimiter below"), path)
+  expect_identical(.read_qmd_frontmatter(path), list())
+})
+
+test_that(".read_qmd_frontmatter() returns an empty list for an empty frontmatter block", {
+  dir <- withr::local_tempdir()
+  path <- file.path(dir, "report.qmd")
+  writeLines(c("---", "---", "", "Body."), path)
+  expect_identical(.read_qmd_frontmatter(path), list())
+})
+
 test_that("validate_header() reads project: without going through Quarto's reserved-key handling", {
   # See R/validate-header.R's file-header comment: `project:` is a
   # reserved Quarto config key that quarto::quarto_inspect() silently
@@ -165,4 +179,47 @@ test_that("validate_header() prints a report by default and is silenced by quiet
 
 test_that("validate_header() errors clearly on a nonexistent shell_qmd", {
   expect_error(validate_header("/does/not/exist.qmd"), "not found")
+})
+
+test_that("the printed report shows a Missing (required) section and the danger alert", {
+  dir <- withr::local_tempdir()
+  path <- .write_qmd(c("filters:", "  - quarto-plus", "  - quartifyr"), dir = dir) # no title/memo, no format
+  writeLines(c("project:", "  output-dir: report/shell"), file.path(dir, "_quarto.yml"))
+
+  msgs <- paste(testthat::capture_messages(validate_header(path)), collapse = "")
+  expect_match(msgs, "Missing \\(required\\)")
+  expect_match(msgs, "format")
+  expect_match(msgs, "Blocking issues found")
+})
+
+test_that("the printed report shows a Recommended, not set section and the warning alert when nothing is blocking", {
+  dir <- withr::local_tempdir()
+  # memo: is set (so no "no-cover" conflict) with only `to` answered --
+  # from/date/re are recommended-but-unset, and nothing here is an error.
+  path <- .write_qmd(
+    c("memo:", '  to: "Jane Doe, CFO"', "filters:", "  - quarto-plus", "  - quartifyr", "format: docx"),
+    dir = dir
+  )
+  writeLines(c("project:", "  output-dir: report/shell"), file.path(dir, "_quarto.yml"))
+
+  res <- validate_header(path, quiet = TRUE)
+  expect_true(res$ok)
+  expect_true(length(res$missing_recommended) > 0)
+  expect_identical(nrow(res$problems), 0L)
+
+  msgs <- paste(testthat::capture_messages(validate_header(path)), collapse = "")
+  expect_match(msgs, "Recommended, not set")
+  expect_match(msgs, "No blocking issues, but see the warnings above")
+})
+
+test_that("the printed report's Conflicts section shows both error- and warn-severity bullets", {
+  path <- .write_qmd(c(
+    'title: "T"', "memo:", '  to: "X"', # title-memo-conflict: error
+    "filters:", "  - quarto-plus", "  - quartifyr", "format: docx",
+    'appendix-numbering: "lowercase"' # appendix-numbering-value: warn
+  ))
+  msgs <- paste(testthat::capture_messages(validate_header(path)), collapse = "")
+  expect_match(msgs, "Conflicts / structural issues")
+  expect_match(msgs, "Both `title:` and `memo:` are set")
+  expect_match(msgs, "appendix-numbering: lowercase")
 })
