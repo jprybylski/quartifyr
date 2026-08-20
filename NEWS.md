@@ -75,9 +75,15 @@
 * Style YAML: new `code:` section (`font_size`, `background_color`,
   `padding_pt`) styles pandoc's `Source Code`/`Verbatim Char` docx styles
   for fenced code blocks/inline code, using `fonts.monospace` (previously
-  declared but never actually applied anywhere -- now wired up). Defaults
-  match pandoc's own previous built-in fallback, so existing renders are
-  unaffected unless a style YAML opts into non-default values (#29).
+  declared but never actually applied anywhere -- now wired up).
+  `background_color` also applies to every per-token syntax-highlight
+  character style pandoc's docx writer can emit inside a fenced code
+  block (`KeywordTok`, `StringTok`, `CommentTok`, ...), so a keyword or
+  string shares the same background as the block around it instead of
+  keeping pandoc's own hardcoded shading regardless of this setting.
+  Defaults match pandoc's own previous built-in fallback, so existing
+  renders are unaffected unless a style YAML opts into non-default
+  values (#29).
 * Style YAML: new `equation.font` sets the docx-wide default math font
   (applied by `styling_apply_layout()`/`render_report()`'s new `style`/
   `override` arguments post-render, since pandoc's docx writer doesn't

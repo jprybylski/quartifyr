@@ -253,6 +253,39 @@ def test_verbatim_char_style_uses_monospace_font_and_background(tmp_path):
     assert shd.get(qn("w:fill")) == "F1F3F5"
 
 
+def test_syntax_highlight_token_styles_match_default_background(tmp_path):
+    _, doc = _build(tmp_path)
+    for name in ("KeywordTok", "StringTok", "CommentTok", "NormalTok"):
+        style = doc.styles[name]
+        shd = style.element.find(f".//{W_NS}shd")
+        assert shd is not None, name
+        assert shd.get(qn("w:fill")) == "F1F3F5", name
+        # Still based on Verbatim Char, so font/size track it -- only
+        # color/shading are set directly here.
+        assert style.base_style.name == "Verbatim Char"
+
+
+def test_syntax_highlight_token_styles_track_custom_background(tmp_path):
+    # issue #56: a custom code.background_color previously only reached
+    # "Source Code"/"Verbatim Char" -- every KindTok style pandoc's docx
+    # writer can emit kept its own hardcoded "#F1F3F5" shading regardless,
+    # since an OOXML style's own explicit rPr always wins over its
+    # basedOn parent's. Confirms every token style now tracks a custom
+    # background too, not just the two base styles.
+    override_path = tmp_path / "org.yaml"
+    override_path.write_text('code:\n  background_color: "#FFF3CD"\n')
+    _, doc = _build(tmp_path, override=override_path)
+    for name in ("KeywordTok", "DataTypeTok", "StringTok", "CommentTok", "FunctionTok", "NormalTok", "OperatorTok"):
+        style = doc.styles[name]
+        shd = style.element.find(f".//{W_NS}shd")
+        assert shd is not None, name
+        assert shd.get(qn("w:fill")) == "FFF3CD", name
+        # Text color (real syntax highlighting) survives the background
+        # override -- this isn't supposed to flatten all tokens to one
+        # color, just unify the shading behind them.
+        assert style.font.color.rgb is not None, name
+
+
 def test_heading_all_caps_off_by_default(tmp_path):
     _, doc = _build(tmp_path)
     assert doc.styles["Heading 1"].font.all_caps is not True

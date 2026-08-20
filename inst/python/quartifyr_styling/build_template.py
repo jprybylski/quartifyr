@@ -42,6 +42,19 @@ def _rgb(hex_color: str) -> RGBColor:
     return RGBColor.from_string(hex_color.lstrip("#").upper())
 
 
+def _shading_element(fill_hex: str) -> OxmlElement:
+    """A fresh `<w:shd>` element for `fill_hex`. OxmlElement instances can't
+    be shared between two parents, so callers setting shading on more than
+    one style/pPr/rPr need a separate call per target, not one reused
+    element.
+    """
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:color"), "auto")
+    shd.set(qn("w:fill"), fill_hex.lstrip("#").upper())
+    return shd
+
+
 def _set_font(style: BaseStyle, name: str, size_pt: float, *, color: str | None = None,
               bold: bool | None = None, italic: bool | None = None, caps: bool | None = None) -> None:
     font = style.font
@@ -289,14 +302,14 @@ def _style_source_code(doc: DocumentObject, config: StyleConfig) -> None:
     its *own* built-in defaults (Consolas 11pt, "#F1F3F5" shading, no
     padding) at render time -- config.code's own defaults match those
     exactly, so leaving code: untouched in a style YAML doesn't change
-    existing rendered output. Per-token syntax-highlight character styles
-    (KeywordTok etc.) are pandoc built-ins based on "Verbatim Char" and,
-    like "Source Code"/"Verbatim Char" themselves, only auto-injected when
-    absent from the reference-doc -- they inherit font/size/background
-    from this style without needing to be touched individually.
+    existing rendered output.
 
     fonts.monospace is applied here -- previously parsed into StyleConfig
     but never actually used anywhere.
+
+    Doesn't touch the per-token syntax-highlight character styles
+    (KeywordTok etc.) -- see `_style_syntax_highlight_tokens()`, called
+    right after this, for why those need their own separate fix.
     """
     paragraph_style = _get_or_add_style(doc, "Source Code", WD_STYLE_TYPE.PARAGRAPH, base="Normal")
     char_style = _get_or_add_style(doc, "Verbatim Char", WD_STYLE_TYPE.CHARACTER, base="Default Paragraph Font")
@@ -307,15 +320,8 @@ def _style_source_code(doc: DocumentObject, config: StyleConfig) -> None:
     # Shading lives on rPr for the character style, pPr for the paragraph
     # style -- OxmlElement instances can't be shared between two parents,
     # so build one per target rather than reusing a single element.
-    def _add_shading(target_pr) -> None:
-        shd = OxmlElement("w:shd")
-        shd.set(qn("w:val"), "clear")
-        shd.set(qn("w:color"), "auto")
-        shd.set(qn("w:fill"), config.code.background_color.lstrip("#").upper())
-        target_pr.append(shd)
-
-    _add_shading(paragraph_style.element.get_or_add_pPr())
-    _add_shading(char_style.element.get_or_add_rPr())
+    paragraph_style.element.get_or_add_pPr().append(_shading_element(config.code.background_color))
+    char_style.element.get_or_add_rPr().append(_shading_element(config.code.background_color))
 
     # "Padding": OOXML paragraph shading has no horizontal-padding concept
     # -- this is vertical spacing around the shaded block only.
@@ -324,6 +330,84 @@ def _style_source_code(doc: DocumentObject, config: StyleConfig) -> None:
         space_before_pt=config.code.padding_pt,
         space_after_pt=config.code.padding_pt,
     )
+
+
+# Pandoc's own default --highlight-style color/weight for every KindTok
+# character style its docx writer can emit (confirmed directly: rendering
+# with no code: override in a style YAML and reading the resulting
+# reference-doc's own auto-injected styles.xml reproduces this exact
+# table). Only color/bold/italic are listed -- font family/size/shading
+# come from "Verbatim Char" via basedOn in _style_syntax_highlight_tokens()
+# below, same as pandoc's own auto-injected copy of each style, except
+# pandoc's own copy also hardcodes its own "#F1F3F5" w:shd independent of
+# "Verbatim Char"'s (confirmed the same way) -- seeing through to that
+# background regardless of a style YAML's own code.background_color is
+# exactly the "gross background" mismatch issue #56 reported (a screenshot
+# of a branded code block: the block's own background changed, but a
+# lighter box stayed visible around every keyword/string/comment inside
+# it). Since an OOXML style's own explicit run properties always win over
+# whatever its basedOn parent has, redefining that fill here -- while still
+# reusing pandoc's own text colors, so real syntax highlighting keeps
+# working -- is the only way to make it track a style YAML's own setting.
+_SYNTAX_HIGHLIGHT_TOKENS: dict[str, dict[str, object]] = {
+    "KeywordTok": {"color": "003b4f", "bold": True},
+    "DataTypeTok": {"color": "ad0000"},
+    "DecValTok": {"color": "ad0000"},
+    "BaseNTok": {"color": "ad0000"},
+    "FloatTok": {"color": "ad0000"},
+    "ConstantTok": {"color": "8f5902"},
+    "CharTok": {"color": "20794d"},
+    "SpecialCharTok": {"color": "5e5e5e"},
+    "StringTok": {"color": "20794d"},
+    "VerbatimStringTok": {"color": "20794d"},
+    "SpecialStringTok": {"color": "20794d"},
+    "ImportTok": {"color": "00769e"},
+    "CommentTok": {"color": "5e5e5e"},
+    "DocumentationTok": {"color": "5e5e5e", "italic": True},
+    "AnnotationTok": {"color": "5e5e5e"},
+    "CommentVarTok": {"color": "5e5e5e", "italic": True},
+    "OtherTok": {"color": "003b4f"},
+    "FunctionTok": {"color": "4758ab"},
+    "VariableTok": {"color": "111111"},
+    "ControlFlowTok": {"color": "003b4f", "bold": True},
+    "OperatorTok": {"color": "5e5e5e"},
+    "BuiltInTok": {"color": "003b4f"},
+    "ExtensionTok": {"color": "003b4f"},
+    "PreprocessorTok": {"color": "ad0000"},
+    "AttributeTok": {"color": "657422"},
+    "RegionMarkerTok": {"color": "003b4f"},
+    "InformationTok": {"color": "5e5e5e"},
+    "WarningTok": {"color": "5e5e5e", "italic": True},
+    "AlertTok": {"color": "ad0000"},
+    "ErrorTok": {"color": "ad0000"},
+    "NormalTok": {"color": "003b4f"},
+}
+
+
+def _style_syntax_highlight_tokens(doc: DocumentObject, config: StyleConfig) -> None:
+    """Pre-defines every per-token syntax-highlight character style
+    (KeywordTok, StringTok, CommentTok, ...) pandoc's docx writer can emit
+    inside a fenced code block, based on "Verbatim Char" (so font/size and,
+    now, background all track it) with pandoc's own default text
+    color/weight per token kind layered on top -- see
+    `_SYNTAX_HIGHLIGHT_TOKENS`'s own comment for why this exists at all:
+    pandoc only auto-injects its own copy of a Tok style when the
+    reference-doc doesn't already define one, so defining them here is what
+    stops that auto-injected copy's own hardcoded shading from silently
+    overriding config.code.background_color's, everywhere but the
+    also-shaded gaps between tokens.
+
+    Called after `_style_source_code()`, which "Verbatim Char" depends on
+    already existing.
+    """
+    for name, spec in _SYNTAX_HIGHLIGHT_TOKENS.items():
+        style = _get_or_add_style(doc, name, WD_STYLE_TYPE.CHARACTER, base="Verbatim Char")
+        style.font.color.rgb = _rgb(str(spec["color"]))
+        if spec.get("bold"):
+            style.font.bold = True
+        if spec.get("italic"):
+            style.font.italic = True
+        style.element.get_or_add_rPr().append(_shading_element(config.code.background_color))
 
 
 def _style_hyperlink(doc: DocumentObject, config: StyleConfig) -> None:
@@ -491,6 +575,7 @@ def build_reference_docx(config: StyleConfig, output_path: str | Path) -> Path:
     _style_synopsis(doc, config)
     _style_bibliography(doc, config)
     _style_source_code(doc, config)
+    _style_syntax_highlight_tokens(doc, config)
     _style_hyperlink(doc, config)
     _style_header(doc, config)
     _add_page_number_footer(doc, config)

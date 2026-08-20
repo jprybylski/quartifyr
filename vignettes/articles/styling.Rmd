@@ -168,14 +168,19 @@ applies to.
 ### `code`
 
 Styles fenced code blocks/inline code (pandoc's own `Source Code`/
-`Verbatim Char` docx styles). Defaults match pandoc's own built-in
-fallback, so leaving this section untouched doesn't change existing
-rendered output.
+`Verbatim Char` docx styles), and every per-token syntax-highlight
+character style pandoc's docx writer can emit inside a fenced code block
+(`KeywordTok`, `StringTok`, `CommentTok`, ...) -- `background_color`
+applies to both, so a keyword or string inside a code block shares the
+same background as the block around it rather than keeping pandoc's own
+hardcoded shading regardless of this setting. Defaults match pandoc's own
+built-in fallback, so leaving this section untouched doesn't change
+existing rendered output.
 
 | Key | Controls | Default |
 | --- | --- | --- |
 | `font_size` | Code text size (pt) -- family comes from `fonts.monospace` above | `10` |
-| `background_color` | Shaded background | `#F1F3F5` |
+| `background_color` | Shaded background, block and per-token alike | `#F1F3F5` |
 | `padding_pt` | Space before/after the shaded block (vertical only -- OOXML paragraph shading has no horizontal-padding concept) | `0` |
 
 ### `equation`
