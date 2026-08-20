@@ -1,5 +1,30 @@
 # quartifyr
 
+# quartifyr (development version)
+
+## New features
+
+* New `.quartifyr_list_of_figures`/`.quartifyr_list_of_tables` divs build
+  a combined List of Figures/List of Tables spanning both `quarto-plus`'s
+  own continuous `fig_caption`/`tbl_caption` and all six of this
+  extension's scoped caption shortcodes (`appendix_fig_caption`/
+  `appendix_tbl_caption`, `section_fig_caption`/`section_tbl_caption`,
+  `subsection_fig_caption`/`subsection_tbl_caption`), in true document
+  order -- unlike `quarto-plus`'s own `.list_of_figures`/
+  `.list_of_tables` (which stay as-is, continuous-only, and keep working
+  unchanged), a native Word `TOC` field switch can't merge multiple `SEQ`
+  families into one document-ordered list. A hand-built list, with live
+  `REF`/`PAGEREF` fields per entry, built by a new post-render step in
+  `quartifyr_styling.layout.apply_layout()` rather than a Lua filter --
+  see `inst/extensions/quartifyr/README.md`'s "Combined List of
+  Figures/Tables" section for why (#54).
+* The reference-doc template now also configures a "Table of Figures"
+  style (Word's built-in style for `quarto-plus`'s own
+  `.list_of_figures`/`.list_of_tables`, previously left unstyled/
+  Word-default) to match "TOC 1" -- the style `.quartifyr_list_of_figures`/
+  `.quartifyr_list_of_tables` entries above use -- so both kinds of list
+  render identically once recalculated (#54).
+
 # quartifyr 0.3.0
 
 ## New features
@@ -31,21 +56,34 @@
   `appendix_fig_caption`/`appendix_tbl_caption`,
   `section_fig_caption`/`section_tbl_caption` (with a new `section_break`
   marker), and `subsection_fig_caption`/`subsection_tbl_caption` (with a
-  new `subsection_break` marker) -- number "Figure A1"/"Figure 3.1"/
+  new `subsection_break` marker) -- number "Figure A.1"/"Figure 3.1"/
   "Figure 3.2.1" respectively, restarting within their scope instead of
   running continuously through the whole document like `quarto-plus`'s
-  own `fig_caption`/`tbl_caption`. A new `scoped_crossref` shortcode
-  resolves any of the six. Additive: nothing here changes `quarto-plus`'s
-  own shortcodes, and an author can mix scoped and continuous captions
-  freely. See `inst/extensions/quartifyr/README.md`'s "Scoped
-  figure/table numbering" section, including its known List of
-  Figures/Tables limitation (#26).
+  own `fig_caption`/`tbl_caption`. Used after an `{{< appendix >}}` call,
+  `section_fig_caption`/`subsection_fig_caption` nest that appendix's own
+  designator into their number too ("Figure C.3.1"), so a figure numbered
+  mid-appendix never reads as though it belongs to the main body's own
+  third section. A new `scoped_crossref` shortcode resolves any of the
+  six. Additive: nothing here changes `quarto-plus`'s own shortcodes, and
+  an author can mix scoped and continuous captions freely -- though a
+  plain (non-appendix) scoped number has no relationship to `quarto-plus`'s
+  own continuous numbering even when digits happen to match, so the first
+  use of plain `section_fig_caption`/`subsection_fig_caption` in a
+  document logs a one-time reminder about picking one convention per
+  figure/table type. See `inst/extensions/quartifyr/README.md`'s "Scoped
+  figure/table numbering" section (#26).
 * Style YAML: new `code:` section (`font_size`, `background_color`,
   `padding_pt`) styles pandoc's `Source Code`/`Verbatim Char` docx styles
   for fenced code blocks/inline code, using `fonts.monospace` (previously
-  declared but never actually applied anywhere -- now wired up). Defaults
-  match pandoc's own previous built-in fallback, so existing renders are
-  unaffected unless a style YAML opts into non-default values (#29).
+  declared but never actually applied anywhere -- now wired up).
+  `background_color` also applies to every per-token syntax-highlight
+  character style pandoc's docx writer can emit inside a fenced code
+  block (`KeywordTok`, `StringTok`, `CommentTok`, ...), so a keyword or
+  string shares the same background as the block around it instead of
+  keeping pandoc's own hardcoded shading regardless of this setting.
+  Defaults match pandoc's own previous built-in fallback, so existing
+  renders are unaffected unless a style YAML opts into non-default
+  values (#29).
 * Style YAML: new `equation.font` sets the docx-wide default math font
   (applied by `styling_apply_layout()`/`render_report()`'s new `style`/
   `override` arguments post-render, since pandoc's docx writer doesn't

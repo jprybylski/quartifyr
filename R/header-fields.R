@@ -274,7 +274,7 @@
     ),
     field(
       "filters", "Quarto filters", "Document structure",
-      "Must list `quartifyr` (and, for ToC/List of Figures/List of Tables/abbreviations/fig_caption/tbl_caption, `quarto-plus`) or none of this extension's frontmatter has any effect.",
+      "Must list `quartifyr` (and, for ToC/List of Figures/List of Tables/abbreviations/fig_caption/tbl_caption, `quarto-plus`) or none of this extension's frontmatter has any effect. quartifyr's own `.quartifyr_list_of_figures`/`.quartifyr_list_of_tables` combined lists and scoped caption shortcodes don't need `quarto-plus` unless a document also uses its continuous `fig_caption`/`tbl_caption`.",
       required = always,
       kind = "fixed"
     )

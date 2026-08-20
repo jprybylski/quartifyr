@@ -53,6 +53,12 @@ EXAMPLES = [
         # render` itself, not by executing any R.
         "extra_files": ["references.bib", "scripts/01_analysis.R"],
         "expect_present": ["Population Pharmacokinetics of Theophylline"],
+        # report.qmd's main-body "Scoped Numbering Example" is the first
+        # plain (non-appendix) section_fig_caption use in the document --
+        # appendix.lua's note_plain_scope_independence() should fire
+        # exactly once, on stderr (confirmed: quarto.log.warning() prints
+        # there, not stdout).
+        "expect_stderr_contains": ["section_fig_caption/section_tbl_caption/subsection_fig_caption"],
     },
     {
         "name": "memo-example",
@@ -115,6 +121,8 @@ def _render_one(example: dict) -> list[tuple[str, bool]]:
         # Pass 2 never ran -- {rpfy}: placeholders are expected to still be
         # literal, not a failure of this step.
         checks.append((f"[{name}] {{rpfy}}: placeholders still literal (pass 2 not run, as expected)", "{rpfy}:" in joined))
+        for expected in example.get("expect_stderr_contains", []):
+            checks.append((f"[{name}] quarto's stderr contains {expected!r}", expected in result.stderr))
 
     return checks
 

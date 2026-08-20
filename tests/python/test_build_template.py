@@ -43,7 +43,7 @@ def test_no_theme_font_references_survive_on_styled_elements(tmp_path):
     # Arial where Calibri isn't installed) instead of Times New Roman.
     _, doc = _build(tmp_path)
     theme_attrs = (qn("w:asciiTheme"), qn("w:hAnsiTheme"), qn("w:cstheme"), qn("w:eastAsiaTheme"))
-    for name in ["Normal", "Title", "Subtitle", "Heading 1", "Heading 4", "Caption", "TOC 1", "Footer"]:
+    for name in ["Normal", "Title", "Subtitle", "Heading 1", "Heading 4", "Caption", "TOC 1", "Table of Figures", "Footer"]:
         rfonts = doc.styles[name].element.find(f".//{W_NS}rFonts")
         assert rfonts is not None, name
         for attr in theme_attrs:
@@ -141,6 +141,29 @@ def test_toc_styles_have_dot_leader_tab_stop(tmp_path):
         assert str(tab_stops[0].leader).endswith("DOTS (4)") or "DOTS" in str(tab_stops[0].leader)
 
 
+def test_table_of_figures_style_matches_toc_1(tmp_path):
+    # quarto-plus's own .list_of_figures/.list_of_tables (a native
+    # `TOC \c "Figure"`/`TOC \c "Table"` field) render each entry in
+    # Word's built-in "Table of Figures" style, a distinct style ID from
+    # "TOC 1"-"TOC 9" -- must be explicitly configured here (same reason
+    # as "TOC 1") so it doesn't fall back to an unbranded default, and
+    # should look identical to "TOC 1" so it matches
+    # `.quartifyr_list_of_figures`/`.quartifyr_list_of_tables`
+    # (`caption_lists.lua`), which reuses "TOC 1" itself.
+    _, doc = _build(tmp_path)
+    tof_style = doc.styles["Table of Figures"]
+    toc1_style = doc.styles["TOC 1"]
+
+    tab_stops = tof_style.paragraph_format.tab_stops
+    assert len(tab_stops) == 1
+    assert "DOTS" in str(tab_stops[0].leader)
+    assert tab_stops[0].position == toc1_style.paragraph_format.tab_stops[0].position
+
+    assert tof_style.font.name == toc1_style.font.name
+    assert tof_style.font.size == toc1_style.font.size
+    assert tof_style.paragraph_format.left_indent == toc1_style.paragraph_format.left_indent
+
+
 def test_table_grid_has_borders_and_header_shading(tmp_path):
     _, doc = _build(tmp_path)
     style_el = doc.styles["Table Grid"].element
@@ -228,6 +251,39 @@ def test_verbatim_char_style_uses_monospace_font_and_background(tmp_path):
     shd = verbatim_char.element.find(f".//{W_NS}shd")
     assert shd is not None
     assert shd.get(qn("w:fill")) == "F1F3F5"
+
+
+def test_syntax_highlight_token_styles_match_default_background(tmp_path):
+    _, doc = _build(tmp_path)
+    for name in ("KeywordTok", "StringTok", "CommentTok", "NormalTok"):
+        style = doc.styles[name]
+        shd = style.element.find(f".//{W_NS}shd")
+        assert shd is not None, name
+        assert shd.get(qn("w:fill")) == "F1F3F5", name
+        # Still based on Verbatim Char, so font/size track it -- only
+        # color/shading are set directly here.
+        assert style.base_style.name == "Verbatim Char"
+
+
+def test_syntax_highlight_token_styles_track_custom_background(tmp_path):
+    # issue #56: a custom code.background_color previously only reached
+    # "Source Code"/"Verbatim Char" -- every KindTok style pandoc's docx
+    # writer can emit kept its own hardcoded "#F1F3F5" shading regardless,
+    # since an OOXML style's own explicit rPr always wins over its
+    # basedOn parent's. Confirms every token style now tracks a custom
+    # background too, not just the two base styles.
+    override_path = tmp_path / "org.yaml"
+    override_path.write_text('code:\n  background_color: "#FFF3CD"\n')
+    _, doc = _build(tmp_path, override=override_path)
+    for name in ("KeywordTok", "DataTypeTok", "StringTok", "CommentTok", "FunctionTok", "NormalTok", "OperatorTok"):
+        style = doc.styles[name]
+        shd = style.element.find(f".//{W_NS}shd")
+        assert shd is not None, name
+        assert shd.get(qn("w:fill")) == "FFF3CD", name
+        # Text color (real syntax highlighting) survives the background
+        # override -- this isn't supposed to flatten all tokens to one
+        # color, just unify the shading behind them.
+        assert style.font.color.rgb is not None, name
 
 
 def test_heading_all_caps_off_by_default(tmp_path):

@@ -81,6 +81,22 @@ once here at the OOXML level rather than in each Lua shortcode separately:
   ``quartifyr_styling.same_page_crossrefs.resolve_same_page_crossrefs()``
   -- which must run after reportifyr's pass 2 (real content, real
   pagination) -- see that module for why and how.
+
+Also fills in a combined List of Figures/List of Tables at each
+``.quartifyr_list_of_figures``/``.quartifyr_list_of_tables`` div
+(``_extensions/quartifyr/caption_lists.lua``), spanning both quarto-plus's
+own continuous captions and this extension's six scoped ones, in true
+document order -- see ``_caption_lists.py`` for why this has to be a
+post-render step here rather than a Lua filter (the short version: Quarto
+resolves extension shortcodes, including every caption, in a pass that
+runs strictly after all Lua filters, so no filter can see the whole
+caption set the way this needs). Unlike ``crossref-hyperlinks:
+"same-page"`` above, this doesn't need reportifyr's pass 2 first -- every
+caption's bookmark/SEQ field is already real by the time Quarto's render
+finishes, and the list's own REF/PAGEREF fields resolve live like any
+other field this extension emits -- so it runs unconditionally here,
+same as the header/footer/page-numbering work above, a silent no-op if a
+project's shell ``.qmd`` never uses either div.
 """
 
 from __future__ import annotations
@@ -96,9 +112,11 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Emu
 
+from ._caption_lists import build_caption_lists
 from ._ooxml_fields import (
     SAME_PAGE_MARKER_ID_BASE,
     SAME_PAGE_MARKER_PREFIX,
+    find_bookmark_paragraph,
     match_ref_field_run_group,
     strip_hyperlink_switch,
 )
@@ -355,13 +373,6 @@ def _mark_crossrefs_for_same_page_resolution(document) -> None:
             i += 1
 
 
-def _find_bookmark_paragraph(document, name: str):
-    body = document.element.body
-    for p in body.iter(qn("w:p")):
-        for bookmark in p.iter(qn("w:bookmarkStart")):
-            if bookmark.get(qn("w:name")) == name:
-                return p
-    return None
 
 
 def _insert_section_break(bookmark_p, final_sectPr) -> None:
@@ -458,8 +469,8 @@ def apply_layout(
     crossref_hyperlink_mode = _resolve_crossref_hyperlink_mode(crossref_hyperlinks)
 
     document = docx.Document(str(docx_path))
-    front_matter_start_p = _find_bookmark_paragraph(document, _FRONT_MATTER_START_BOOKMARK)
-    body_start_p = _find_bookmark_paragraph(document, _BODY_START_BOOKMARK)
+    front_matter_start_p = find_bookmark_paragraph(document, _FRONT_MATTER_START_BOOKMARK)
+    body_start_p = find_bookmark_paragraph(document, _BODY_START_BOOKMARK)
 
     if body_start_p is not None:
         final_sectPr = document.element.body.find(qn("w:sectPr"))
@@ -557,6 +568,8 @@ def apply_layout(
 
     if equation_font is not None:
         _set_equation_font(document, equation_font)
+
+    build_caption_lists(document)
 
     document.save(str(docx_path))
     return docx_path

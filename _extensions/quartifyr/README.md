@@ -589,9 +589,15 @@ continuously through the whole document:
 See {{< scoped_crossref "FigResiduals" >}}.
 ```
 
-Numbers "Figure A1"/"Table A1" -- the appendix's own designator (from
-`appendix-numbering:` above) directly followed by a local number that
-resets to 1 at each `{{< appendix >}}`.
+Numbers "Figure A.1"/"Table A.1" -- the appendix's own designator (from
+`appendix-numbering:` above), a period, then a local number that resets
+to 1 at each `{{< appendix >}}`. Every level of a composite number joins
+onto the next with a period this way, matching Word's own "include
+chapter number in caption" convention (e.g. "Figure 2-1"/"Figure 2.1")
+and ISO 2145's rule for numbering document subdivisions -- not run
+together undelimited ("Figure A1"), which reads ambiguously once
+`appendix-numbering: arabic` is in play ("Figure 11" -- the first figure
+of appendix 1, or the eleventh figure?).
 
 `section_fig_caption`/`section_tbl_caption` and
 `subsection_fig_caption`/`subsection_tbl_caption` do the same for
@@ -623,26 +629,106 @@ section/subsection you want reflected in scoped numbering, in the same
 order they appear -- skip one and the scoped numbers and
 `number-sections:`'s own will visibly disagree.
 
+Used *after* an `{{< appendix >}}` call, `section_fig_caption`/
+`subsection_fig_caption` nest that appendix's own designator into their
+number too -- "Figure C.3.1" (appendix C, section 3), not plain "Figure
+3.1" -- since a figure numbered as though it belongs to the third
+*main-body* section, while actually sitting inside an appendix, would
+read as misplaced. Every `{{< appendix >}}` call resets the section/
+subsection counters back to 0 for exactly this reason, so the first
+`section_break` after a new appendix always starts that appendix's own
+nested numbering at ".1", not wherever the main body's (or an earlier
+appendix's) own section count happened to leave off.
+
+**Relationship to `quarto-plus`'s continuous numbering: none.** "Figure
+1"/"Figure 2" (`fig_caption`/`tbl_caption`, continuous) and "Figure
+3.1"/"Figure 3.2" (`section_fig_caption`, scoped) are two entirely
+separate counters -- a continuous "Figure 1" has no relationship
+whatsoever to a scoped caption that happens to also start with "1" (a
+scoped "Figure 1.1", or a *second* continuous "Figure 2" appearing near
+it -- neither implies anything about "section 1" or "section 2"; the
+continuous counter doesn't know section-scoped numbering exists, and vice
+versa). Nothing enforces this separation visually beyond the dot itself,
+so mixing the two conventions *for the same figure/table type* within one
+document is legal but can read as though the numbers relate when they
+don't -- a document is clearer picking one convention (continuous, or
+scoped) per figure/table type and using it throughout, the same way a
+real document wouldn't switch between "Figure 3" and "Figure 3.1"
+numbering schemes for the same series of figures. Appendix-scoped numbers
+("Figure C.1") don't have this problem -- the leading letter already
+marks them as a different sequence from any numeric continuous "Figure
+N"; the ambiguity is specific to *plain* (non-appendix) section-/
+subsection-scoped numbers, which is why the extension logs a one-time
+reminder (visible on a plain `quarto render`; not currently surfaced by
+`render_report()`'s own wrapped call, which only prints Quarto's
+stdout/stderr on a failed render) the first time one of those is used.
+
 `scoped_crossref "BookmarkId"` resolves any of the six caption
 shortcodes' bookmarks (auto-detecting figure vs. table the same way
 `quarto-plus`'s own `crossref` does, by the bookmark ID's `Fig`/`Tbl`
 prefix) via the same `REF ... \h` mechanism as `crossref`/
 `appendix_crossref`, so `crossref-hyperlinks:` (above) applies to it too.
 
-Known limitation: none of these six show up in a `.list_of_figures`/
-`.list_of_tables` div (`quarto-plus`'s `table_of_contents.lua`) -- that's
-built from Word's native `TOC \c "Figure"`/`TOC \c "Table"` switch, which
-only collects entries from the literal `SEQ Figure`/`SEQ Table`
-sequences `fig_caption`/`tbl_caption` use, not the separate per-scope SEQ
-names here (`SEQ AppendixFigure`, `SEQ SectionFigure`, ...). A document
-mixing scoped and continuous captions needs to accept scoped ones being
-absent from `list_of_figures`/`list_of_tables`.
+None of these six show up in `quarto-plus`'s own `.list_of_figures`/
+`.list_of_tables` div (its `table_of_contents.lua`) -- that's built from
+Word's native `TOC \c "Figure"`/`TOC \c "Table"` switch, which only
+collects entries from the literal `SEQ Figure`/`SEQ Table` sequences
+`fig_caption`/`tbl_caption` use, not the separate per-scope SEQ names
+here (`SEQ AppendixFigure`, `SEQ SectionFigure`, ...). See "Combined List
+of Figures/Tables" below for a `.list_of_figures`/`.list_of_tables`
+alternative that does include them.
 
-Gotcha: writing a shortcode literally in backticks as documentation text
-(e.g. `` `{{< section_break >}}` `` inside a sentence explaining what it
-does) still gets expanded and executed -- Quarto's shortcode scanner
-doesn't skip inline code spans. Describe a shortcode in prose without the
-literal `{{< ... >}}` syntax if you don't mean to invoke it again.
+Gotcha: writing a shortcode literally as documentation text -- in
+backticks (e.g. `` `{{< section_break >}}` `` inside a sentence
+explaining what it does) *or* inside an HTML comment (`<!-- ... -->`) --
+still gets expanded and executed. Quarto's shortcode scanner doesn't skip
+inline code spans or comments; confirmed the hard way, with a bare
+`{{< appendix >}}` (no args) written into an explanatory `.qmd` comment
+consuming a real appendix letter and resetting scoped-numbering state
+exactly like a genuine call would. Describe a shortcode in prose without
+the literal `{{< ... >}}` syntax if you don't mean to invoke it again.
+
+### Combined List of Figures/Tables
+
+```
+::: .quartifyr_list_of_figures
+:::
+
+::: .quartifyr_list_of_tables
+:::
+```
+
+An alternative to `quarto-plus`'s own `.list_of_figures`/`.list_of_tables`
+divs (above) that includes every caption in the document -- both the
+continuous `fig_caption`/`tbl_caption` shortcodes and all six scoped ones
+-- listed in true document order regardless of how a project mixes them.
+Additive, not a replacement: `quarto-plus`'s own divs still work exactly
+as before (continuous captions only), so a project that never uses a
+scoped caption sees no difference from adding these.
+
+Each entry's figure/table number and page number are live `REF`/`PAGEREF`
+fields back to that caption's own bookmark -- the same mechanism
+`crossref`/`appendix_crossref`/`scoped_crossref` already use -- so
+reordering, adding, or removing captions renumbers and repaginates the
+list correctly on the next field recalculation, just like every other
+field this extension emits. Unlike `.list_of_figures`/`.list_of_tables`
+above (a native Word `TOC` field Word itself builds and styles), this is
+a plain hand-built list, styled with the reference-doc's existing "TOC 1"
+paragraph style (dot-leader tab stop) and "Hyperlink" character style,
+that quartifyr constructs itself -- there's no native `TOC` field switch
+that can merge multiple `SEQ` families into one document-ordered list
+(see `appendix.lua`'s file-header comment for why).
+
+This can't run as a Lua filter the way the rest of this extension does:
+Quarto resolves every caption shortcode in a pass that runs after all Lua
+filters, so no filter can see the whole document's caption set. Instead,
+`caption_lists.lua` only marks where each div is; `quartifyr_styling`'s
+`apply-layout` step (part of `render_report()`'s standard pipeline, not a
+separate opt-in step -- unlike `resolve-same-page-crossrefs`, this
+doesn't need reportifyr's pass 2 first) fills it in once Quarto's full
+render, captions included, is done. See
+`../../python/quartifyr_styling/_caption_lists.py`'s module docstring for
+the full story.
 
 ### Numbered sections
 

@@ -78,7 +78,7 @@
       check = function(fm, shell_qmd, quarto_yml) {
         filters <- unlist(get(fm, "filters"))
         if ("quartifyr" %in% filters && !("quarto-plus" %in% filters)) {
-          "`filters:` includes `quartifyr` but not `quarto-plus` -- the ToC/List of Figures/List of Tables/abbreviations divs and `fig_caption`/`tbl_caption`/`crossref` shortcodes come from quarto-plus."
+          "`filters:` includes `quartifyr` but not `quarto-plus` -- the ToC/List of Figures/List of Tables/abbreviations divs and `fig_caption`/`tbl_caption`/`crossref` shortcodes come from quarto-plus. (quartifyr's own `.quartifyr_list_of_figures`/`.quartifyr_list_of_tables`/scoped caption shortcodes don't need quarto-plus at all, unless a document also mixes in its continuous `fig_caption`/`tbl_caption`.)"
         }
       }
     ),
