@@ -49,11 +49,26 @@ jobs:
 
       # The repo-root .Rprofile adds a2-ai.r-universe.dev to options(repos=)
       # automatically once R starts here, so pak resolves pyro/reportifyr
-      # (no CRAN release for either) the same way local dev does.
-      - name: Install quartifyr and pkgdown
-        run: |
-          Rscript -e 'install.packages("pak", repos = "https://r-lib.github.io/p/pak/stable/")'
-          Rscript -e 'pak::pkg_install(c("local::.", "pkgdown"), dependencies = TRUE)'
+      # (no CRAN release for either) the same way local dev does -- picked
+      # up by setup-r-dependencies@v2's own Rscript invocation below the
+      # same way it was by this step's own former plain `Rscript -e` calls,
+      # since neither runs with --vanilla/--no-init-file.
+      #
+      # r-lib/actions/setup-r-dependencies@v2 (the same action
+      # ../R-CMD-check.yaml/../test-coverage.yaml already use for their own
+      # dependency installs) resolves and caches this via pak's own binary
+      # cache, keyed on DESCRIPTION -- replacing a hand-rolled
+      # `pak::pkg_install(..., dependencies = TRUE)` that reinstalled
+      # everything, including rebuilding reportifyr/pyro from source, on
+      # every single doc deploy. `needs: website` is the canonical
+      # r-lib/actions value for a pkgdown build (mirrors
+      # usethis::use_pkgdown_github_pages()'s own generated workflow) --
+      # pulls in Suggests: rmarkdown (needed to render vignettes/articles)
+      # alongside quartifyr's own Imports.
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::pkgdown, local::.
+          needs: website
 
       - name: Build pkgdown site
         run: Rscript -e 'pkgdown::build_site(new_process = FALSE, install = FALSE)'
