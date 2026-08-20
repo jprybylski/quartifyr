@@ -213,6 +213,28 @@
 #'   `missing_required`, `missing_recommended`, `available` (each a
 #'   character vector of field keys), and `problems` (a data frame of
 #'   `id`/`severity`/`message` from the structural checks).
+#' @examples
+#' # A minimal shell .qmd -- title/format/filters are set, but there's no
+#' # _quarto.yml next to it yet. The printed report below is real output,
+#' # not a curated transcript: it reflects the current field registry
+#' # (R/header-fields.R) exactly, so it can't drift from what
+#' # validate_header() actually checks.
+#' tmp <- tempfile(fileext = ".qmd")
+#' writeLines(
+#'   c(
+#'     "---",
+#'     "title: \"Demo Report\"",
+#'     "filters:",
+#'     "  - quarto-plus",
+#'     "  - quartifyr",
+#'     "format: docx",
+#'     "---",
+#'     "",
+#'     "Body text."
+#'   ),
+#'   tmp
+#' )
+#' validate_header(tmp)
 #' @export
 validate_header <- function(shell_qmd, quarto_yml = NULL, quiet = FALSE, strict = FALSE) {
   if (!file.exists(shell_qmd)) {

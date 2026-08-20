@@ -142,10 +142,74 @@
 #' added to the registry is automatically prompted for here too, with no
 #' separate wording to maintain.
 #'
+#' @section Example session:
+#' `header_helper()` requires a real interactive session (it aborts
+#' otherwise -- see `@examples` below), so this can't be executed on the
+#' pkgdown/`R CMD check` example run the way `validate_header()`'s can.
+#' The transcript below is a real captured run of the underlying prompt
+#' loop, reformatted the way it reads in a terminal (each `[y/N]`/`[Y/n]`
+#' question abbreviated to just the ones answered "yes", since most of
+#' several dozen optional fields are skipped in any one run):
+#'
+#' ```
+#' > header_helper("report")
+#' ── quartifyr header helper (report) ──
+#'
+#' Title (required): Population PK Analysis of Compound X
+#' Set Subtitle? -- Optional subtitle line under the title. [y/N] n
+#' Set Report type? -- ... [y/N] n
+#' Set Date? -- Info-table row. ... [y/N] y
+#' Date: 2026-08-19
+#' Set Lead scientist? -- Info-table row. [y/N] n
+#' ...
+#' ── Title page ──
+#'
+#' Add an address line? [y/N] y
+#'   Line: Acme Pharma
+#' Add one more address line? [y/N] n
+#' Add an extra title-page row? [y/N] n
+#' ── Signature page ──
+#'
+#' Add an author? [y/N] y
+#'   Name: Jane Doe, PharmD
+#'   Title: Lead Scientist
+#' Add one more author? [y/N] n
+#' Add a reviewer? [y/N] n
+#' Add an approver? [y/N] n
+#' ── Synopsis ──
+#'
+#' Add a synopsis? [y/N] n
+#'
+#' ── Generated front matter ──
+#'
+#' ---
+#' title: Population PK Analysis of Compound X
+#' date: '2026-08-19'
+#' address:
+#'   - Acme Pharma
+#' contributors:
+#'   authors:
+#'     - name: Jane Doe, PharmD
+#'       title: Lead Scientist
+#' format: docx
+#' filters:
+#'   - quarto-plus
+#'   - quartifyr
+#' ---
+#'
+#' Copied to the clipboard -- paste it at the top of your .qmd.
+#' ```
+#'
 #' @param doc_type `"report"` (title page) or `"memo"` (memo cover).
 #' @param clipboard Try to copy the result to the clipboard. Default `TRUE`.
 #' @return Invisibly, the generated YAML block (a single string, including
 #'   the `---` fences).
+#' @examples
+#' \dontrun{
+#' # Interactive only -- run this at the console, not via source()/Rscript.
+#' header_helper("report")
+#' header_helper("memo")
+#' }
 #' @export
 header_helper <- function(doc_type = c("report", "memo"), clipboard = TRUE) {
   doc_type <- match.arg(doc_type)
