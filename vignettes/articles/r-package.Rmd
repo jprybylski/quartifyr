@@ -99,6 +99,48 @@ load-bearing, not just a naming convention.
 See `vignette("styling")` for what each of those `styling_*()` calls
 does on its own.
 
+## Front matter: `validate_header()` and `header_helper()`
+
+A quartifyr shell `.qmd` carries a lot of frontmatter -- title/memo,
+signature page, synopsis, appendices, page header/footer, ... (see
+`vignette("quarto-extension")`). Both functions below are driven by one
+shared, in-package field registry (every field either filter actually
+reads, with its requiredness and a one-line description), so they stay
+in sync with the extension itself rather than with separately maintained
+documentation -- run either one to see the current, authoritative field
+list instead of looking it up here.
+
+`validate_header()` checks a shell `.qmd` (and its project's
+`_quarto.yml`) against that registry and prints what's provided, what's
+missing, what else is available, and any conflicts (`title:`/`memo:`
+both set, an unresolvable `header-format:` placeholder, an unrecognized
+`crossref-hyperlinks:` value, a `logo:`/`bibliography:` path that
+doesn't exist on disk, ...):
+
+```r
+quartifyr::validate_header("report.qmd")
+```
+
+Pass `strict = TRUE` to abort (rather than just print) when something
+required is missing or a conflict was found -- useful as a pre-render
+gate in a script. `quiet = TRUE` suppresses the printed report and just
+returns the structured result (`ok`, `provided`, `missing_required`,
+`missing_recommended`, `available`, `problems`) for programmatic use.
+
+`header_helper()` is the other direction: an interactive prompt walk
+through the same registry that builds a ready-to-paste front-matter
+block, copying it to the clipboard (via the optional `clipr` package) or
+printing it if no clipboard is available.
+
+```r
+quartifyr::header_helper("report")   # or "memo"
+```
+
+It's meant as a starting point for a new project, not a full editor --
+richer constructs like `synopsis:`'s multi-line/embedded-figure values
+(see `vignette("quarto-extension")`'s "Synopsis" section) are left for
+hand-editing afterward. Check the result with `validate_header()`.
+
 ## A load-bearing detail: working directory
 
 `reportifyr`/`pyro` locate their Python venv and project config by

@@ -79,6 +79,11 @@ reference:
       - install_quartifyr_extension
       - check_quarto_extensions
       - quartifyr_quarto_extensions
+  - title: Front matter
+    desc: Validate or interactively build a shell `.qmd`'s YAML front matter.
+    contents:
+      - validate_header
+      - header_helper
   - title: Styling engine (pyro bridge)
     desc: >-
       Thin R wrappers around the bundled Python engine
