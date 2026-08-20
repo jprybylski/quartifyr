@@ -1,3 +1,13 @@
+# testthat::local_mocked_bindings() can only mock a base function (here,
+# interactive()/readline()/requireNamespace()) if this package already
+# has *some* binding for it -- see ?testthat::local_mocked_bindings's
+# "Base functions" section. These NULL bindings exist solely so tests
+# can mock them; every real call below still resolves to the base
+# functions via R's usual lexical scoping.
+interactive <- NULL
+readline <- NULL
+requireNamespace <- NULL
+
 #' Prompt for one line of interactive input
 #'
 #' Thin wrapper around `readline()` so the rest of `header_helper()` can be
@@ -127,6 +137,35 @@
   fm
 }
 
+#' Try to copy text to the clipboard via the optional `clipr` package
+#'
+#' Isolated in its own function (rather than inline in `header_helper()`)
+#' so tests can mock this one call instead of reaching into `clipr`'s own
+#' namespace, which `testthat::local_mocked_bindings()` advises against
+#' for functions called with `::` (see `?testthat::local_mocked_bindings`'s
+#' "Namespaced calls" section) -- and so a real run doesn't depend on the
+#' test environment actually having clipboard access.
+#'
+#' @param text The text to copy.
+#' @return `TRUE` if copied, `FALSE` if `clipr` isn't installed, has no
+#'   clipboard available, or the copy itself failed.
+#' @keywords internal
+.header_helper_copy_to_clipboard <- function(text) {
+  if (!requireNamespace("clipr", quietly = TRUE)) {
+    return(FALSE)
+  }
+  if (!isTRUE(tryCatch(clipr::clipr_available(), error = function(e) FALSE))) {
+    return(FALSE)
+  }
+  isTRUE(tryCatch(
+    {
+      clipr::write_clip(text)
+      TRUE
+    },
+    error = function(e) FALSE
+  ))
+}
+
 #' Interactively build a quartifyr front-matter block
 #'
 #' Walks the same field registry `validate_header()` validates against
@@ -227,17 +266,7 @@ header_helper <- function(doc_type = c("report", "memo"), clipboard = TRUE) {
   cli::cli_h2("Generated front matter")
   cli::cat_line(yaml_block)
 
-  copied <- FALSE
-  if (isTRUE(clipboard) && requireNamespace("clipr", quietly = TRUE) &&
-    isTRUE(tryCatch(clipr::clipr_available(), error = function(e) FALSE))) {
-    copied <- isTRUE(tryCatch(
-      {
-        clipr::write_clip(yaml_block)
-        TRUE
-      },
-      error = function(e) FALSE
-    ))
-  }
+  copied <- isTRUE(clipboard) && .header_helper_copy_to_clipboard(yaml_block)
   if (copied) {
     cli::cli_alert_success("Copied to the clipboard -- paste it at the top of your .qmd.")
   } else {

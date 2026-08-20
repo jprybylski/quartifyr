@@ -10,6 +10,11 @@ test_that("header_helper() requires an interactive session", {
   expect_error(header_helper("report"), "interactive session")
 })
 
+test_that(".header_helper_ask() trims readline() input", {
+  local_mocked_bindings(readline = function(prompt) "  hello there  ")
+  expect_identical(.header_helper_ask("Name:"), "hello there")
+})
+
 test_that(".header_helper_ask_yn() defaults on empty input and parses y/n", {
   local_mocked_bindings(.header_helper_ask = function(prompt) "")
   expect_true(.header_helper_ask_yn("Include X?", default = TRUE))
@@ -99,6 +104,87 @@ test_that(".header_field_set() assigns scalar and nested paths without clobberin
   expect_identical(fm$memo$from, "John")
 })
 
+test_that(".header_field_set() creates intermediate lists for a path whose parent doesn't exist yet", {
+  fm <- .header_field_set(list(), c("memo", "to"), "Jane")
+  expect_identical(fm, list(memo = list(to = "Jane")))
+})
+
+test_that(".header_helper_ask_scalar() prompts a required field directly and returns NULL on a blank answer", {
+  title_field <- Filter(function(f) f$key == "title", .quartifyr_header_fields())[[1]]
+
+  local_mocked_bindings(.header_helper_ask = function(prompt) {
+    expect_match(prompt, "^Title \\(required\\)")
+    "My Report"
+  })
+  expect_identical(.header_helper_ask_scalar(title_field, list()), "My Report")
+
+  local_mocked_bindings(.header_helper_ask = function(prompt) "")
+  expect_null(.header_helper_ask_scalar(title_field, list()))
+})
+
+test_that(".header_helper_ask_scalar() skips an optional field when declined", {
+  subtitle_field <- Filter(function(f) f$key == "subtitle", .quartifyr_header_fields())[[1]]
+  local_mocked_bindings(.header_helper_ask_yn = function(prompt, default = FALSE) FALSE)
+  expect_null(.header_helper_ask_scalar(subtitle_field, list()))
+})
+
+test_that(".header_helper_copy_to_clipboard() covers every outcome", {
+  local_mocked_bindings(requireNamespace = function(...) FALSE)
+  expect_false(.header_helper_copy_to_clipboard("text"))
+
+  local_mocked_bindings(requireNamespace = function(...) TRUE)
+  local_mocked_bindings(clipr_available = function() FALSE, .package = "clipr")
+  expect_false(.header_helper_copy_to_clipboard("text"))
+
+  local_mocked_bindings(requireNamespace = function(...) TRUE)
+  local_mocked_bindings(
+    clipr_available = function() TRUE,
+    write_clip = function(...) stop("no clipboard mechanism found"),
+    .package = "clipr"
+  )
+  expect_false(.header_helper_copy_to_clipboard("text"))
+
+  local_mocked_bindings(requireNamespace = function(...) TRUE)
+  local_mocked_bindings(
+    clipr_available = function() TRUE,
+    write_clip = function(...) invisible(NULL),
+    .package = "clipr"
+  )
+  expect_true(.header_helper_copy_to_clipboard("text"))
+})
+
+test_that("header_helper() runs end to end and reports a successful clipboard copy", {
+  local_mocked_bindings(interactive = function() TRUE)
+  local_mocked_bindings(
+    .header_helper_collect = function(doc_type) {
+      list(title = "Demo Report", format = "docx", filters = c("quarto-plus", "quartifyr"))
+    },
+    .header_helper_copy_to_clipboard = function(text) TRUE
+  )
+
+  msgs <- character()
+  result <- withCallingHandlers(
+    header_helper("report"),
+    message = function(m) {
+      msgs <<- c(msgs, conditionMessage(m))
+      invokeRestart("muffleMessage")
+    }
+  )
+  expect_match(paste(msgs, collapse = ""), "Copied to the clipboard")
+  expect_match(result, "^---\ntitle: Demo Report")
+})
+
+test_that("header_helper() reports the clipboard as unavailable when clipboard = FALSE", {
+  local_mocked_bindings(interactive = function() TRUE)
+  local_mocked_bindings(
+    .header_helper_collect = function(doc_type) list(format = "docx", filters = c("quarto-plus", "quartifyr")),
+    # Would succeed if called -- proves clipboard = FALSE short-circuits
+    # before even trying, not just that the mock happened to return FALSE.
+    .header_helper_copy_to_clipboard = function(text) TRUE
+  )
+  expect_message(header_helper("report", clipboard = FALSE), "Clipboard unavailable")
+})
+
 test_that(".header_helper_render() produces a fenced, sensibly-ordered YAML block", {
   fm <- list(
     filters = c("quarto-plus", "quartifyr"),
@@ -174,6 +260,47 @@ test_that(".header_helper_collect('memo') drops an empty memo: block if every su
 
   fm <- .header_helper_collect("memo")
   expect_null(fm$memo)
+})
+
+test_that(".header_helper_collect('report') populates every structured field when each is accepted once", {
+  # .header_helper_collect_rows()/_people()'s first "Add a/an ...?" prompt
+  # and their repeat "Add one more ...?" prompt are distinct strings (see
+  # R/header-helper.R) -- matching only the former means every loop below
+  # collects exactly one entry then stops, without needing a positional
+  # answer queue.
+  local_mocked_bindings(
+    .header_helper_ask_yn = function(prompt, default = FALSE) grepl("^Add (a|an) ", prompt),
+    .header_helper_ask = function(prompt) {
+      if (grepl("^Title \\(required\\)", prompt)) {
+        return("Demo Report")
+      }
+      if (grepl("^  Line:", prompt)) {
+        return("Acme Pharma")
+      }
+      if (grepl("^  Label:", prompt)) {
+        return("Sponsor")
+      }
+      if (grepl("^  Value:", prompt)) {
+        return("Acme Pharma")
+      }
+      if (grepl("^  Name:", prompt)) {
+        return("Jane Doe")
+      }
+      if (grepl("^  Title:", prompt)) {
+        return("Lead Scientist")
+      }
+      ""
+    }
+  )
+
+  fm <- .header_helper_collect("report")
+
+  expect_identical(fm$address, list("Acme Pharma"))
+  expect_identical(fm[["title-page-extra"]], list(list(label = "Sponsor", value = "Acme Pharma")))
+  expect_identical(fm$contributors$authors, list(list(name = "Jane Doe", title = "Lead Scientist")))
+  expect_identical(fm$contributors$reviewers, list(list(name = "Jane Doe", title = "Lead Scientist")))
+  expect_identical(fm$approvers, list(list(name = "Jane Doe", title = "Lead Scientist")))
+  expect_identical(fm$synopsis, list(list(label = "Sponsor", value = "Acme Pharma")))
 })
 
 test_that(".header_helper_collect('report') -> .header_helper_render() output validates cleanly", {
