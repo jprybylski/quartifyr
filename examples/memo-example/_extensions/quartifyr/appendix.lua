@@ -56,18 +56,47 @@
 -- `tbl_caption` (its `crossref.lua`, vendored per-project under
 -- `_extensions/A2-ai/quarto-plus/`, not part of quartifyr) number
 -- continuously through the whole document -- "Figure 12" inside Appendix
--- B, not "Figure B1". `appendix_fig_caption`/`appendix_tbl_caption`,
+-- B, not "Figure B.1". `appendix_fig_caption`/`appendix_tbl_caption`,
 -- `section_fig_caption`/`section_tbl_caption`, and
 -- `subsection_fig_caption`/`subsection_tbl_caption` are additive
 -- alternatives an author can use in place of quarto-plus's own shortcode
--- wherever scoped numbering is wanted, numbered "Figure A1" (appendix,
--- letter from that appendix's own designator), "Figure 3.1" (section,
--- ordinal from the most recent `{{< section_break >}}`), and "Figure
--- 3.2.1" (subsection, from the most recent `{{< subsection_break >}}`)
--- respectively. Nothing here forks or modifies quarto-plus's own
--- crossref.lua -- these are new shortcode names, not a replacement, and
--- an author can freely mix scoped and continuous captions in the same
--- document.
+-- wherever scoped numbering is wanted. Every level joins onto the next
+-- with a period, matching how Word's own "include chapter number in
+-- caption" feature numbers a document's real chapters/sections (e.g.
+-- "Figure 2-1"/"Figure 2.1") and ISO 2145's convention for numbering
+-- subdivisions of a document (a full stop between each level) -- not
+-- run together undelimited the way APA style's own appendix-figure
+-- convention does ("Figure A1"), which reads ambiguously here once
+-- `appendix-numbering: arabic` is in play ("Figure 11" -- the first
+-- figure of appendix 1, or the eleventh figure?):
+--
+--   {{< appendix_fig_caption "FigResiduals" "Residual plot" >}}
+--
+-- numbers "Figure A.1" -- that appendix's own designator (from
+-- `appendix-numbering:` above), a period, then a number that restarts at
+-- 1 for each new `{{< appendix >}}`.
+--
+--   {{< section_break >}}
+--   {{< section_fig_caption "FigDoseResponse" "Dose-response curve" >}}
+--
+-- numbers "Figure 3.1" in the main body (the "3" from the most recent
+-- `{{< section_break >}}`) -- but "Figure C.3.1" if that same
+-- `section_break`/`section_fig_caption` pair instead appears *after* an
+-- `{{< appendix >}}` call, prefixed with that appendix's own designator:
+-- a figure numbered "Figure 3.1" deep inside an appendix would otherwise
+-- read as though it belongs to the third *main-body* section, when nothing
+-- about its number says "this is inside an appendix" at all. Every
+-- `{{< appendix >}}` call resets the section/subsection counters back to
+-- 0 for exactly this reason -- so the first `section_break` after a new
+-- appendix always starts that appendix's own nested numbering at ".1",
+-- not wherever the main body's own section count happened to leave off.
+-- `{{< subsection_break >}}`/`subsection_fig_caption` do the same one
+-- level deeper: "Figure 3.2.1" in the main body, "Figure C.3.2.1" inside
+-- an appendix.
+--
+-- Nothing here forks or modifies quarto-plus's own crossref.lua -- these
+-- are new shortcode names, not a replacement, and an author can freely
+-- mix scoped and continuous captions in the same document.
 --
 -- Why section/subsection scope needs an explicit `{{< section_break >}}`/
 -- `{{< subsection_break >}}` marker rather than just resetting
@@ -138,13 +167,22 @@ local scopes = {
 -- populated by every scoped caption shortcode, read by scoped_crossref.
 local scoped_bookmarks = {}
 
--- "" for appendix ("Figure A1" -- letter directly abuts the number), "."
--- for section/subsection ("Figure 3.1"/"Figure 3.2.1").
-local SCOPE_SEPARATOR = { appendix = "", section = ".", subsection = "." }
-
+-- Every level of a composite number joins onto the next with a period --
+-- see the file header comment for why (ISO 2145 / Word's own
+-- chapter-numbered-caption convention, and disambiguation against
+-- `appendix-numbering: arabic`). Builds the dot-joined prefix that
+-- precedes a scoped caption's own local number: just the appendix
+-- designator for `appendix` scope; the section (and subsection) ordinal
+-- for `section`/`subsection` scope, itself prefixed with the current
+-- appendix's designator too whenever one is active (`{{< appendix >}}`
+-- resets the section/subsection counters on every call specifically so
+-- this nesting always starts fresh per appendix -- see `appendix`'s own
+-- handler below).
 local function scope_prefix(scope_key)
+  local appendix_active = current_appendix_designator ~= nil
+
   if scope_key == "appendix" then
-    if current_appendix_designator == nil then
+    if not appendix_active then
       quarto.log.warning(
         "appendix_fig_caption/appendix_tbl_caption used before any {{< appendix >}} -- numbering will show '?'"
       )
@@ -158,7 +196,12 @@ local function scope_prefix(scope_key)
       )
       return "?"
     end
-    return tostring(current_section_number)
+    local parts = {}
+    if appendix_active then
+      table.insert(parts, current_appendix_designator)
+    end
+    table.insert(parts, tostring(current_section_number))
+    return table.concat(parts, ".")
   else -- subsection
     if current_section_number == 0 or current_subsection_number == 0 then
       quarto.log.warning(
@@ -166,7 +209,13 @@ local function scope_prefix(scope_key)
       )
       return "?"
     end
-    return tostring(current_section_number) .. "." .. tostring(current_subsection_number)
+    local parts = {}
+    if appendix_active then
+      table.insert(parts, current_appendix_designator)
+    end
+    table.insert(parts, tostring(current_section_number))
+    table.insert(parts, tostring(current_subsection_number))
+    return table.concat(parts, ".")
   end
 end
 
@@ -191,7 +240,7 @@ local function make_scoped_caption(scope_key, counter_key, label, seq_name)
     local local_number = scope[counter_key]
 
     local prefix = scope_prefix(scope_key)
-    local composite_number = prefix .. SCOPE_SEPARATOR[scope_key] .. tostring(local_number)
+    local composite_number = prefix .. "." .. tostring(local_number)
 
     local reset_flag_key = counter_key .. "_needs_reset"
     local reset_switch = ""
@@ -241,7 +290,7 @@ local function make_scoped_caption(scope_key, counter_key, label, seq_name)
       id,
       utils.escape_xml(bookmark_id),
       label,
-      utils.escape_xml(prefix .. SCOPE_SEPARATOR[scope_key]),
+      utils.escape_xml(prefix .. "."),
       seq_name,
       reset_switch,
       local_number,
@@ -253,6 +302,13 @@ local function make_scoped_caption(scope_key, counter_key, label, seq_name)
   end
 end
 
+local function reset_scope_counters(scope_key)
+  scopes[scope_key].fig = 0
+  scopes[scope_key].tbl = 0
+  scopes[scope_key].fig_needs_reset = true
+  scopes[scope_key].tbl_needs_reset = true
+end
+
 -- Zero-output boundary markers: no bookmark, no downstream consumer needs
 -- to locate these positionally (unlike body_start.lua's bookmark, which
 -- apply-layout.py has to find later) -- just advance Lua-side counters,
@@ -261,21 +317,14 @@ end
 local function section_break(_args, _kwargs, _meta)
   current_section_number = current_section_number + 1
   current_subsection_number = 0
-  for _, scope_key in ipairs({ "section", "subsection" }) do
-    scopes[scope_key].fig = 0
-    scopes[scope_key].tbl = 0
-    scopes[scope_key].fig_needs_reset = true
-    scopes[scope_key].tbl_needs_reset = true
-  end
+  reset_scope_counters("section")
+  reset_scope_counters("subsection")
   return pandoc.Blocks({})
 end
 
 local function subsection_break(_args, _kwargs, _meta)
   current_subsection_number = current_subsection_number + 1
-  scopes.subsection.fig = 0
-  scopes.subsection.tbl = 0
-  scopes.subsection.fig_needs_reset = true
-  scopes.subsection.tbl_needs_reset = true
+  reset_scope_counters("subsection")
   return pandoc.Blocks({})
 end
 
@@ -301,11 +350,17 @@ return {
     local designator = numbering_style.generator(appendix_count)
     current_appendix_designator = designator
 
-    -- New appendix: figure/table numbering inside it starts fresh.
-    scopes.appendix.fig = 0
-    scopes.appendix.tbl = 0
-    scopes.appendix.fig_needs_reset = true
-    scopes.appendix.tbl_needs_reset = true
+    -- New appendix: figure/table numbering inside it starts fresh, and so
+    -- does any section/subsection scoping from here on -- a
+    -- {{< section_break >}} after this point nests under *this*
+    -- appendix's own designator (see scope_prefix()), starting at ".1"
+    -- again rather than continuing whatever the main body's (or an
+    -- earlier appendix's) own section count happened to reach.
+    reset_scope_counters("appendix")
+    current_section_number = 0
+    current_subsection_number = 0
+    reset_scope_counters("section")
+    reset_scope_counters("subsection")
 
     local ooxml = string.format(
       [[

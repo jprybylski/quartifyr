@@ -279,15 +279,18 @@ subsection instead of running continuously through the document:
 See {{< scoped_crossref "FigResiduals" >}}.
 ```
 
-Numbers "Figure A1" -- the appendix's own letter directly followed by a
-number that restarts at each `{{< appendix >}}`.
-`section_fig_caption`/`subsection_fig_caption` (with table equivalents)
-do the same for ordinary headings, numbered "Figure 3.1"/"Figure 3.2.1";
+Numbers "Figure A.1" -- the appendix's own letter, a period, then a
+number that restarts at each `{{< appendix >}}`. `section_fig_caption`/
+`subsection_fig_caption` (with table equivalents) do the same for
+ordinary headings, numbered "Figure 3.1"/"Figure 3.2.1" in the main body;
 since a `#`/`##` heading isn't a shortcode, each needs an explicit
 `{{< section_break >}}`/`{{< subsection_break >}}` placed next to it to
-mark where numbering restarts. `scoped_crossref` resolves any of these
-six shortcodes' bookmarks. See the extension's own README for the full
-shortcode list.
+mark where numbering restarts. Used *after* an `{{< appendix >}}` call
+instead, they nest that appendix's own designator in too ("Figure
+C.3.1"), so a figure numbered mid-appendix never reads as though it
+belongs to the main body's own third section. `scoped_crossref` resolves
+any of these six shortcodes' bookmarks. See the extension's own README
+for the full shortcode list.
 
 None of these six show up in `fig_caption`/`tbl_caption`'s own
 `.list_of_figures`/`.list_of_tables` div (above). For a combined list

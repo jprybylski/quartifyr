@@ -553,34 +553,76 @@ def main() -> int:
 
     # Combined List of Figures/Tables (issue #54): .quartifyr_list_of_figures/
     # .quartifyr_list_of_tables in report.qmd should list BOTH the
-    # continuous Figure 1/Table 1/Table 2 captions AND every appendix-/
-    # section-/subsection-scoped one, in true document order -- unlike the
-    # plain quarto-plus .list_of_figures/.list_of_tables divs above
-    # (checked via seq_figure_count == 1 earlier), which only ever see the
-    # continuous ones. Order here doubles as proof of correct
+    # continuous Figure 1/Table 1/Table 2 captions AND every main-body and
+    # appendix-/section-/subsection-scoped one, in true document order --
+    # unlike the plain quarto-plus .list_of_figures/.list_of_tables divs
+    # above (checked via seq_figure_count == 1 earlier), which only ever
+    # see the continuous ones. Order here doubles as proof of correct
     # document-order interleaving, not just correct membership.
     quartifyr_list_hyperlinks = re.findall(
         r'<w:hyperlink w:anchor="([^"]+)">(.*?)</w:hyperlink>', document_xml, re.DOTALL
     )
+    expected_figure_anchors = [
+        "FigConcTime",
+        "FigMainSectionExample",
+        "FigMainSubsectionExample",
+        "FigAppendixExample",
+        "FigSectionExample",
+        "FigSubsectionExample",
+    ]
+    expected_table_anchors = ["TblPkSummary", "TblDemographics", "TblAppendixExample"]
     checks.append(
         (
-            "combined List of Figures has all 4 figures (continuous + appendix/section/subsection-scoped), in document order",
-            [a for a, _ in quartifyr_list_hyperlinks if a in ("FigConcTime", "FigAppendixExample", "FigSectionExample", "FigSubsectionExample")]
-            == ["FigConcTime", "FigAppendixExample", "FigSectionExample", "FigSubsectionExample"],
+            "combined List of Figures has all 6 figures (continuous + main-body/appendix/section/subsection-scoped), in document order",
+            [a for a, _ in quartifyr_list_hyperlinks if a in expected_figure_anchors] == expected_figure_anchors,
         )
     )
     checks.append(
         (
             "combined List of Tables has all 3 tables (continuous + appendix-scoped), in document order",
-            [a for a, _ in quartifyr_list_hyperlinks if a in ("TblPkSummary", "TblDemographics", "TblAppendixExample")]
-            == ["TblPkSummary", "TblDemographics", "TblAppendixExample"],
+            [a for a, _ in quartifyr_list_hyperlinks if a in expected_table_anchors] == expected_table_anchors,
         )
     )
     checks.append(
         (
             "combined List entries use REF+PAGEREF fields styled with TOC1/Hyperlink, not the native TOC field quarto-plus's own list uses",
-            document_xml.count('<w:pStyle w:val="TOC1"/>') == 7  # 4 figures + 3 tables
+            document_xml.count('<w:pStyle w:val="TOC1"/>') == len(expected_figure_anchors) + len(expected_table_anchors)
             and any('REF FigConcTime \\h' in b and 'PAGEREF FigConcTime \\h' in b for a, b in quartifyr_list_hyperlinks if a == "FigConcTime"),
+        )
+    )
+    def scoped_caption_prefix(bookmark: str) -> str | None:
+        # The composite "1."/"C.1.1." text baked in before the caption's
+        # own live SEQ field -- see appendix.lua's make_scoped_caption().
+        # `<w:r ...>`/`<w:t ...>` attributes are matched loosely (`[^>]*`)
+        # since reportifyr's pass 2 injects its own bookkeeping attributes
+        # (`w:run_index`/`w:run_content_index`) onto every run by this point.
+        m = re.search(
+            r'<w:bookmarkStart[^>]*w:name="'
+            + re.escape(bookmark)
+            + r'"[^>]*/>\s*<w:r[^>]*>\s*<w:t[^>]*>\w+ </w:t>\s*</w:r>\s*'
+            r'<w:r[^>]*>\s*<w:t[^>]*>([^<]*)</w:t>',
+            document_xml,
+        )
+        return m.group(1) if m else None
+
+    checks.append(
+        (
+            "main-body section-/subsection-scoped captions number plainly, with no appendix active yet",
+            scoped_caption_prefix("FigMainSectionExample") == "1."
+            and scoped_caption_prefix("FigMainSubsectionExample") == "1.1.",
+        )
+    )
+    checks.append(
+        (
+            "appendix-scoped caption numbers with just that appendix's own designator",
+            scoped_caption_prefix("FigAppendixExample") == "C.",
+        )
+    )
+    checks.append(
+        (
+            "section-/subsection-scoped captions used *after* an appendix call nest that appendix's own designator into their number, distinguishing them from the plain main-body ones above",
+            scoped_caption_prefix("FigSectionExample") == "C.1."
+            and scoped_caption_prefix("FigSubsectionExample") == "C.1.1.",
         )
     )
 

@@ -589,9 +589,15 @@ continuously through the whole document:
 See {{< scoped_crossref "FigResiduals" >}}.
 ```
 
-Numbers "Figure A1"/"Table A1" -- the appendix's own designator (from
-`appendix-numbering:` above) directly followed by a local number that
-resets to 1 at each `{{< appendix >}}`.
+Numbers "Figure A.1"/"Table A.1" -- the appendix's own designator (from
+`appendix-numbering:` above), a period, then a local number that resets
+to 1 at each `{{< appendix >}}`. Every level of a composite number joins
+onto the next with a period this way, matching Word's own "include
+chapter number in caption" convention (e.g. "Figure 2-1"/"Figure 2.1")
+and ISO 2145's rule for numbering document subdivisions -- not run
+together undelimited ("Figure A1"), which reads ambiguously once
+`appendix-numbering: arabic` is in play ("Figure 11" -- the first figure
+of appendix 1, or the eleventh figure?).
 
 `section_fig_caption`/`section_tbl_caption` and
 `subsection_fig_caption`/`subsection_tbl_caption` do the same for
@@ -623,6 +629,17 @@ section/subsection you want reflected in scoped numbering, in the same
 order they appear -- skip one and the scoped numbers and
 `number-sections:`'s own will visibly disagree.
 
+Used *after* an `{{< appendix >}}` call, `section_fig_caption`/
+`subsection_fig_caption` nest that appendix's own designator into their
+number too -- "Figure C.3.1" (appendix C, section 3), not plain "Figure
+3.1" -- since a figure numbered as though it belongs to the third
+*main-body* section, while actually sitting inside an appendix, would
+read as misplaced. Every `{{< appendix >}}` call resets the section/
+subsection counters back to 0 for exactly this reason, so the first
+`section_break` after a new appendix always starts that appendix's own
+nested numbering at ".1", not wherever the main body's (or an earlier
+appendix's) own section count happened to leave off.
+
 `scoped_crossref "BookmarkId"` resolves any of the six caption
 shortcodes' bookmarks (auto-detecting figure vs. table the same way
 `quarto-plus`'s own `crossref` does, by the bookmark ID's `Fig`/`Tbl`
@@ -638,11 +655,15 @@ here (`SEQ AppendixFigure`, `SEQ SectionFigure`, ...). See "Combined List
 of Figures/Tables" below for a `.list_of_figures`/`.list_of_tables`
 alternative that does include them.
 
-Gotcha: writing a shortcode literally in backticks as documentation text
-(e.g. `` `{{< section_break >}}` `` inside a sentence explaining what it
-does) still gets expanded and executed -- Quarto's shortcode scanner
-doesn't skip inline code spans. Describe a shortcode in prose without the
-literal `{{< ... >}}` syntax if you don't mean to invoke it again.
+Gotcha: writing a shortcode literally as documentation text -- in
+backticks (e.g. `` `{{< section_break >}}` `` inside a sentence
+explaining what it does) *or* inside an HTML comment (`<!-- ... -->`) --
+still gets expanded and executed. Quarto's shortcode scanner doesn't skip
+inline code spans or comments; confirmed the hard way, with a bare
+`{{< appendix >}}` (no args) written into an explanatory `.qmd` comment
+consuming a real appendix letter and resetting scoped-numbering state
+exactly like a genuine call would. Describe a shortcode in prose without
+the literal `{{< ... >}}` syntax if you don't mean to invoke it again.
 
 ### Combined List of Figures/Tables
 

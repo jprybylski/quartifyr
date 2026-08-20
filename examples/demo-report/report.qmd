@@ -211,6 +211,39 @@ plotted on the same axes, summarized numerically in
 
 Body weight and weight-normalized dose for each participant in the study.
 
+<!-- Demonstrates quartifyr's scoped figure/table numbering (issue #26)
+     in the main body, for contrast with the appendix-embedded example
+     further down: with no appendix shortcode call active yet, section_break/
+     subsection_break number independently of Figure 1/Table 1/Table 2
+     above, plainly ("Figure 1.1"/"Figure 1.1.1") -- no appendix
+     designator, since there isn't one yet. See the appendix-embedded
+     example below for how the *same* shortcodes number once used after
+     an appendix shortcode call: the appendix's own designator nests into
+     every section/subsection number from that point on. No real
+     {rpfy}: content is filled in here -- this section only demonstrates
+     the numbering shortcodes themselves; see
+     inst/extensions/quartifyr/README.md's "Scoped figure/table
+     numbering" section (including its gotcha about writing a shortcode
+     name literally as documentation text -- deliberately avoided here). -->
+## Scoped Numbering Example
+
+{{< section_break >}}
+
+{{< section_fig_caption "FigMainSectionExample" "Example main-body section-scoped figure" >}}
+
+Numbered against this section's own position in the main body, with no
+appendix designator -- contrast with the same shortcode used inside an
+appendix, further down.
+
+{{< subsection_break >}}
+
+### Subsection-Scoped Example
+
+{{< subsection_fig_caption "FigMainSubsectionExample" "Example main-body subsection-scoped figure" >}}
+
+Referenced as {{< scoped_crossref "FigMainSectionExample" >}} and
+{{< scoped_crossref "FigMainSubsectionExample" >}}.
+
 {{< pagebreak >}}
 
 <!-- Same `custom-style="Heading 1"` idiom as Synopsis/Abbreviations above
@@ -285,13 +318,16 @@ End of script.
 
 <!-- Demonstrates quartifyr's scoped figure/table numbering (issue #26):
      appendix_fig_caption/appendix_tbl_caption number independently within
-     this appendix rather than continuing Figure 1/Table 1/Table 2 from
-     the main body above, and section_break/subsection_fig_caption number
-     independently again within this appendix's own ## subsection. No real
-     {rpfy}: content is filled in here -- this section only demonstrates
-     the numbering shortcodes themselves; see
-     inst/extensions/quartifyr/README.md's "Figures, tables, and
-     cross-references" section. -->
+     this appendix ("Figure C.1", not continuing Figure 1/Table 1/Table 2
+     from the main body above). section_break/subsection_fig_caption used
+     here, *after* an appendix shortcode call, nest that appendix's own
+     designator into their number too ("Figure C.1.1"/"Figure C.1.1.1") --
+     contrast with the plain "Figure 1.1"/"Figure 1.1.1" the identical
+     shortcodes produced in the main body's own "Scoped Numbering Example"
+     above, before any appendix existed. No real {rpfy}: content is filled
+     in here -- this section only demonstrates the numbering shortcodes
+     themselves; see inst/extensions/quartifyr/README.md's "Scoped
+     figure/table numbering" section. -->
 {{< appendix "SupplementaryNumbering" "Supplementary Numbering Example" >}}
 
 {{< appendix_fig_caption "FigAppendixExample" "Example appendix-scoped figure" >}}
@@ -310,8 +346,9 @@ Referenced as {{< scoped_crossref "TblAppendixExample" >}} and
 
 {{< section_fig_caption "FigSectionExample" "Example section-scoped figure" >}}
 
-Numbered against this section's own position rather than this appendix's,
-restarting again at the next section-break marker.
+Numbered against this section's own position *within this appendix*
+(nesting under the appendix's own designator), restarting again at the
+next section-break marker.
 
 {{< subsection_break >}}
 
