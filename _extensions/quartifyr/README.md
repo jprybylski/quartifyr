@@ -491,11 +491,18 @@ Reference an appendix from body text with
 `{{< appendix_crossref "BookmarkId" >}}`, which resolves to "Appendix A"
 (etc.) via a `REF` field to the bookmark `appendix` set.
 
-Note: figure/table numbering from `quarto-plus`'s own `fig_caption`/
-`tbl_caption` shortcodes is intentionally left continuous through
-appendices (e.g. "Figure 12" inside Appendix B, not "Figure B-1"); see
-the comment at the top of `appendix.lua` for why and how that could be
-extended later.
+The designator style defaults to letters but is configurable document-wide:
+
+```yaml
+appendix-numbering: alphabetic   # default -- A, B, C, ...
+appendix-numbering: arabic       # 1, 2, 3, ...
+appendix-numbering: roman        # I, II, III, ... (uppercase only)
+```
+
+Figure/table numbering from `quarto-plus`'s own `fig_caption`/
+`tbl_caption` shortcodes is left continuous through appendices (e.g.
+"Figure 12" inside Appendix B, not "Figure B1") -- see "Scoped
+figure/table numbering" below for an additive alternative.
 
 ### Figures, tables, and cross-references
 
@@ -565,6 +572,77 @@ headless-LibreOffice round-trip, that it silently corrupts the field
 rather than evaluating it. If you never run
 `resolve-same-page-crossrefs`, a `"same-page"` document just stays
 hyperlinked everywhere, same as `true`.
+
+### Scoped figure/table numbering
+
+An additive alternative to `quarto-plus`'s `fig_caption`/`tbl_caption`
+(above), for wherever figure/table numbering should restart within an
+appendix, a top-level section, or a subsection instead of running
+continuously through the whole document:
+
+```
+{{< appendix "SupplementaryFigures" "Supplementary Figures" >}}
+
+{{< appendix_fig_caption "FigResiduals" "Residual plot" >}}
+{{< appendix_tbl_caption "TblCoefficients" "Model coefficients" >}}
+
+See {{< scoped_crossref "FigResiduals" >}}.
+```
+
+Numbers "Figure A1"/"Table A1" -- the appendix's own designator (from
+`appendix-numbering:` above) directly followed by a local number that
+resets to 1 at each `{{< appendix >}}`.
+
+`section_fig_caption`/`section_tbl_caption` and
+`subsection_fig_caption`/`subsection_tbl_caption` do the same for
+ordinary body headings, numbered "Figure 3.1" (section) and "Figure
+3.2.1" (subsection) -- but since regular `#`/`##` headings aren't
+shortcodes, they need an explicit marker placed next to the heading to
+say when a new section/subsection starts:
+
+```
+{{< section_break >}}
+
+# Results
+
+{{< section_fig_caption "FigDoseResponse" "Dose-response curve" >}}
+
+{{< subsection_break >}}
+
+## Subgroup Analysis
+
+{{< subsection_fig_caption "FigSubgroup" "Subgroup analysis" >}}
+```
+
+`section_break`/`subsection_break` render nothing themselves -- they only
+advance an internal counter, independently of `number-sections: true`
+(above), which numbers visible heading *text* by a different, unrelated
+mechanism (see the repo-root CLAUDE.md for why the two can't be tied
+together). Call `section_break`/`subsection_break` exactly once per
+section/subsection you want reflected in scoped numbering, in the same
+order they appear -- skip one and the scoped numbers and
+`number-sections:`'s own will visibly disagree.
+
+`scoped_crossref "BookmarkId"` resolves any of the six caption
+shortcodes' bookmarks (auto-detecting figure vs. table the same way
+`quarto-plus`'s own `crossref` does, by the bookmark ID's `Fig`/`Tbl`
+prefix) via the same `REF ... \h` mechanism as `crossref`/
+`appendix_crossref`, so `crossref-hyperlinks:` (above) applies to it too.
+
+Known limitation: none of these six show up in a `.list_of_figures`/
+`.list_of_tables` div (`quarto-plus`'s `table_of_contents.lua`) -- that's
+built from Word's native `TOC \c "Figure"`/`TOC \c "Table"` switch, which
+only collects entries from the literal `SEQ Figure`/`SEQ Table`
+sequences `fig_caption`/`tbl_caption` use, not the separate per-scope SEQ
+names here (`SEQ AppendixFigure`, `SEQ SectionFigure`, ...). A document
+mixing scoped and continuous captions needs to accept scoped ones being
+absent from `list_of_figures`/`list_of_tables`.
+
+Gotcha: writing a shortcode literally in backticks as documentation text
+(e.g. `` `{{< section_break >}}` `` inside a sentence explaining what it
+does) still gets expanded and executed -- Quarto's shortcode scanner
+doesn't skip inline code spans. Describe a shortcode in prose without the
+literal `{{< ... >}}` syntax if you don't mean to invoke it again.
 
 ### Numbered sections
 

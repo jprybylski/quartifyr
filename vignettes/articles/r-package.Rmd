@@ -80,10 +80,12 @@ load-bearing, not just a naming convention.
    reports far less specifically.
 2. Regenerates `abbreviations.tex` next to `shell_qmd` from the
    project's `standard_footnotes.yaml`, via `styling_build_abbreviations_tex()`.
-3. Renders `shell_qmd` with Quarto against the package's bundled
-   `inst/templates/org-reference.docx` (or a `reference_doc` you pass
-   explicitly), passing `-M document-status:DRAFT` or `:FINAL` depending
-   on `status`.
+3. Renders `shell_qmd` with Quarto against a docx reference-doc --
+   whichever `reference_doc` you pass explicitly; failing that, whatever
+   the `.qmd`'s frontmatter or the project's `_quarto.yml` already
+   configures; failing that, the package's own bundled
+   `inst/templates/org-reference.docx` -- passing `-M
+   document-status:DRAFT` or `:FINAL` depending on `status`.
 4. Runs `styling_apply_layout()` on the rendered shell.
 5. Runs `reportifyr::build_report()` to fill in tables/figures/footnotes
    from `OUTPUTS/`, producing `report/draft/<name>-draft.docx`.
@@ -96,6 +98,48 @@ load-bearing, not just a naming convention.
 
 See `vignette("styling")` for what each of those `styling_*()` calls
 does on its own.
+
+## Front matter: `validate_header()` and `header_helper()`
+
+A quartifyr shell `.qmd` carries a lot of frontmatter -- title/memo,
+signature page, synopsis, appendices, page header/footer, ... (see
+`vignette("quarto-extension")`). Both functions below are driven by one
+shared, in-package field registry (every field either filter actually
+reads, with its requiredness and a one-line description), so they stay
+in sync with the extension itself rather than with separately maintained
+documentation -- run either one to see the current, authoritative field
+list instead of looking it up here.
+
+`validate_header()` checks a shell `.qmd` (and its project's
+`_quarto.yml`) against that registry and prints what's provided, what's
+missing, what else is available, and any conflicts (`title:`/`memo:`
+both set, an unresolvable `header-format:` placeholder, an unrecognized
+`crossref-hyperlinks:` value, a `logo:`/`bibliography:` path that
+doesn't exist on disk, ...):
+
+```r
+quartifyr::validate_header("report.qmd")
+```
+
+Pass `strict = TRUE` to abort (rather than just print) when something
+required is missing or a conflict was found -- useful as a pre-render
+gate in a script. `quiet = TRUE` suppresses the printed report and just
+returns the structured result (`ok`, `provided`, `missing_required`,
+`missing_recommended`, `available`, `problems`) for programmatic use.
+
+`header_helper()` is the other direction: an interactive prompt walk
+through the same registry that builds a ready-to-paste front-matter
+block, copying it to the clipboard (via the optional `clipr` package) or
+printing it if no clipboard is available.
+
+```r
+quartifyr::header_helper("report")   # or "memo"
+```
+
+It's meant as a starting point for a new project, not a full editor --
+richer constructs like `synopsis:`'s multi-line/embedded-figure values
+(see `vignette("quarto-extension")`'s "Synopsis" section) are left for
+hand-editing afterward. Check the result with `validate_header()`.
 
 ## A load-bearing detail: working directory
 

@@ -103,11 +103,13 @@ step (or any other step) to consume.
    project's own directory -- so R's normal startup activates *that*
    project's `renv`/`.Rprofile` (giving the session `quartifyr`,
    `reportifyr`, `pyro`). Unlike the pre-restructuring version of this
-   action, there's no separate `--toolkit-root` concept anymore:
-   `render_report()`'s own default `reference_doc` resolves the
-   package's bundled template via `system.file()`, since the package
-   itself is now what's installed into the project, not just referenced
-   from an external checkout path.
+   action, there's no separate `--toolkit-root` concept anymore: when
+   `reference-doc` isn't set, `render_report()`'s own default resolves
+   the package's bundled template via `system.file()` -- unless the
+   project's own `.qmd`/`_quarto.yml` already configures one, in which
+   case that wins instead -- since the package itself is now what's
+   installed into the project, not just referenced from an external
+   checkout path.
 
 ## Known limitations
 

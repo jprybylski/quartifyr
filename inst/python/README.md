@@ -30,9 +30,43 @@ quartifyr-styling build \
 
 Add `--override /path/to/<org>.yaml` with just the keys that differ
 from the default preset (fonts, colors, page setup, ...) to brand a new
-organization; see `styles/default.yaml` for the full schema and
-`quartifyr_styling/schema.py` for validation rules (hex colors, positive
-sizes, etc.).
+organization; see "Customizing the style YAML" below for what every key
+controls, `styles/schema.json` for a machine-readable schema (types,
+enums, hex-color/positive-number constraints), and
+`quartifyr_styling/schema.py` for the validation those constraints
+enforce at load time.
+
+### Customizing the style YAML
+
+`styles/default.yaml` carries a
+`# yaml-language-server: $schema=./schema.json` header, so an editor with
+the [YAML language server](https://github.com/redhat-developer/yaml-language-server)
+(the VS Code YAML extension bundles it) gets autocomplete/inline
+validation against `styles/schema.json` automatically; point an org
+override YAML at the same schema (adjust the relative path to wherever
+you copied it, e.g. the installed package's `inst/python/styles/schema.json`)
+to get the same for it. An override, being a partial file by design (only
+the keys that differ from the base), will still show the editor's
+"missing required property" warnings for whatever it deliberately leaves
+out -- expected for a deep-merge override, not a sign anything's wrong;
+those keys just aren't required to be present in that specific file, only
+in the merged result `StyleConfig.load()` actually validates.
+
+Top-level sections, matching `schema.py`'s dataclasses:
+
+| Key | Controls |
+| --- | --- |
+| `fonts` | Body/heading/monospace font family and every font size (title, subtitle, per-heading-level, caption, footnote, ToC). `monospace` styles code blocks (see `code` below). |
+| `colors` | Every hex color the reference-doc uses: body/heading/title/caption text, table header fill, table border, and the rule under the title. |
+| `page` | Page size (`letter`/`a4`) and margins. |
+| `paragraph` | Body text line spacing, space-after, and alignment. |
+| `heading` | Bold, spacing before/after, keep-with-next, and `all_caps` (a visual-only transform, not a string mutation) for `Heading 1`-`6`. |
+| `table` | The `Table Grid` style's border style, header bold, and banding. |
+| `synopsis` | The synopsis section's definition-list look (label/value spacing, value indent, optional alignment override). |
+| `title_page` | Whether to show a rule under the title, and which fields appear (as an ordered list -- see `styles/default.yaml`'s own comment on why this is a list, not a map). |
+| `footer` | Page number visibility and optional static footer text. |
+| `code` | Fenced-code-block/inline-code font size, background color, and padding (vertical spacing only -- see `code.padding_pt`'s own description in `schema.json`). |
+| `equation` | The docx-wide default math font (applied post-render by `apply-layout`, not `build` -- see that command's own docs above). |
 
 `--style`/`--override`/`--out` are plain file paths, not fixed locations.
 See the repo-root README's "Style YAML and reference-doc" section for how
@@ -92,6 +126,14 @@ for the footer's left-side label (the same field `title_page.lua` renders
 on the title page). A `.qmd` with no `header-format:` and no `{{<
 body-start >}}` is left untouched -- both are opt-in.
 
+Optional `--style`/`--override` (deep-merged the same way as `build`,
+above): when given, applies that style's `equation.font` to the rendered
+docx's document-wide default math font (`word/settings.xml`'s
+`m:mathPr/m:mathFont`) -- pandoc's docx writer doesn't carry this setting
+through from a reference-doc built by `build`, so it has to be reapplied
+here, post-render. Omit `--style` to leave the rendered docx's math font
+untouched.
+
 Also reads `crossref-hyperlinks:` (default `true`) -- `false` strips the
 `\h` hyperlink switch from every figure/table/appendix cross-reference's
 `REF` field, document-wide, regardless of whether `quarto-plus`'s
@@ -117,6 +159,55 @@ Python's hands) -- see
 `quartifyr_styling/same_page_crossrefs.py`'s docstring for why, and for
 this feature's own experimental/flaky-headless-LibreOffice caveat
 (inherited from, and equivalent to, `recalculate-fields`'s above).
+
+```bash
+quartifyr-styling sync-reportifyr-config --style styles/default.yaml --config report/config.yaml
+```
+
+reportifyr doesn't read quartifyr's style YAML at all -- its own
+`report/config.yaml` scaffolds `footnotes_font`/`footnotes_font_size`
+independently (defaulting to "Arial Narrow"/10), which visually clashes
+with a style YAML's `fonts.body`/`fonts.sizes.footnote` unless kept in
+sync by hand (both bundled examples' `report/config.yaml` carry a comment
+to that effect). This updates just those two keys to match, printing the
+diff and requiring an interactive `y`/`yes` confirmation before writing
+-- pass `--yes` to skip the prompt (required when combined with `--json`,
+since there's no interactive stdin to confirm over in that non-interactive
+invocation). A no-op if already in sync. Rewrites the whole file via
+`yaml.safe_dump`, so any comments/formatting `config.yaml` had are lost.
+
+```bash
+quartifyr-styling example-style --base styles/default.yaml --out style.yaml
+```
+
+Copies a base style YAML (default: the bundled `default.yaml`) into a
+project, printing (`--json`: returning as a field) its parsed content --
+a working copy to hand-edit, or edit as an R list
+(`quartifyr::styling_example_style()`) and hand to `save-overrides`
+below. `--overwrite` to replace an existing `--out`.
+
+```bash
+quartifyr-styling save-overrides --base styles/default.yaml --style-json edited.json --out overrides.yaml
+```
+
+Saves a (possibly edited) style dict -- as JSON, since a full nested
+style doesn't fit as CLI args; the R wrapper handles this transparently
+-- back out to `--out`, by default (`--no-deconvolute` to disable) as
+just the keys that differ from `--base`: an override YAML meant to be
+deep-merged back onto that same base at load time
+(`StyleConfig.load(base, override)`), not a second full style YAML to
+keep in sync by hand.
+
+```bash
+quartifyr-styling update-style --file style.yaml --updates-json changes.json --yes
+```
+
+Deep-merges the JSON at `--updates-json` onto `--file`'s existing
+content, in place -- a `modifyList()`-style edit of one section of a
+style YAML without hand-copying the rest of the file. Requires `--yes`
+(there's no interactive prompt with `--json`, and the R wrapper's own
+`yes = TRUE` argument is the direct equivalent): rewrites the whole file
+via `yaml.safe_dump`, so any comments/formatting it had are lost.
 
 ## Tests
 

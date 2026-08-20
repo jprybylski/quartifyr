@@ -93,6 +93,110 @@ test_that("errors when reference_doc doesn't exist", {
   )
 })
 
+# --- reference_doc = NULL resolution (#30) -----------------------------------
+# render_report() must not silently override an already-configured Quarto
+# reference-doc with its own package default, and must fall back to the
+# package default (with a notice) only when nothing is configured at all.
+
+test_that("reference_doc = NULL falls back to the package default and emits a notice when nothing is configured", {
+  fixture <- .render_report_fixture()
+  local_mocked_bindings(
+    quarto_inspect = function(...) list(formats = list(docx = list(pandoc = list()))),
+    .package = "quarto"
+  )
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
+  local_mocked_bindings(
+    styling_build_abbreviations_tex = function(...) invisible(NULL),
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) invisible(docx)
+  )
+  record <- new.env()
+  local_mocked_bindings(run = .mock_quarto_run(record), .package = "processx")
+  local_mocked_bindings(
+    make_doc_dirs = .mock_make_doc_dirs,
+    build_report = function(...) invisible(NULL),
+    .package = "reportifyr"
+  )
+
+  expect_message(
+    render_report(
+      fixture$shell_qmd,
+      standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+      config_yaml = fixture$config_yaml
+    ),
+    "package default reference-doc"
+  )
+
+  used <- record$quarto_run$args[which(record$quarto_run$args == "--reference-doc") + 1]
+  expect_identical(normalizePath(used), normalizePath(
+    system.file("templates", "org-reference.docx", package = "quartifyr")
+  ))
+})
+
+test_that("reference_doc = NULL leaves an already-configured Quarto reference-doc alone", {
+  fixture <- .render_report_fixture()
+  local_mocked_bindings(
+    quarto_inspect = function(...) {
+      list(formats = list(docx = list(pandoc = list(`reference-doc` = "already-configured.docx"))))
+    },
+    .package = "quarto"
+  )
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
+  local_mocked_bindings(
+    styling_build_abbreviations_tex = function(...) invisible(NULL),
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) invisible(docx)
+  )
+  record <- new.env()
+  local_mocked_bindings(run = .mock_quarto_run(record), .package = "processx")
+  local_mocked_bindings(
+    make_doc_dirs = .mock_make_doc_dirs,
+    build_report = function(...) invisible(NULL),
+    .package = "reportifyr"
+  )
+
+  expect_no_message(
+    render_report(
+      fixture$shell_qmd,
+      standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+      config_yaml = fixture$config_yaml
+    ),
+    message = "package default reference-doc"
+  )
+
+  expect_false("--reference-doc" %in% record$quarto_run$args)
+})
+
+test_that("an explicit reference_doc always wins over a configured Quarto reference-doc", {
+  fixture <- .render_report_fixture()
+  local_mocked_bindings(
+    quarto_inspect = function(...) {
+      stop("quarto_inspect() should not be consulted when reference_doc is given explicitly")
+    },
+    .package = "quarto"
+  )
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
+  local_mocked_bindings(
+    styling_build_abbreviations_tex = function(...) invisible(NULL),
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) invisible(docx)
+  )
+  record <- new.env()
+  local_mocked_bindings(run = .mock_quarto_run(record), .package = "processx")
+  local_mocked_bindings(
+    make_doc_dirs = .mock_make_doc_dirs,
+    build_report = function(...) invisible(NULL),
+    .package = "reportifyr"
+  )
+
+  render_report(
+    fixture$shell_qmd,
+    reference_doc = fixture$reference_doc,
+    standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+    config_yaml = fixture$config_yaml
+  )
+
+  used <- record$quarto_run$args[which(record$quarto_run$args == "--reference-doc") + 1]
+  expect_identical(normalizePath(used), normalizePath(fixture$reference_doc))
+})
+
 test_that("errors when standard_footnotes_yaml doesn't exist", {
   fixture <- .render_report_fixture()
 
@@ -140,8 +244,8 @@ test_that("orchestrates quarto render -> apply-layout -> build_report() for stat
       assign("abbrevs", list(footnotes = footnotes, out = out), envir = record)
       invisible(out)
     },
-    styling_apply_layout = function(docx, qmd, status) {
-      assign("apply_layout", list(docx = docx, qmd = qmd, status = status), envir = record)
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) {
+      assign("apply_layout", list(docx = docx, qmd = qmd, status = status, style = style, override = override), envir = record)
       invisible(docx)
     }
   )
@@ -207,7 +311,7 @@ test_that("also runs finalize_document() and returns a final path for status = '
   local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
   local_mocked_bindings(
     styling_build_abbreviations_tex = function(...) invisible(NULL),
-    styling_apply_layout = function(docx, qmd, status) invisible(docx)
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) invisible(docx)
   )
   local_mocked_bindings(run = .mock_quarto_run(record), .package = "processx")
   local_mocked_bindings(
@@ -239,7 +343,7 @@ test_that("also runs finalize_document() and returns a final path for status = '
   local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL), .env = parent.frame())
   local_mocked_bindings(
     styling_build_abbreviations_tex = function(...) invisible(NULL),
-    styling_apply_layout = function(docx, qmd, status) invisible(docx),
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) invisible(docx),
     .env = parent.frame()
   )
   local_mocked_bindings(run = .mock_quarto_run(record), .package = "processx", .env = parent.frame())

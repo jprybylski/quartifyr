@@ -210,6 +210,42 @@ def test_update_fields_inserted_at_schema_correct_position(tmp_path):
     assert tags.index(qn("w:savePreviewPicture")) < tags.index(qn("w:updateFields")) < tags.index(qn("w:compat"))
 
 
+def test_source_code_style_uses_monospace_font_and_background(tmp_path):
+    _, doc = _build(tmp_path)
+    source_code = doc.styles["Source Code"]
+    assert source_code.font.name == "Courier New"
+    assert source_code.font.size.pt == 10
+    shd = source_code.element.find(f".//{W_NS}shd")
+    assert shd is not None
+    assert shd.get(qn("w:fill")) == "F1F3F5"
+
+
+def test_verbatim_char_style_uses_monospace_font_and_background(tmp_path):
+    _, doc = _build(tmp_path)
+    verbatim_char = doc.styles["Verbatim Char"]
+    assert verbatim_char.font.name == "Courier New"
+    assert verbatim_char.font.size.pt == 10
+    shd = verbatim_char.element.find(f".//{W_NS}shd")
+    assert shd is not None
+    assert shd.get(qn("w:fill")) == "F1F3F5"
+
+
+def test_heading_all_caps_off_by_default(tmp_path):
+    _, doc = _build(tmp_path)
+    assert doc.styles["Heading 1"].font.all_caps is not True
+
+
+def test_heading_all_caps_can_be_enabled(tmp_path):
+    override_path = tmp_path / "org.yaml"
+    override_path.write_text("heading:\n  all_caps: true\n")
+    _, doc = _build(tmp_path, override=override_path)
+    assert doc.styles["Heading 1"].font.all_caps is True
+    # Visual transform only -- python-docx's Font API has no notion of
+    # "the underlying text", so this just documents the paragraph style's
+    # own toggle exists; the .qmd's actual heading text is untouched by
+    # construction (build_template.py never touches document content).
+
+
 def test_org_override_changes_heading_color_and_body_font(tmp_path):
     override_path = tmp_path / "org.yaml"
     override_path.write_text(

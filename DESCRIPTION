@@ -23,12 +23,14 @@ Imports:
     withr,
     processx,
     pyro,
-    reportifyr
+    reportifyr,
+    yaml
 Suggests:
     testthat (>= 3.0.0),
     covr,
     rmarkdown,
-    pkgdown
+    pkgdown,
+    clipr
 Config/testthat/edition: 3
 License: GPL (>= 3)
 Encoding: UTF-8

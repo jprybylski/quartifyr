@@ -1,13 +1,27 @@
--- Shortcodes for numbered appendices:
+-- Shortcodes for numbered appendices, and for figure/table numbering
+-- scoped to an appendix, a top-level section, or a subsection instead of
+-- running continuously through the whole document:
 --
 --   {{< appendix "StatsAppendix" "Statistical Analysis Details" >}}
 --   {{< appendix_crossref "StatsAppendix" >}}
+--   {{< appendix_fig_caption "FigResiduals" "Residual plot" >}}
+--   {{< appendix_tbl_caption "TblCoefficients" "Model coefficients" >}}
+--   {{< section_break >}}
+--   {{< section_fig_caption "FigDoseResponse" "Dose-response curve" >}}
+--   {{< subsection_break >}}
+--   {{< subsection_fig_caption "FigSubgroup" "Subgroup analysis" >}}
+--   {{< scoped_crossref "FigResiduals" >}}
 --
 -- `appendix` auto-letters each appendix heading ("Appendix A", "Appendix
 -- B", ...) via a native Word SEQ field, so adding/removing/reordering
 -- appendices never requires manual renumbering -- just recalculate fields
 -- (Quarto's docx output flags fields dirty; see the repo-root README for
--- the field-recalculation step).
+-- the field-recalculation step). Its designator style defaults to
+-- letters but is configurable document-wide via `appendix-numbering:`
+-- frontmatter (`"alphabetic"` (default) / `"arabic"` / `"roman"`,
+-- uppercase roman only -- the conventional choice for appendix
+-- designators, matching Word's `\* ROMAN` switch as opposed to its
+-- separate lowercase `\* roman` one).
 --
 -- The field's cached result (the text between its `separate` and `end`
 -- fldChar, shown until the next recalculation) is pre-computed here to
@@ -38,20 +52,51 @@
 -- tbl_caption/fig_caption/crossref shortcodes -- reimplemented here rather
 -- than reused since theirs are hardcoded to the "Table"/"Figure" SEQ names.
 --
--- KNOWN SIMPLIFICATION: figure/table numbering (SEQ Figure / SEQ Table,
--- from quarto-plus's crossref shortcode) is intentionally left continuous
--- through appendices -- e.g. "Figure 12" inside Appendix B, not "Figure
--- B-1". Word can do appendix-scoped figure numbering by resetting the SEQ
--- counter (`\r 1`) right after each appendix heading, but that requires
--- either forking quarto-plus's crossref shortcode or duplicating its
--- bookmark bookkeeping here; left as a documented follow-up rather than
--- done unreliably.
+-- SCOPED FIGURE/TABLE NUMBERING: quarto-plus's own `fig_caption`/
+-- `tbl_caption` (its `crossref.lua`, vendored per-project under
+-- `_extensions/A2-ai/quarto-plus/`, not part of quartifyr) number
+-- continuously through the whole document -- "Figure 12" inside Appendix
+-- B, not "Figure B1". `appendix_fig_caption`/`appendix_tbl_caption`,
+-- `section_fig_caption`/`section_tbl_caption`, and
+-- `subsection_fig_caption`/`subsection_tbl_caption` are additive
+-- alternatives an author can use in place of quarto-plus's own shortcode
+-- wherever scoped numbering is wanted, numbered "Figure A1" (appendix,
+-- letter from that appendix's own designator), "Figure 3.1" (section,
+-- ordinal from the most recent `{{< section_break >}}`), and "Figure
+-- 3.2.1" (subsection, from the most recent `{{< subsection_break >}}`)
+-- respectively. Nothing here forks or modifies quarto-plus's own
+-- crossref.lua -- these are new shortcode names, not a replacement, and
+-- an author can freely mix scoped and continuous captions in the same
+-- document.
+--
+-- Why section/subsection scope needs an explicit `{{< section_break >}}`/
+-- `{{< subsection_break >}}` marker rather than just resetting
+-- automatically at each native `#`/`##` heading: see the repo-root
+-- CLAUDE.md's "Architecture notes that span files" section. Not validated
+-- or enforced -- placement is the author's responsibility, same as
+-- `appendix_crossref`'s bookmark target today.
+--
+-- KNOWN LIMITATION: none of the scoped captions show up in a
+-- `.list_of_figures`/`.list_of_tables` div (quarto-plus's
+-- `table_of_contents.lua`) -- that's built from Word's native
+-- `TOC \c "Figure"`/`TOC \c "Table"` field switch, which only collects
+-- entries from the literal `SEQ Figure`/`SEQ Table` sequences
+-- quarto-plus's own fig_caption/tbl_caption use, not the separate
+-- `SEQ AppendixFigure`/`SEQ SectionFigure`/etc. sequences here. A
+-- document mixing scoped and continuous captions would need two lists,
+-- or to accept scoped captions being absent from list_of_figures/tables;
+-- documented rather than worked around, since emitting a second parallel
+-- `SEQ Figure`/`SEQ Table` field per scoped caption just for LOF/LOT
+-- membership would mean two competing counters sharing one field name.
 
 local utils = require("quartifyr_utils")
 
 -- Offset away from quarto-plus's own crossref.lua bookmark ids (which
--- start at 1 and increment per caption) so the two extensions' w:id values
--- can never collide within the same document.
+-- start at 1 and increment per caption) so the two extensions' w:id
+-- values can never collide within the same document -- also clear of
+-- layout.py's SAME_PAGE_MARKER_ID_BASE (950000+, see
+-- quartifyr_styling/_ooxml_fields.py), with 50000 ids of headroom, ample
+-- for any realistic document even with every caption in it scoped.
 local next_id = 900000
 
 local function alloc_id()
@@ -59,30 +104,207 @@ local function alloc_id()
   return next_id
 end
 
--- Appendix position, tracked independently of alloc_id() (whose numbers
--- are bookmark ids, not appendix order). Mirrors Word's own SEQ \*
--- ALPHABETIC output: 1=A, ..., 26=Z, 27=AA, 28=AB, ... (bijective base-26,
--- same scheme as spreadsheet column letters).
+-- Appendix position + designator style, e.g. Word's own SEQ \* ALPHABETIC
+-- output: 1=A, ..., 26=Z, 27=AA, 28=AB, ... (bijective base-26, same
+-- scheme as spreadsheet column letters -- see quartifyr_utils.lua).
 local appendix_count = 0
+local current_appendix_designator = nil -- nil until the first {{< appendix >}}
 
-local function next_appendix_letter()
-  appendix_count = appendix_count + 1
-  local n = appendix_count
-  local letters = ""
-  while n > 0 do
-    local remainder = (n - 1) % 26
-    letters = string.char(65 + remainder) .. letters
-    n = math.floor((n - 1) / 26)
+local APPENDIX_NUMBERING_STYLES = {
+  alphabetic = { seq_switch = "ALPHABETIC", generator = utils.to_alphabetic },
+  arabic = { seq_switch = "ARABIC", generator = function(n) return tostring(n) end },
+  roman = { seq_switch = "ROMAN", generator = utils.to_roman },
+}
+
+-- Section/subsection ordinals, advanced only by section_break/
+-- subsection_break -- see the file header comment on why these can't be
+-- derived automatically from native #/## headings.
+local current_section_number = 0
+local current_subsection_number = 0
+
+-- Per-scope figure/table counters. `<scope>_needs_reset` is consumed
+-- (and cleared) by the next caption in that scope: only that one caption
+-- gets an explicit `\r 1` SEQ reset switch baked in, so Word's own live
+-- recalculation restarts at 1 there too instead of continuing whatever
+-- that named SEQ sequence last held.
+local scopes = {
+  appendix = { fig = 0, tbl = 0, fig_needs_reset = true, tbl_needs_reset = true },
+  section = { fig = 0, tbl = 0, fig_needs_reset = true, tbl_needs_reset = true },
+  subsection = { fig = 0, tbl = 0, fig_needs_reset = true, tbl_needs_reset = true },
+}
+
+-- bookmark_id -> {label = "Figure"/"Table", text = "<baked composite number>"},
+-- populated by every scoped caption shortcode, read by scoped_crossref.
+local scoped_bookmarks = {}
+
+-- "" for appendix ("Figure A1" -- letter directly abuts the number), "."
+-- for section/subsection ("Figure 3.1"/"Figure 3.2.1").
+local SCOPE_SEPARATOR = { appendix = "", section = ".", subsection = "." }
+
+local function scope_prefix(scope_key)
+  if scope_key == "appendix" then
+    if current_appendix_designator == nil then
+      quarto.log.warning(
+        "appendix_fig_caption/appendix_tbl_caption used before any {{< appendix >}} -- numbering will show '?'"
+      )
+      return "?"
+    end
+    return current_appendix_designator
+  elseif scope_key == "section" then
+    if current_section_number == 0 then
+      quarto.log.warning(
+        "section_fig_caption/section_tbl_caption used before any {{< section_break >}} -- numbering will show '?'"
+      )
+      return "?"
+    end
+    return tostring(current_section_number)
+  else -- subsection
+    if current_section_number == 0 or current_subsection_number == 0 then
+      quarto.log.warning(
+        "subsection_fig_caption/subsection_tbl_caption used before any {{< subsection_break >}} -- numbering will show '?'"
+      )
+      return "?"
+    end
+    return tostring(current_section_number) .. "." .. tostring(current_subsection_number)
   end
-  return letters
+end
+
+-- Builds the appendix_fig_caption/appendix_tbl_caption/section_.../
+-- subsection_... shortcode handlers -- all six share this one
+-- implementation, parameterized by which scope's counters/prefix to use,
+-- the display label ("Figure"/"Table"), and the Word SEQ field name that
+-- scope+label's counter lives under (each of the six needs its own,
+-- distinct from quarto-plus's own "Figure"/"Table" SEQ names -- see the
+-- file header's List of Figures/Tables limitation).
+local function make_scoped_caption(scope_key, counter_key, label, seq_name)
+  return function(args, _kwargs, meta)
+    local bookmark_id = (args[1] or "defaultBookId"):gsub("%s+", "")
+    local caption_text = args[2] or "If you see this, you did not provide caption text."
+    local style = pandoc.utils.stringify(
+      meta and (label == "Table" and meta["caption-style-table"] or meta["caption-style-figure"]) or "Caption"
+    )
+    local id = alloc_id()
+
+    local scope = scopes[scope_key]
+    scope[counter_key] = scope[counter_key] + 1
+    local local_number = scope[counter_key]
+
+    local prefix = scope_prefix(scope_key)
+    local composite_number = prefix .. SCOPE_SEPARATOR[scope_key] .. tostring(local_number)
+
+    local reset_flag_key = counter_key .. "_needs_reset"
+    local reset_switch = ""
+    if scope[reset_flag_key] then
+      reset_switch = " \\r 1"
+      scope[reset_flag_key] = false
+    end
+
+    scoped_bookmarks[bookmark_id] = { label = label, text = composite_number }
+
+    local ooxml = string.format(
+      [[
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="%s"/>
+      </w:pPr>
+      <w:bookmarkStart w:id="%d" w:name="%s"/>
+      <w:r>
+        <w:t xml:space="preserve">%s </w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve">%s</w:t>
+      </w:r>
+      <w:r>
+        <w:fldChar w:fldCharType="begin" w:dirty="true"/>
+      </w:r>
+      <w:r>
+        <w:instrText xml:space="preserve"> SEQ %s \* ARABIC%s </w:instrText>
+      </w:r>
+      <w:r>
+        <w:fldChar w:fldCharType="separate"/>
+      </w:r>
+      <w:r>
+        <w:t>%d</w:t>
+      </w:r>
+      <w:r>
+        <w:fldChar w:fldCharType="end"/>
+      </w:r>
+      <w:bookmarkEnd w:id="%d"/>
+      <w:r>
+        <w:tab/>
+          <w:t>%s</w:t>
+      </w:r>
+    </w:p>
+    ]],
+      utils.escape_xml(style),
+      id,
+      utils.escape_xml(bookmark_id),
+      label,
+      utils.escape_xml(prefix .. SCOPE_SEPARATOR[scope_key]),
+      seq_name,
+      reset_switch,
+      local_number,
+      id,
+      utils.escape_xml(caption_text)
+    )
+
+    return pandoc.RawBlock("openxml", ooxml)
+  end
+end
+
+-- Zero-output boundary markers: no bookmark, no downstream consumer needs
+-- to locate these positionally (unlike body_start.lua's bookmark, which
+-- apply-layout.py has to find later) -- just advance Lua-side counters,
+-- so an empty block list renders as truly nothing rather than an extra
+-- blank paragraph.
+local function section_break(_args, _kwargs, _meta)
+  current_section_number = current_section_number + 1
+  current_subsection_number = 0
+  for _, scope_key in ipairs({ "section", "subsection" }) do
+    scopes[scope_key].fig = 0
+    scopes[scope_key].tbl = 0
+    scopes[scope_key].fig_needs_reset = true
+    scopes[scope_key].tbl_needs_reset = true
+  end
+  return pandoc.Blocks({})
+end
+
+local function subsection_break(_args, _kwargs, _meta)
+  current_subsection_number = current_subsection_number + 1
+  scopes.subsection.fig = 0
+  scopes.subsection.tbl = 0
+  scopes.subsection.fig_needs_reset = true
+  scopes.subsection.tbl_needs_reset = true
+  return pandoc.Blocks({})
 end
 
 return {
-  ["appendix"] = function(args, _kwargs, _meta)
+  ["appendix"] = function(args, _kwargs, meta)
     local bookmark_id = (args[1] or "defaultAppendixId"):gsub("%s+", "")
     local title = args[2] or "If you see this, you did not provide an appendix title."
     local id = alloc_id()
-    local letter = next_appendix_letter()
+
+    local numbering_style_name = pandoc.utils.stringify(meta and meta["appendix-numbering"] or "alphabetic")
+    if numbering_style_name == "" then
+      numbering_style_name = "alphabetic"
+    end
+    local numbering_style = APPENDIX_NUMBERING_STYLES[numbering_style_name]
+    if not numbering_style then
+      quarto.log.warning(
+        "appendix-numbering: unrecognized value '" .. numbering_style_name .. "', falling back to 'alphabetic'"
+      )
+      numbering_style = APPENDIX_NUMBERING_STYLES.alphabetic
+    end
+
+    appendix_count = appendix_count + 1
+    local designator = numbering_style.generator(appendix_count)
+    current_appendix_designator = designator
+
+    -- New appendix: figure/table numbering inside it starts fresh.
+    scopes.appendix.fig = 0
+    scopes.appendix.tbl = 0
+    scopes.appendix.fig_needs_reset = true
+    scopes.appendix.tbl_needs_reset = true
 
     local ooxml = string.format(
       [[
@@ -98,7 +320,7 @@ return {
         <w:fldChar w:fldCharType="begin" w:dirty="true"/>
       </w:r>
       <w:r>
-        <w:instrText xml:space="preserve"> SEQ Appendix \* ALPHABETIC </w:instrText>
+        <w:instrText xml:space="preserve"> SEQ Appendix \* %s </w:instrText>
       </w:r>
       <w:r>
         <w:fldChar w:fldCharType="separate"/>
@@ -117,7 +339,8 @@ return {
     ]],
       id,
       utils.escape_xml(bookmark_id),
-      letter,
+      numbering_style.seq_switch,
+      designator,
       id,
       utils.escape_xml(title)
     )
@@ -147,6 +370,53 @@ return {
     </w:r>
     ]],
       utils.escape_xml(bookmark_id)
+    )
+
+    return pandoc.RawInline("openxml", ooxml)
+  end,
+
+  ["appendix_fig_caption"] = make_scoped_caption("appendix", "fig", "Figure", "AppendixFigure"),
+  ["appendix_tbl_caption"] = make_scoped_caption("appendix", "tbl", "Table", "AppendixTable"),
+  ["section_fig_caption"] = make_scoped_caption("section", "fig", "Figure", "SectionFigure"),
+  ["section_tbl_caption"] = make_scoped_caption("section", "tbl", "Table", "SectionTable"),
+  ["subsection_fig_caption"] = make_scoped_caption("subsection", "fig", "Figure", "SubsectionFigure"),
+  ["subsection_tbl_caption"] = make_scoped_caption("subsection", "tbl", "Table", "SubsectionTable"),
+
+  ["section_break"] = section_break,
+  ["subsection_break"] = subsection_break,
+
+  ["scoped_crossref"] = function(args, _kwargs, _meta)
+    local bookmark_id = (args[1] or "defaultBookId"):gsub("%s+", "")
+    local entry = scoped_bookmarks[bookmark_id]
+    local label, text
+    if entry then
+      label, text = entry.label, entry.text
+    else
+      quarto.log.warning("scoped_crossref: no scoped caption found for bookmark ID: " .. bookmark_id)
+      label, text = "Unknown", "??"
+    end
+
+    local ooxml = string.format(
+      [[
+    <w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+      <w:fldChar w:fldCharType="begin" w:dirty="true"/>
+    </w:r>
+    <w:r>
+      <w:instrText xml:space="preserve"> REF %s \h </w:instrText>
+    </w:r>
+    <w:r>
+      <w:fldChar w:fldCharType="separate"/>
+    </w:r>
+    <w:r>
+      <w:t>%s %s</w:t>
+    </w:r>
+    <w:r>
+      <w:fldChar w:fldCharType="end"/>
+    </w:r>
+    ]],
+      utils.escape_xml(bookmark_id),
+      utils.escape_xml(label),
+      utils.escape_xml(text)
     )
 
     return pandoc.RawInline("openxml", ooxml)

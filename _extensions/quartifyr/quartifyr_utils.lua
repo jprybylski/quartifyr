@@ -205,6 +205,44 @@ local LOGO_ALIGN_STYLES = {
   right = "Logo Right",
 }
 
+-- Bijective base-26 letter numbering: 1=A, ..., 26=Z, 27=AA, 28=AB, ...
+-- Mirrors Word's own SEQ \* ALPHABETIC field output -- used both for
+-- appendix.lua's live SEQ Appendix field (which needs this same sequence
+-- pre-computed as a cached fallback value, see that file's own comment on
+-- why) and, unlike a real Word field, as *literal* text for the
+-- already-known current appendix's letter baked into scoped figure/table
+-- captions (appendix_fig_caption/appendix_tbl_caption).
+function M.to_alphabetic(n)
+  local letters = ""
+  while n > 0 do
+    local remainder = (n - 1) % 26
+    letters = string.char(65 + remainder) .. letters
+    n = math.floor((n - 1) / 26)
+  end
+  return letters
+end
+
+local ROMAN_VALUES = {
+  { 1000, "M" }, { 900, "CM" }, { 500, "D" }, { 400, "CD" },
+  { 100, "C" }, { 90, "XC" }, { 50, "L" }, { 40, "XL" },
+  { 10, "X" }, { 9, "IX" }, { 5, "V" }, { 4, "IV" }, { 1, "I" },
+}
+
+-- Uppercase roman numerals, matching Word's SEQ \* ROMAN switch (its
+-- lowercase counterpart is the separate \* roman switch -- not offered
+-- here, uppercase is the conventional choice for appendix designators).
+function M.to_roman(n)
+  local result = {}
+  for _, pair in ipairs(ROMAN_VALUES) do
+    local value, numeral = pair[1], pair[2]
+    while n >= value do
+      table.insert(result, numeral)
+      n = n - value
+    end
+  end
+  return table.concat(result)
+end
+
 function M.logo_block(path, width, align)
   local img = pandoc.Image({}, path, "", pandoc.Attr("", {}, { { "width", width } }))
   local para = pandoc.Para({ img })

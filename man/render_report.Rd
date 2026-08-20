@@ -7,7 +7,9 @@
 render_report(
   shell_qmd,
   status = c("draft", "final"),
-  reference_doc = system.file("templates", "org-reference.docx", package = "quartifyr"),
+  reference_doc = NULL,
+  style = NULL,
+  override = NULL,
   standard_footnotes_yaml = file.path(dirname(shell_qmd), "report",
     "standard_footnotes.yaml"),
   config_yaml = file.path(dirname(shell_qmd), "report", "config.yaml"),
@@ -34,10 +36,28 @@ stamp (via Quarto's \verb{-M document-status:}) and, when \code{"final"}, also
 runs \code{reportifyr::finalize_document()} to produce a \verb{report/final/}
 output alongside the \verb{report/draft/} one.}
 
-\item{reference_doc}{Path to the docx reference-template. Defaults to
-the one bundled with this package (\code{inst/templates/org-reference.docx},
-built from \code{inst/python/styles/default.yaml} -- see
-\code{styling_build_reference_docx()} to build a custom one).}
+\item{reference_doc}{Path to the docx reference-template. \code{NULL}
+(default) checks \code{shell_qmd}'s own frontmatter and the project's
+\verb{_quarto.yml} (via \code{quarto::quarto_inspect()}, so this follows Quarto's
+own frontmatter-over-project merge precedence) for an already-configured
+\code{format: {docx: {reference-doc: ...}}} and, if found, leaves it alone --
+\verb{quarto render} picks it up on its own, same as a plain \verb{quarto render}
+would. Only when neither sets one does this fall back to the template
+bundled with this package (\code{inst/templates/org-reference.docx}, built
+from \code{inst/python/styles/default.yaml}), with a one-time notice
+pointing at \code{styling_build_reference_docx()} to build a custom one
+instead. Pass an explicit path here to always use it regardless of any
+Quarto-level setting.}
+
+\item{style, override}{Optional style YAML paths -- when \code{style} is
+given, its \code{equation.font} is applied to the rendered shell's default
+math font via \code{styling_apply_layout()} (see that function; pandoc's
+docx writer doesn't carry this setting through from \code{reference_doc}
+itself, so it has to be reapplied here, after rendering). Independent
+of \code{reference_doc} -- if \code{reference_doc} was itself built from a style
+YAML (\code{styling_build_reference_docx()}), pass the same path here to
+keep the two in sync. \code{NULL} (default) leaves the rendered docx's math
+font untouched.}
 
 \item{standard_footnotes_yaml, config_yaml, figures_path, tables_path}{Passed through to reportifyr; default to the standard project layout
 \code{reportifyr::initialize_report_project()} creates, alongside \code{shell_qmd}.}

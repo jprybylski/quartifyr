@@ -253,3 +253,44 @@ below for reference.
      notes. End every appendix that embeds source code with a real
      sentence after the code block for this reason. -->
 End of script.
+
+{{< pagebreak >}}
+
+<!-- Demonstrates quartifyr's scoped figure/table numbering (issue #26):
+     appendix_fig_caption/appendix_tbl_caption number independently within
+     this appendix rather than continuing Figure 1/Table 1/Table 2 from
+     the main body above, and section_break/subsection_fig_caption number
+     independently again within this appendix's own ## subsection. No real
+     {rpfy}: content is filled in here -- this section only demonstrates
+     the numbering shortcodes themselves; see
+     inst/extensions/quartifyr/README.md's "Figures, tables, and
+     cross-references" section. -->
+{{< appendix "SupplementaryNumbering" "Supplementary Numbering Example" >}}
+
+{{< appendix_fig_caption "FigAppendixExample" "Example appendix-scoped figure" >}}
+
+This figure's number restarts at 1 within this appendix, independent of
+Figure 1 in the main body above.
+
+{{< appendix_tbl_caption "TblAppendixExample" "Example appendix-scoped table" >}}
+
+Referenced as {{< scoped_crossref "TblAppendixExample" >}} and
+{{< scoped_crossref "FigAppendixExample" >}}.
+
+{{< section_break >}}
+
+## Section-Scoped Example
+
+{{< section_fig_caption "FigSectionExample" "Example section-scoped figure" >}}
+
+Numbered against this section's own position rather than this appendix's,
+restarting again at the next section-break marker.
+
+{{< subsection_break >}}
+
+### Subsection-Scoped Example
+
+{{< subsection_fig_caption "FigSubsectionExample" "Example subsection-scoped figure" >}}
+
+Referenced as {{< scoped_crossref "FigSectionExample" >}} and
+{{< scoped_crossref "FigSubsectionExample" >}}.

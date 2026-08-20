@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=./schema.json
+#
 # Default quartifyr style preset: Times New Roman, black text, flat/neutral
 # tables — a plain "professional industrial" look with no brand color baked
 # in. Per-org looks are a second YAML deep-merged over this one (see
@@ -59,6 +61,7 @@ heading:
   space_before_pt: 12
   space_after_pt: 6
   keep_with_next: true
+  all_caps: false
 
 table:
   style: "Table Grid"
@@ -92,6 +95,21 @@ footer:
   show_page_number: true
   text: ""
 
-identity:
-  org_name: ""
-  logo_path: ""
+# "Source Code"/"Verbatim Char" docx styles for fenced code blocks/inline
+# code (see build_template.py's _style_source_code()). Defaults match
+# pandoc's own built-in fallback (Consolas via fonts.monospace below,
+# #F1F3F5 background, no padding) so leaving this section untouched
+# doesn't change existing rendered output.
+code:
+  font_size: 10
+  background_color: "#F1F3F5"
+  padding_pt: 0
+
+# Docx-wide default math font (word/settings.xml's m:mathPr/m:mathFont),
+# applied post-render by layout.py -- see that module's own note on why
+# this can't be set from the reference-doc template. "Cambria Math" is
+# Word's own absolute fallback, so the default here doesn't change
+# existing rendered output. Font family only; an unstyled math run
+# inherits its size from the surrounding paragraph.
+equation:
+  font: "Cambria Math"

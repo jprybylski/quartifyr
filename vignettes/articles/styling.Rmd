@@ -20,6 +20,170 @@ source .venv/bin/activate
 uv pip install -e '.[dev]'
 ```
 
+## What a style YAML can do
+
+Every option below is a YAML diff from the default preset -- fonts,
+color, all-caps headings, shaded/padded code blocks, banded tables, all
+changed together here to show the range in one comparison. Both are the
+*same* `examples/demo-report/report.qmd` content, rendered through the
+same pipeline, differing only in which reference-doc was built from
+which style YAML:
+
+<div style="display:flex; gap:12px; flex-wrap:wrap;">
+<div><img src="../man/figures/style-gallery-default.png" alt="Default style: black serif Times New Roman heading and body text, plain gray code block background, no padding" width="440" loading="lazy"><p style="text-align:center; font-size:0.85em;">default.yaml, untouched</p></div>
+<div><img src="../man/figures/style-gallery-branded.png" alt="Branded style: blue all-caps sans-serif Calibri heading, Calibri body text, warm yellow code block background with visible padding" width="440" loading="lazy"><p style="text-align:center; font-size:0.85em;">a ~15-line override</p></div>
+</div>
+
+```yaml
+fonts:
+  body: "Calibri"
+  heading: "Calibri"
+  monospace: "Consolas"
+colors:
+  heading: "#0054AD"
+  title: "#0054AD"
+  table_header_fill: "#CFE2FF"
+  rule: "#0054AD"
+heading:
+  all_caps: true
+code:
+  background_color: "#FFF3CD"
+  padding_pt: 4
+table:
+  banding: true
+```
+
+```r
+quartifyr::styling_build_reference_docx(
+  style = "inst/python/styles/default.yaml",
+  override = "acme-branding.yaml",
+  out = "acme-reference.docx"
+)
+```
+
+See "Style YAML reference" below for every option this can touch, and
+"Pulling and editing a project's own style YAML" for a lower-friction
+way to build an override like the one above than hand-writing it from
+scratch.
+
+## Style YAML reference
+
+Every top-level section below is a dataclass in
+`inst/python/quartifyr_styling/schema.py`, validated against
+`inst/python/styles/schema.json` (point an editor at it via
+`# yaml-language-server: $schema=...` for autocomplete). `override` YAMLs
+(`build`'s `--override`, most `styling_*()` functions' `override`
+argument) only need the keys that differ -- deep-merged onto `style` at
+load time, not a second full copy.
+
+### `fonts`
+
+| Key | Controls | Default |
+| --- | --- | --- |
+| `body` | Body text font family | `"Times New Roman"` |
+| `heading` | Title/subtitle/heading font family | `"Times New Roman"` |
+| `monospace` | Code block/inline code font family | `"Courier New"` |
+| `sizes.body` | Body text size (pt) | `11` |
+| `sizes.title` | Title page title size (pt) | `26` |
+| `sizes.subtitle` | Title page subtitle size (pt) | `16` |
+| `sizes.heading.1`-`6` | Per-level heading size (pt) -- a level deeper than any key here falls back to the smallest defined | `16, 14, 12, 11, 11, 11` |
+| `sizes.caption` | Figure/table caption size (pt) | `10` |
+| `sizes.footnote` | Footer/footnote text size (pt) | `9` |
+| `sizes.toc` | Table of contents entry size (pt) | `11` |
+
+### `colors`
+
+Every value is a `"#RRGGBB"` hex color.
+
+| Key | Controls | Default |
+| --- | --- | --- |
+| `text` | Body text | `#000000` |
+| `heading` | Heading text | `#000000` |
+| `title` | Title/subtitle text | `#000000` |
+| `caption` | Figure/table caption text | `#000000` |
+| `table_header_fill` | Table header row background | `#D9D9D9` |
+| `table_border` | Table border lines | `#000000` |
+| `rule` | Rule under the title (if shown) | `#000000` |
+
+### `page`
+
+| Key | Controls | Default |
+| --- | --- | --- |
+| `size` | `"letter"` or `"a4"` | `"letter"` |
+| `margins_in.top`/`bottom`/`left`/`right` | Page margins (inches) | `1` each |
+
+### `paragraph`
+
+| Key | Controls | Default |
+| --- | --- | --- |
+| `line_spacing` | Body text line spacing multiplier | `1.15` |
+| `space_after_pt` | Space after a body paragraph (pt) | `8` |
+| `alignment` | `"left"`/`"justify"`/`"center"`/`"right"` | `"left"` |
+
+### `heading`
+
+| Key | Controls | Default |
+| --- | --- | --- |
+| `bold` | Bold heading text | `true` |
+| `space_before_pt`/`space_after_pt` | Spacing around a heading (pt) | `12`/`6` |
+| `keep_with_next` | Keep a heading on the same page as the paragraph after it | `true` |
+| `all_caps` | All-caps *visual* transform (OOXML `w:caps`) -- the underlying text is untouched | `false` |
+
+### `table`
+
+| Key | Controls | Default |
+| --- | --- | --- |
+| `style` | Word table style name | `"Table Grid"` |
+| `header_bold` | Bold the header row | `true` |
+| `banding` | Alternating row shading | `false` |
+
+### `synopsis`
+
+Governs the synopsis section's definition-list look (bold label line,
+indented value beneath it) -- see `synopsis-style:` in the [Quarto
+extension](quarto-extension.html) article for the three layouts this
+applies to.
+
+| Key | Controls | Default |
+| --- | --- | --- |
+| `label_space_before_pt`/`label_space_after_pt` | Spacing around a label line (pt) | `12`/`2` |
+| `value_space_after_pt` | Space after a value line (pt) | `2` |
+| `value_indent_in` | Value line indent (inches) | `0.25` |
+| `alignment` | Overrides `paragraph.alignment` for values only; omit to inherit it | unset |
+
+### `title_page`
+
+| Key | Controls | Default |
+| --- | --- | --- |
+| `show_rule_under_title` | Rule under the title (color from `colors.rule`) | `true` |
+| `fields` | Which title-page fields appear, in order (a list, not a map -- pandoc's Lua metadata tables don't preserve map key order) | `report_type, title, subtitle, date, lead_scientist, version, confidentiality` |
+
+### `footer`
+
+| Key | Controls | Default |
+| --- | --- | --- |
+| `show_page_number` | Show the page-number field | `true` |
+| `text` | Optional static footer text | `""` |
+
+### `code`
+
+Styles fenced code blocks/inline code (pandoc's own `Source Code`/
+`Verbatim Char` docx styles). Defaults match pandoc's own built-in
+fallback, so leaving this section untouched doesn't change existing
+rendered output.
+
+| Key | Controls | Default |
+| --- | --- | --- |
+| `font_size` | Code text size (pt) -- family comes from `fonts.monospace` above | `10` |
+| `background_color` | Shaded background | `#F1F3F5` |
+| `padding_pt` | Space before/after the shaded block (vertical only -- OOXML paragraph shading has no horizontal-padding concept) | `0` |
+
+### `equation`
+
+| Key | Controls | Default |
+| --- | --- | --- |
+| `font` | Docx-wide default math font (applied post-render by `apply-layout`, not `build` -- pandoc's docx writer doesn't carry this setting through from the reference-doc template). Font family only; an unstyled equation inherits its size from the surrounding paragraph | `"Cambria Math"` |
+
 ## `build`: style YAML → reference-doc
 
 ```r
@@ -133,6 +297,50 @@ cause. Off by default (`render_report(..., recalculate_fields = FALSE)`).
 When it does fail, it only produces a warning, not a render failure;
 the document is still fully usable, just needs a manual "select all,
 F9" in Word.
+
+## Pulling and editing a project's own style YAML
+
+```r
+# Copy the bundled default template/style into a project
+quartifyr::styling_example_template(dir = "templates")
+style <- quartifyr::styling_example_style(dir = ".")
+
+# Edit in place ...
+style$heading$all_caps <- TRUE
+style$colors$heading <- "#0054AD"
+
+# ... and save back out as just the diff from the default
+quartifyr::styling_save_overrides(style, file = "overrides.yaml")
+```
+
+```yaml
+# overrides.yaml
+heading:
+  all_caps: true
+colors:
+  heading: "#0054AD"
+```
+
+That override YAML is what `style`/`override` (or `--style`/`--override`)
+take everywhere else in this article -- `styling_build_reference_docx()`
+deep-merges it onto the base at load time, so it's a diff to keep in a
+project, not a second full style YAML to maintain by hand.
+
+For a narrower, one-off edit to an *existing* style YAML (not
+necessarily one just pulled via `styling_example_style()`):
+
+```r
+quartifyr::styling_update_style(
+  list(code = list(background_color = "#FFF3CD")),
+  file = "overrides.yaml",
+  yes = TRUE
+)
+```
+
+Deep-merges the update onto `file`'s content, in place -- a
+`modifyList()`-style edit without hand-copying the rest of the file.
+`yes = TRUE` is required: this rewrites the whole file, so any comments
+it had are lost.
 
 ## Tests
 

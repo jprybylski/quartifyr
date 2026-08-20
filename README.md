@@ -245,36 +245,42 @@ Python engine.
 An org's look lives entirely in one YAML file, no Word template editing.
 
 ```r
-default_style <- system.file("python", "styles", "default.yaml", package = "quartifyr")
-file.copy(default_style, "acme-pharma.yaml")
-# edit fonts/colors/page setup/table.header_bold/etc.
+style <- quartifyr::styling_example_style(dir = ".")
+# edit fonts/colors/page setup/table.header_bold/etc. in place
+style$fonts$body <- "Calibri"
+style$colors$heading <- "#0054AD"
+quartifyr::styling_save_overrides(style, file = "acme-pharma.yaml")
+
 quartifyr::styling_build_reference_docx(
-  style = default_style,
+  style = system.file("python", "styles", "default.yaml", package = "quartifyr"),
   override = "acme-pharma.yaml",
   out = "acme-pharma-reference.docx"
 )
 ```
 
-Or the equivalent standalone CLI, if you'd rather not go through R:
-
-```bash
-quartifyr-styling build \
-  --style /path/to/inst/python/styles/default.yaml \
-  --override acme-pharma.yaml \
-  --out acme-pharma-reference.docx
-```
-
-See `inst/python/styles/default.yaml` for the full schema and
-`inst/python/quartifyr_styling/schema.py` for validation rules.
+`styling_save_overrides()` saves only what actually changed from the
+default preset, so `acme-pharma.yaml` stays a diff to keep in the org's
+own config repo -- not a second full style YAML to keep in sync by hand.
+See the [Styling](https://jprybylski.github.io/quartifyr/articles/styling.html)
+article's "Pulling and editing a project's own style YAML" section for
+the full set of these convenience functions (and their `quartifyr-styling`
+CLI equivalents), and its "Style YAML reference" section for every
+option -- fonts, colors, page setup, headings (including an all-caps
+transform), tables, code block shading, equation font, and more -- with
+a real branded-vs-default rendered comparison.
 
 ## Style YAML and reference-doc: generating, locating, sharing
 
-**Generating a style YAML**: there's no interactive wizard. "Generate"
-means copy the bundled `default.yaml` and edit just the fields that
-differ, as shown above. That file doubles as both the default preset
-and the schema reference; `inst/python/quartifyr_styling/schema.py`
-documents validation rules (hex colors, positive sizes, valid page
-sizes, ...).
+**Generating a style YAML**: there's no interactive wizard, but
+`styling_example_style()`/`styling_save_overrides()` (above) beat a raw
+`file.copy()` + hand-diff. `inst/python/styles/schema.json` is the
+machine-readable schema (point an editor at it via
+`# yaml-language-server: $schema=...`, already set in `default.yaml`
+itself, for autocomplete/inline validation); `inst/python/quartifyr_styling/schema.py`
+is what actually enforces it at load time (hex colors, positive sizes,
+valid page sizes, ...). The [Styling](https://jprybylski.github.io/quartifyr/articles/styling.html)
+article's reference table is the exhaustive, human-readable version of
+the same schema.
 
 **Where a style YAML lives**: wherever you put it. `style`/`override`
 (`styling_build_reference_docx()`) or `--style`/`--override`
@@ -284,9 +290,13 @@ drive, wherever it already manages shared config.
 
 **Where the built reference-doc lives**: likewise, wherever `out`/
 `--out` points. `render_report()`'s `reference_doc` parameter defaults
-to the package's own bundled `inst/templates/org-reference.docx` (via
-`system.file("templates", "org-reference.docx", package = "quartifyr")`)
--- unlike everything else `styling_build_reference_docx()`/
+to `NULL`, which checks the `.qmd`'s own frontmatter and the project's
+`_quarto.yml` for an already-configured `format: {docx: {reference-doc:
+...}}` first (Quarto's own precedence) and only falls back -- with a
+`cli` notice -- to the package's own bundled
+`inst/templates/org-reference.docx` (via `system.file("templates",
+"org-reference.docx", package = "quartifyr")`) when neither sets one.
+Unlike everything else `styling_build_reference_docx()`/
 `quartifyr-styling build` produces, this repo commits that specific
 file rather than gitignoring it, precisely so the two bundled examples
 (and the Quarto-only path above) work straight out of a clone with no
@@ -295,8 +305,9 @@ examples' `smoke_test.py`, and safe to run yourself) guards against it
 drifting from `inst/python/styles/default.yaml`; rebuild it (`python3
 scripts/check_template_freshness.py`) after changing that file.
 
-For your own org's reference-doc, pass `reference_doc` explicitly rather
-than relying on the bundled default:
+For your own org's reference-doc, pass `reference_doc` explicitly (or
+set `format: {docx: {reference-doc: ...}}` in `_quarto.yml`) rather than
+relying on the bundled default:
 
 ```r
 render_report(
