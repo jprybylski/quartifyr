@@ -27,6 +27,10 @@ test_that("styling_example_template() creates dir when it doesn't exist", {
   expect_true(file.exists(path))
 })
 
+test_that("styling_example_template() errors clearly when the bundled reference-doc can't be found", {
+  expect_error(styling_example_template(src = ""), "was not found")
+})
+
 # styling_example_style() -- pyro bridge, mocked.
 
 test_that("styling_example_style() forwards args and returns the parsed style", {
@@ -56,6 +60,10 @@ test_that("styling_example_style() includes --overwrite when requested", {
   styling_example_style(dir = ".", file = "style.yaml", overwrite = TRUE, base = "default.yaml")
 
   expect_true("--overwrite" %in% captured_args)
+})
+
+test_that("styling_example_style() errors clearly when the bundled default style YAML can't be found", {
+  expect_error(styling_example_style(base = ""), "was not found")
 })
 
 # styling_save_overrides() -- pyro bridge, mocked; only the args/return
@@ -118,6 +126,10 @@ test_that("styling_save_overrides() includes --overwrite when requested", {
   styling_save_overrides(list(a = 1), overwrite = TRUE, base = "default.yaml")
 
   expect_true("--overwrite" %in% captured_args)
+})
+
+test_that("styling_save_overrides() errors clearly when the bundled default style YAML can't be found", {
+  expect_error(styling_save_overrides(list(a = 1), base = ""), "was not found")
 })
 
 # styling_update_style() -- pyro bridge, mocked.

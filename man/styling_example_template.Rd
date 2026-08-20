@@ -7,7 +7,8 @@
 styling_example_template(
   dir = ".",
   file = "org-reference.docx",
-  overwrite = FALSE
+  overwrite = FALSE,
+  src = system.file("templates", "org-reference.docx", package = "quartifyr")
 )
 }
 \arguments{
@@ -16,6 +17,10 @@ styling_example_template(
 \item{file}{Destination filename within \code{dir}.}
 
 \item{overwrite}{Replace the destination if it already exists.}
+
+\item{src}{Reference-doc to copy. Defaults to the package's own bundled
+\code{org-reference.docx}; only worth overriding to start from an existing
+docx instead.}
 }
 \value{
 The destination path (invisibly).

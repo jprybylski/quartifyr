@@ -8,10 +8,13 @@
 #' @param dir Destination directory. Created if it doesn't exist.
 #' @param file Destination filename within `dir`.
 #' @param overwrite Replace the destination if it already exists.
+#' @param src Reference-doc to copy. Defaults to the package's own bundled
+#'   `org-reference.docx`; only worth overriding to start from an existing
+#'   docx instead.
 #' @return The destination path (invisibly).
 #' @export
-styling_example_template <- function(dir = ".", file = "org-reference.docx", overwrite = FALSE) {
-  src <- system.file("templates", "org-reference.docx", package = "quartifyr")
+styling_example_template <- function(dir = ".", file = "org-reference.docx", overwrite = FALSE,
+                                      src = system.file("templates", "org-reference.docx", package = "quartifyr")) {
   if (!nzchar(src)) {
     stop(
       "quartifyr's bundled reference-doc (inst/templates/org-reference.docx) was not found in ",
