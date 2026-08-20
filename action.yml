@@ -29,8 +29,11 @@ inputs:
     description: >-
       Path, relative to the calling repo's root, to an org's docx
       reference-doc (built with `quartifyr-styling build` /
-      `styling_build_reference_docx()`). Defaults to the quartifyr R
-      package's own bundled inst/templates/org-reference.docx if unset.
+      `styling_build_reference_docx()`). If unset, render_report()'s own
+      default applies: an already-configured reference-doc in the shell
+      .qmd's frontmatter or the project's _quarto.yml wins, otherwise it
+      falls back to the quartifyr R package's own bundled
+      inst/templates/org-reference.docx.
     required: false
     default: ''
   r-version:

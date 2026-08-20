@@ -65,6 +65,18 @@
   `scripts/render_style_option_gallery.py` from `examples/demo-report`'s
   actual content -- not a mockup.
 
+## Fixed
+
+* `render_report()`'s `reference_doc` argument now defaults to `NULL`
+  instead of the bundled package template. When unset, it checks (via
+  `quarto::quarto_inspect()`, so it follows Quarto's own
+  frontmatter-over-`_quarto.yml` merge precedence) whether the project
+  already configures a docx `reference-doc` and, if so, leaves it alone
+  instead of silently overriding it with the package default as before.
+  Only when neither sets one does it fall back to the package default,
+  now with a `cli` notice pointing at `styling_build_reference_docx()`
+  (#30).
+
 ## Breaking changes
 
 * Removed the style YAML's `identity.org_name`/`identity.logo_path` keys

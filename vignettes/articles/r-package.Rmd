@@ -80,10 +80,12 @@ load-bearing, not just a naming convention.
    reports far less specifically.
 2. Regenerates `abbreviations.tex` next to `shell_qmd` from the
    project's `standard_footnotes.yaml`, via `styling_build_abbreviations_tex()`.
-3. Renders `shell_qmd` with Quarto against the package's bundled
-   `inst/templates/org-reference.docx` (or a `reference_doc` you pass
-   explicitly), passing `-M document-status:DRAFT` or `:FINAL` depending
-   on `status`.
+3. Renders `shell_qmd` with Quarto against a docx reference-doc --
+   whichever `reference_doc` you pass explicitly; failing that, whatever
+   the `.qmd`'s frontmatter or the project's `_quarto.yml` already
+   configures; failing that, the package's own bundled
+   `inst/templates/org-reference.docx` -- passing `-M
+   document-status:DRAFT` or `:FINAL` depending on `status`.
 4. Runs `styling_apply_layout()` on the rendered shell.
 5. Runs `reportifyr::build_report()` to fill in tables/figures/footnotes
    from `OUTPUTS/`, producing `report/draft/<name>-draft.docx`.

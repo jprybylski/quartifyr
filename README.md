@@ -290,9 +290,13 @@ drive, wherever it already manages shared config.
 
 **Where the built reference-doc lives**: likewise, wherever `out`/
 `--out` points. `render_report()`'s `reference_doc` parameter defaults
-to the package's own bundled `inst/templates/org-reference.docx` (via
-`system.file("templates", "org-reference.docx", package = "quartifyr")`)
--- unlike everything else `styling_build_reference_docx()`/
+to `NULL`, which checks the `.qmd`'s own frontmatter and the project's
+`_quarto.yml` for an already-configured `format: {docx: {reference-doc:
+...}}` first (Quarto's own precedence) and only falls back -- with a
+`cli` notice -- to the package's own bundled
+`inst/templates/org-reference.docx` (via `system.file("templates",
+"org-reference.docx", package = "quartifyr")`) when neither sets one.
+Unlike everything else `styling_build_reference_docx()`/
 `quartifyr-styling build` produces, this repo commits that specific
 file rather than gitignoring it, precisely so the two bundled examples
 (and the Quarto-only path above) work straight out of a clone with no
@@ -301,8 +305,9 @@ examples' `smoke_test.py`, and safe to run yourself) guards against it
 drifting from `inst/python/styles/default.yaml`; rebuild it (`python3
 scripts/check_template_freshness.py`) after changing that file.
 
-For your own org's reference-doc, pass `reference_doc` explicitly rather
-than relying on the bundled default:
+For your own org's reference-doc, pass `reference_doc` explicitly (or
+set `format: {docx: {reference-doc: ...}}` in `_quarto.yml`) rather than
+relying on the bundled default:
 
 ```r
 render_report(

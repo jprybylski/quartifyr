@@ -7,7 +7,7 @@
 render_report(
   shell_qmd,
   status = c("draft", "final"),
-  reference_doc = system.file("templates", "org-reference.docx", package = "quartifyr"),
+  reference_doc = NULL,
   style = NULL,
   override = NULL,
   standard_footnotes_yaml = file.path(dirname(shell_qmd), "report",
@@ -36,10 +36,18 @@ stamp (via Quarto's \verb{-M document-status:}) and, when \code{"final"}, also
 runs \code{reportifyr::finalize_document()} to produce a \verb{report/final/}
 output alongside the \verb{report/draft/} one.}
 
-\item{reference_doc}{Path to the docx reference-template. Defaults to
-the one bundled with this package (\code{inst/templates/org-reference.docx},
-built from \code{inst/python/styles/default.yaml} -- see
-\code{styling_build_reference_docx()} to build a custom one).}
+\item{reference_doc}{Path to the docx reference-template. \code{NULL}
+(default) checks \code{shell_qmd}'s own frontmatter and the project's
+\verb{_quarto.yml} (via \code{quarto::quarto_inspect()}, so this follows Quarto's
+own frontmatter-over-project merge precedence) for an already-configured
+\code{format: {docx: {reference-doc: ...}}} and, if found, leaves it alone --
+\verb{quarto render} picks it up on its own, same as a plain \verb{quarto render}
+would. Only when neither sets one does this fall back to the template
+bundled with this package (\code{inst/templates/org-reference.docx}, built
+from \code{inst/python/styles/default.yaml}), with a one-time notice
+pointing at \code{styling_build_reference_docx()} to build a custom one
+instead. Pass an explicit path here to always use it regardless of any
+Quarto-level setting.}
 
 \item{style, override}{Optional style YAML paths -- when \code{style} is
 given, its \code{equation.font} is applied to the rendered shell's default

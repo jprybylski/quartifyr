@@ -26,10 +26,18 @@
 #'   stamp (via Quarto's `-M document-status:`) and, when `"final"`, also
 #'   runs `reportifyr::finalize_document()` to produce a `report/final/`
 #'   output alongside the `report/draft/` one.
-#' @param reference_doc Path to the docx reference-template. Defaults to
-#'   the one bundled with this package (`inst/templates/org-reference.docx`,
-#'   built from `inst/python/styles/default.yaml` -- see
-#'   `styling_build_reference_docx()` to build a custom one).
+#' @param reference_doc Path to the docx reference-template. `NULL`
+#'   (default) checks `shell_qmd`'s own frontmatter and the project's
+#'   `_quarto.yml` (via `quarto::quarto_inspect()`, so this follows Quarto's
+#'   own frontmatter-over-project merge precedence) for an already-configured
+#'   `format: {docx: {reference-doc: ...}}` and, if found, leaves it alone --
+#'   `quarto render` picks it up on its own, same as a plain `quarto render`
+#'   would. Only when neither sets one does this fall back to the template
+#'   bundled with this package (`inst/templates/org-reference.docx`, built
+#'   from `inst/python/styles/default.yaml`), with a one-time notice
+#'   pointing at `styling_build_reference_docx()` to build a custom one
+#'   instead. Pass an explicit path here to always use it regardless of any
+#'   Quarto-level setting.
 #' @param style,override Optional style YAML paths -- when `style` is
 #'   given, its `equation.font` is applied to the rendered shell's default
 #'   math font via `styling_apply_layout()` (see that function; pandoc's
@@ -83,7 +91,7 @@
 render_report <- function(
   shell_qmd,
   status = c("draft", "final"),
-  reference_doc = system.file("templates", "org-reference.docx", package = "quartifyr"),
+  reference_doc = NULL,
   style = NULL,
   override = NULL,
   standard_footnotes_yaml = file.path(dirname(shell_qmd), "report", "standard_footnotes.yaml"),
@@ -128,11 +136,43 @@ render_report <- function(
       "\nRun reportifyr::initialize_report_project(project_dir = \"", project_dir, "\") first."
     )
   }
-  if (!file.exists(reference_doc)) {
+  # reference_doc_arg is what (if anything) gets passed as `quarto render
+  # --reference-doc` below. When the caller passes reference_doc explicitly,
+  # it always wins. Otherwise, ask quarto itself (quarto::quarto_inspect(),
+  # which applies Quarto's own frontmatter-over-_quarto.yml merge precedence)
+  # whether a docx reference-doc is already configured -- if so, leave
+  # reference_doc_arg NULL and let `quarto render` pick it up on its own,
+  # same as a plain `quarto render` would (see #30: previously this
+  # function's own default silently overrode a project's existing Quarto-
+  # level reference-doc setting with the package one). Only fall back to the
+  # bundled package default, with a one-time notice, when neither is set.
+  reference_doc_arg <- reference_doc
+  if (is.null(reference_doc)) {
+    configured <- tryCatch(
+      quarto::quarto_inspect(shell_qmd)$formats$docx$pandoc$`reference-doc`,
+      error = function(e) NULL
+    )
+    if (is.character(configured) && length(configured) == 1 && nzchar(configured)) {
+      reference_doc_arg <- NULL
+    } else {
+      reference_doc_arg <- system.file("templates", "org-reference.docx", package = "quartifyr")
+      cli::cli_inform(c(
+        "i" = paste(
+          "No {.field reference-doc} set in {.path {quarto_yml}} or {.file {basename(shell_qmd)}}",
+          "-- using the quartifyr package default reference-doc."
+        ),
+        ">" = paste0(
+          "See {.help [quartifyr::styling_build_reference_docx()]",
+          "(quartifyr::styling_build_reference_docx)} to build a project-specific one."
+        )
+      ))
+    }
+  }
+  if (!is.null(reference_doc_arg) && !file.exists(reference_doc_arg)) {
     stop(
-      "reference-doc not found: ", reference_doc,
+      "reference-doc not found: ", reference_doc_arg,
       "\nBuild it first, e.g.: quartifyr::styling_build_reference_docx(",
-      "\"inst/python/styles/default.yaml\", out = \"", reference_doc, "\")"
+      "\"inst/python/styles/default.yaml\", out = \"", reference_doc_arg, "\")"
     )
   }
   if (!file.exists(standard_footnotes_yaml)) {
@@ -167,7 +207,7 @@ render_report <- function(
     args = c(
       "render", basename(shell_qmd),
       "--to", "docx",
-      "--reference-doc", reference_doc,
+      if (!is.null(reference_doc_arg)) c("--reference-doc", reference_doc_arg),
       "--output", shell_docx_name,
       "-M", paste0("document-status:", toupper(status))
     ),
