@@ -18,6 +18,12 @@
   `quartifyr_styling.layout.apply_layout()` rather than a Lua filter --
   see `inst/extensions/quartifyr/README.md`'s "Combined List of
   Figures/Tables" section for why (#54).
+* The reference-doc template now also configures a "Table of Figures"
+  style (Word's built-in style for `quarto-plus`'s own
+  `.list_of_figures`/`.list_of_tables`, previously left unstyled/
+  Word-default) to match "TOC 1" -- the style `.quartifyr_list_of_figures`/
+  `.quartifyr_list_of_tables` entries above use -- so both kinds of list
+  render identically once recalculated (#54).
 
 # quartifyr 0.3.0
 

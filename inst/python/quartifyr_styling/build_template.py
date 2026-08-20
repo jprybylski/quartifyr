@@ -128,20 +128,47 @@ def _get_or_add_style(doc: DocumentObject, name: str, style_type: WD_STYLE_TYPE,
         return style
 
 
-def _configure_toc_style(doc: DocumentObject, level: int, config: StyleConfig, page_width_in: float, margins_in: float) -> None:
-    """Create/configure the 'TOC n' style Word applies to generated ToC/LOF/LOT entries."""
-    name = f"TOC {level}"
+def _style_dot_leader_entry_style(
+    doc: DocumentObject, name: str, config: StyleConfig, page_width_in: float, margins_in: float, *, indent_in: float = 0.0
+) -> None:
+    """Create/configure a paragraph style with this reference-doc's body
+    font and a right-aligned dot-leader tab stop at the usable text width,
+    so entries read as "Heading text ..... 4" the way a native Word field
+    result does. Shared by every "list of entries with a page number on
+    the right" style this template defines -- see callers.
+    """
     style = _get_or_add_style(doc, name, WD_STYLE_TYPE.PARAGRAPH, base="Normal")
     _set_font(style, config.fonts.body, config.fonts.sizes.toc, color=config.colors.text)
-    indent_in = 0.25 * (level - 1)
     style.paragraph_format.left_indent = Inches(indent_in)
     style.paragraph_format.space_after = Pt(4)
 
-    # Right-aligned dot-leader tab stop at the text-area width, so entries
-    # read as "Heading text ..... 4" the way a native Word ToC does.
     usable_width_in = page_width_in - (2 * margins_in)
     tab_stops = style.paragraph_format.tab_stops
     tab_stops.add_tab_stop(Inches(usable_width_in), WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.DOTS)
+
+
+def _configure_toc_style(doc: DocumentObject, level: int, config: StyleConfig, page_width_in: float, margins_in: float) -> None:
+    """Create/configure the 'TOC n' style Word applies to generated ToC entries."""
+    _style_dot_leader_entry_style(doc, f"TOC {level}", config, page_width_in, margins_in, indent_in=0.25 * (level - 1))
+
+
+def _style_table_of_figures(doc: DocumentObject, config: StyleConfig, page_width_in: float, margins_in: float) -> None:
+    """Create/configure the 'Table of Figures' style Word applies to
+    quarto-plus's own native `.list_of_figures`/`.list_of_tables` divs
+    (its `table_of_contents.lua`, a `TOC \\c "Figure"`/`TOC \\c "Table"`
+    field) -- a distinct built-in Word style ID from "TOC 1"-"TOC 9"
+    (those are for heading-based `TOC \\o` fields only), so it needs its
+    own definition here for the same reason "TOC 1" does: Word treats it
+    as a reserved built-in style and renders *something* even undefined
+    (an unbranded default look, not this reference-doc's own font), so it
+    has to be defined explicitly to avoid an unstyled-looking mismatch
+    against quartifyr's own `.quartifyr_list_of_figures`/
+    `.quartifyr_list_of_tables` (`caption_lists.lua`/`_caption_lists.py`),
+    which deliberately reuses "TOC 1" itself for its hand-built entries so
+    the two ever look the same. Same look as "TOC 1" (no per-level
+    indent, since captions have no nesting).
+    """
+    _style_dot_leader_entry_style(doc, "Table of Figures", config, page_width_in, margins_in)
 
 
 def _style_table_grid(doc: DocumentObject, config: StyleConfig) -> None:
@@ -458,6 +485,7 @@ def build_reference_docx(config: StyleConfig, output_path: str | Path) -> Path:
 
     for level in (1, 2, 3):
         _configure_toc_style(doc, level, config, page_width_in, config.page.margins_in.left)
+    _style_table_of_figures(doc, config, page_width_in, config.page.margins_in.left)
 
     _style_table_grid(doc, config)
     _style_synopsis(doc, config)

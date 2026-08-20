@@ -27,9 +27,11 @@ IMG_DIR = REPO_ROOT / "man" / "figures"
 JOBS = [
     ("examples/demo-report/report/final/report-final.docx", 0, "demo-report-title.png"),
     ("examples/demo-report/report/final/report-final.docx", 2, "demo-report-synopsis.png"),
-    ("examples/demo-report/report/final/report-final.docx", 8, "demo-report-body.png"),
-    ("examples/demo-report/report/final/report-final.docx", 12, "demo-report-appendix.png"),
-    ("examples/demo-report/report/final/report-final.docx", 13, "demo-report-analysis-code.png"),
+    ("examples/demo-report/report/final/report-final.docx", 6, "demo-report-list-of-figures.png"),
+    ("examples/demo-report/report/final/report-final.docx", 7, "demo-report-list-of-tables.png"),
+    ("examples/demo-report/report/final/report-final.docx", 10, "demo-report-body.png"),
+    ("examples/demo-report/report/final/report-final.docx", 14, "demo-report-appendix.png"),
+    ("examples/demo-report/report/final/report-final.docx", 15, "demo-report-analysis-code.png"),
     ("examples/memo-example/report/final/report-final.docx", 0, "memo-example-cover.png"),
     ("examples/memo-example/report/final/report-final.docx", 1, "memo-example-body.png"),
 ]

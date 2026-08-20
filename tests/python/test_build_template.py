@@ -43,7 +43,7 @@ def test_no_theme_font_references_survive_on_styled_elements(tmp_path):
     # Arial where Calibri isn't installed) instead of Times New Roman.
     _, doc = _build(tmp_path)
     theme_attrs = (qn("w:asciiTheme"), qn("w:hAnsiTheme"), qn("w:cstheme"), qn("w:eastAsiaTheme"))
-    for name in ["Normal", "Title", "Subtitle", "Heading 1", "Heading 4", "Caption", "TOC 1", "Footer"]:
+    for name in ["Normal", "Title", "Subtitle", "Heading 1", "Heading 4", "Caption", "TOC 1", "Table of Figures", "Footer"]:
         rfonts = doc.styles[name].element.find(f".//{W_NS}rFonts")
         assert rfonts is not None, name
         for attr in theme_attrs:
@@ -139,6 +139,29 @@ def test_toc_styles_have_dot_leader_tab_stop(tmp_path):
         tab_stops = style.paragraph_format.tab_stops
         assert len(tab_stops) == 1
         assert str(tab_stops[0].leader).endswith("DOTS (4)") or "DOTS" in str(tab_stops[0].leader)
+
+
+def test_table_of_figures_style_matches_toc_1(tmp_path):
+    # quarto-plus's own .list_of_figures/.list_of_tables (a native
+    # `TOC \c "Figure"`/`TOC \c "Table"` field) render each entry in
+    # Word's built-in "Table of Figures" style, a distinct style ID from
+    # "TOC 1"-"TOC 9" -- must be explicitly configured here (same reason
+    # as "TOC 1") so it doesn't fall back to an unbranded default, and
+    # should look identical to "TOC 1" so it matches
+    # `.quartifyr_list_of_figures`/`.quartifyr_list_of_tables`
+    # (`caption_lists.lua`), which reuses "TOC 1" itself.
+    _, doc = _build(tmp_path)
+    tof_style = doc.styles["Table of Figures"]
+    toc1_style = doc.styles["TOC 1"]
+
+    tab_stops = tof_style.paragraph_format.tab_stops
+    assert len(tab_stops) == 1
+    assert "DOTS" in str(tab_stops[0].leader)
+    assert tab_stops[0].position == toc1_style.paragraph_format.tab_stops[0].position
+
+    assert tof_style.font.name == toc1_style.font.name
+    assert tof_style.font.size == toc1_style.font.size
+    assert tof_style.paragraph_format.left_indent == toc1_style.paragraph_format.left_indent
 
 
 def test_table_grid_has_borders_and_header_shading(tmp_path):
