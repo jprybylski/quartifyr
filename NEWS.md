@@ -4,6 +4,18 @@
 
 ## New features
 
+* New `validate_header()` checks a shell `.qmd`'s front matter (and its
+  project's `_quarto.yml`) against every field this extension's Lua
+  filters and `apply-layout` step actually read, and prints a
+  cli-formatted report: what's provided, what's missing (required or
+  merely recommended), what else is available and what it does, and any
+  conflicts (`title:`/`memo:` both set, an unresolvable
+  `header-format:` placeholder, an unrecognized `crossref-hyperlinks:`
+  value, a `logo:`/`bibliography:` path that doesn't exist, ...). New
+  `header_helper()` interactively builds a front-matter block from the
+  same field catalog and copies (or prints) the result, ready to paste
+  into a new `.qmd`. Both are driven by one shared field registry, so a
+  field added to the extension only needs documenting in one place (#31).
 * New `styling_example_template()`/`styling_example_style()` pull the
   bundled reference-doc/default style YAML into a project (the latter
   also returning its parsed content as a list, ready to edit), and new
