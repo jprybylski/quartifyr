@@ -144,6 +144,17 @@ opt-in, post-reportifyr step; see the next command and
 `../extensions/quartifyr/README.md`'s "Figures, tables, and
 cross-references" section.
 
+Also fills in a combined List of Figures/List of Tables at any
+`.quartifyr_list_of_figures`/`.quartifyr_list_of_tables` div, spanning
+both `quarto-plus`'s own continuous captions and this extension's six
+scoped ones, in true document order -- unconditional, unlike
+`resolve-same-page-crossrefs` above, since every caption's bookmark/`SEQ`
+field is already real by this point (no pass-2 dependency); a no-op if a
+`.qmd` uses neither div. See `../extensions/quartifyr/README.md`'s
+"Combined List of Figures/Tables" section and `_caption_lists.py`'s
+module docstring for why this has to be a post-render step here rather
+than a Lua filter.
+
 ```bash
 quartifyr-styling resolve-same-page-crossrefs --docx report/draft/report-draft.docx
 ```

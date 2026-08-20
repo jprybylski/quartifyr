@@ -58,6 +58,22 @@ def match_ref_field_run_group(runs: list, i: int) -> tuple[str, str] | None:
     return match.group(1), (cached_run.text if cached_run is not None and cached_run.text else "")
 
 
+def find_bookmark_paragraph(document, name: str):
+    """Returns the ``<w:p>`` containing a ``w:bookmarkStart`` named ``name``,
+    or ``None``. Shared by ``layout.py`` (``quartifyr-front-matter-start``/
+    ``quartifyr-body-start``) and ``_caption_lists.py``
+    (``quartifyr-list-of-figures``/``quartifyr-list-of-tables``) -- every
+    marker bookmark this project's Lua filters leave for a later
+    post-render step to find again.
+    """
+    body = document.element.body
+    for p in body.iter(qn("w:p")):
+        for bookmark in p.iter(qn("w:bookmarkStart")):
+            if bookmark.get(qn("w:name")) == name:
+                return p
+    return None
+
+
 def strip_hyperlink_switch(instr_text_element) -> bool:
     """If ``instr_text_element`` is a ``REF <bookmark> \\h`` field's
     instruction text, removes the ``\\h`` switch in place and returns

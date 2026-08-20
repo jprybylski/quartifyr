@@ -76,18 +76,19 @@
 -- or enforced -- placement is the author's responsibility, same as
 -- `appendix_crossref`'s bookmark target today.
 --
--- KNOWN LIMITATION: none of the scoped captions show up in a
--- `.list_of_figures`/`.list_of_tables` div (quarto-plus's
+-- LIST OF FIGURES/TABLES: none of the scoped captions show up in
+-- quarto-plus's own `.list_of_figures`/`.list_of_tables` div (its
 -- `table_of_contents.lua`) -- that's built from Word's native
 -- `TOC \c "Figure"`/`TOC \c "Table"` field switch, which only collects
 -- entries from the literal `SEQ Figure`/`SEQ Table` sequences
 -- quarto-plus's own fig_caption/tbl_caption use, not the separate
--- `SEQ AppendixFigure`/`SEQ SectionFigure`/etc. sequences here. A
--- document mixing scoped and continuous captions would need two lists,
--- or to accept scoped captions being absent from list_of_figures/tables;
--- documented rather than worked around, since emitting a second parallel
--- `SEQ Figure`/`SEQ Table` field per scoped caption just for LOF/LOT
--- membership would mean two competing counters sharing one field name.
+-- `SEQ AppendixFigure`/`SEQ SectionFigure`/etc. sequences here -- and
+-- can't, short of running two competing counters under one shared field
+-- name. `caption_lists.lua`'s own `.quartifyr_list_of_figures`/
+-- `.quartifyr_list_of_tables` divs are the fix: a combined, hand-built
+-- list (not a native TOC field) spanning both these six scoped shortcodes
+-- and quarto-plus's own continuous ones, in true document order. See that
+-- file's header comment for how.
 
 local utils = require("quartifyr_utils")
 

@@ -629,20 +629,62 @@ shortcodes' bookmarks (auto-detecting figure vs. table the same way
 prefix) via the same `REF ... \h` mechanism as `crossref`/
 `appendix_crossref`, so `crossref-hyperlinks:` (above) applies to it too.
 
-Known limitation: none of these six show up in a `.list_of_figures`/
-`.list_of_tables` div (`quarto-plus`'s `table_of_contents.lua`) -- that's
-built from Word's native `TOC \c "Figure"`/`TOC \c "Table"` switch, which
-only collects entries from the literal `SEQ Figure`/`SEQ Table`
-sequences `fig_caption`/`tbl_caption` use, not the separate per-scope SEQ
-names here (`SEQ AppendixFigure`, `SEQ SectionFigure`, ...). A document
-mixing scoped and continuous captions needs to accept scoped ones being
-absent from `list_of_figures`/`list_of_tables`.
+None of these six show up in `quarto-plus`'s own `.list_of_figures`/
+`.list_of_tables` div (its `table_of_contents.lua`) -- that's built from
+Word's native `TOC \c "Figure"`/`TOC \c "Table"` switch, which only
+collects entries from the literal `SEQ Figure`/`SEQ Table` sequences
+`fig_caption`/`tbl_caption` use, not the separate per-scope SEQ names
+here (`SEQ AppendixFigure`, `SEQ SectionFigure`, ...). See "Combined List
+of Figures/Tables" below for a `.list_of_figures`/`.list_of_tables`
+alternative that does include them.
 
 Gotcha: writing a shortcode literally in backticks as documentation text
 (e.g. `` `{{< section_break >}}` `` inside a sentence explaining what it
 does) still gets expanded and executed -- Quarto's shortcode scanner
 doesn't skip inline code spans. Describe a shortcode in prose without the
 literal `{{< ... >}}` syntax if you don't mean to invoke it again.
+
+### Combined List of Figures/Tables
+
+```
+::: .quartifyr_list_of_figures
+:::
+
+::: .quartifyr_list_of_tables
+:::
+```
+
+An alternative to `quarto-plus`'s own `.list_of_figures`/`.list_of_tables`
+divs (above) that includes every caption in the document -- both the
+continuous `fig_caption`/`tbl_caption` shortcodes and all six scoped ones
+-- listed in true document order regardless of how a project mixes them.
+Additive, not a replacement: `quarto-plus`'s own divs still work exactly
+as before (continuous captions only), so a project that never uses a
+scoped caption sees no difference from adding these.
+
+Each entry's figure/table number and page number are live `REF`/`PAGEREF`
+fields back to that caption's own bookmark -- the same mechanism
+`crossref`/`appendix_crossref`/`scoped_crossref` already use -- so
+reordering, adding, or removing captions renumbers and repaginates the
+list correctly on the next field recalculation, just like every other
+field this extension emits. Unlike `.list_of_figures`/`.list_of_tables`
+above (a native Word `TOC` field Word itself builds and styles), this is
+a plain hand-built list, styled with the reference-doc's existing "TOC 1"
+paragraph style (dot-leader tab stop) and "Hyperlink" character style,
+that quartifyr constructs itself -- there's no native `TOC` field switch
+that can merge multiple `SEQ` families into one document-ordered list
+(see `appendix.lua`'s file-header comment for why).
+
+This can't run as a Lua filter the way the rest of this extension does:
+Quarto resolves every caption shortcode in a pass that runs after all Lua
+filters, so no filter can see the whole document's caption set. Instead,
+`caption_lists.lua` only marks where each div is; `quartifyr_styling`'s
+`apply-layout` step (part of `render_report()`'s standard pipeline, not a
+separate opt-in step -- unlike `resolve-same-page-crossrefs`, this
+doesn't need reportifyr's pass 2 first) fills it in once Quarto's full
+render, captions included, is done. See
+`../../python/quartifyr_styling/_caption_lists.py`'s module docstring for
+the full story.
 
 ### Numbered sections
 

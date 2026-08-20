@@ -503,11 +503,16 @@ def main() -> int:
     # *target* bookmark actually survives reportifyr's pass-2 fill intact
     # is checked separately below, and known-flaky -- see that check's
     # comment for why this doesn't also assert it here.
+    #
+    # Checked per-<w:hyperlink> (not a bare document-wide rStyle count,
+    # which the combined List of Figures/Tables below also uses -- see its
+    # own checks further down) so this only asserts on the citation
+    # hyperlinks specifically.
+    ref_hyperlinks = re.findall(r'<w:hyperlink w:anchor="ref-[^"]+">(.*?)</w:hyperlink>', document_xml, re.DOTALL)
     checks.append(
         (
             "both in-text citations are real hyperlinks to their bibliography entry",
-            document_xml.count('<w:hyperlink w:anchor="ref-') == 2
-            and document_xml.count('<w:rStyle w:val="Hyperlink"') == 2,
+            len(ref_hyperlinks) == 2 and all('<w:rStyle w:val="Hyperlink"' in h for h in ref_hyperlinks),
         )
     )
 
@@ -543,6 +548,39 @@ def main() -> int:
             "both cross-references are hyperlinked (default crossref-hyperlinks: true)",
             any(t.strip() == "REF TblPkSummary \\h" for t in instr_texts)
             and any(t.strip() == "REF StatisticalMethods \\h" for t in instr_texts),
+        )
+    )
+
+    # Combined List of Figures/Tables (issue #54): .quartifyr_list_of_figures/
+    # .quartifyr_list_of_tables in report.qmd should list BOTH the
+    # continuous Figure 1/Table 1/Table 2 captions AND every appendix-/
+    # section-/subsection-scoped one, in true document order -- unlike the
+    # plain quarto-plus .list_of_figures/.list_of_tables divs above
+    # (checked via seq_figure_count == 1 earlier), which only ever see the
+    # continuous ones. Order here doubles as proof of correct
+    # document-order interleaving, not just correct membership.
+    quartifyr_list_hyperlinks = re.findall(
+        r'<w:hyperlink w:anchor="([^"]+)">(.*?)</w:hyperlink>', document_xml, re.DOTALL
+    )
+    checks.append(
+        (
+            "combined List of Figures has all 4 figures (continuous + appendix/section/subsection-scoped), in document order",
+            [a for a, _ in quartifyr_list_hyperlinks if a in ("FigConcTime", "FigAppendixExample", "FigSectionExample", "FigSubsectionExample")]
+            == ["FigConcTime", "FigAppendixExample", "FigSectionExample", "FigSubsectionExample"],
+        )
+    )
+    checks.append(
+        (
+            "combined List of Tables has all 3 tables (continuous + appendix-scoped), in document order",
+            [a for a, _ in quartifyr_list_hyperlinks if a in ("TblPkSummary", "TblDemographics", "TblAppendixExample")]
+            == ["TblPkSummary", "TblDemographics", "TblAppendixExample"],
+        )
+    )
+    checks.append(
+        (
+            "combined List entries use REF+PAGEREF fields styled with TOC1/Hyperlink, not the native TOC field quarto-plus's own list uses",
+            document_xml.count('<w:pStyle w:val="TOC1"/>') == 7  # 4 figures + 3 tables
+            and any('REF FigConcTime \\h' in b and 'PAGEREF FigConcTime \\h' in b for a, b in quartifyr_list_hyperlinks if a == "FigConcTime"),
         )
     )
 

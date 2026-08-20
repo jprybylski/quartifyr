@@ -52,3 +52,8 @@ contributes:
     - signature_page.lua
     - memo_cover.lua
     - title_page.lua
+    # caption_lists.lua isn't bound by the ordering constraints above --
+    # see its own file-header comment -- but is listed last anyway so it
+    # walks the truly final document, including whatever front matter the
+    # other filters themselves prepend.
+    - caption_lists.lua

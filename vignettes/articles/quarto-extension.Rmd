@@ -287,8 +287,25 @@ since a `#`/`##` heading isn't a shortcode, each needs an explicit
 `{{< section_break >}}`/`{{< subsection_break >}}` placed next to it to
 mark where numbering restarts. `scoped_crossref` resolves any of these
 six shortcodes' bookmarks. See the extension's own README for the full
-shortcode list and known limitations (not shown in a `.list_of_figures`/
-`.list_of_tables` div).
+shortcode list.
+
+None of these six show up in `fig_caption`/`tbl_caption`'s own
+`.list_of_figures`/`.list_of_tables` div (above). For a combined list
+that does include them -- alongside the continuous captions, in true
+document order -- use `.quartifyr_list_of_figures`/
+`.quartifyr_list_of_tables` instead:
+
+```
+::: .quartifyr_list_of_figures
+:::
+
+::: .quartifyr_list_of_tables
+:::
+```
+
+Additive, not a replacement -- `.list_of_figures`/`.list_of_tables`
+themselves keep working unchanged. See the extension's own README's
+"Combined List of Figures/Tables" section for how it's built.
 
 ## Page header/footer and page numbering
 

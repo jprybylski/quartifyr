@@ -119,6 +119,33 @@ List of Tables
 
 {{< pagebreak >}}
 
+<!-- Demonstrates issue #54: a combined List of Figures/Tables spanning
+     BOTH the continuous fig_caption/tbl_caption above (Figure 1/Table 1/
+     Table 2) AND every appendix-/section-/subsection-scoped caption
+     further down (Figure A1/Table A1/Figure 3.1/Figure 3.2.1), in true
+     document order -- unlike the .list_of_figures/.list_of_tables divs
+     above (quarto-plus's own, continuous-only), which only ever show
+     Figure 1/Table 1/Table 2. See caption_lists.lua and
+     inst/extensions/quartifyr/README.md's "Combined List of Figures/
+     Tables" section. -->
+::: {custom-style="Heading 1"}
+List of Figures (All)
+:::
+
+::: .quartifyr_list_of_figures
+:::
+
+{{< pagebreak >}}
+
+::: {custom-style="Heading 1"}
+List of Tables (All)
+:::
+
+::: .quartifyr_list_of_tables
+:::
+
+{{< pagebreak >}}
+
 ::: {custom-style="Heading 1"}
 Abbreviations
 :::

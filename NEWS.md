@@ -38,8 +38,19 @@
   resolves any of the six. Additive: nothing here changes `quarto-plus`'s
   own shortcodes, and an author can mix scoped and continuous captions
   freely. See `inst/extensions/quartifyr/README.md`'s "Scoped
-  figure/table numbering" section, including its known List of
-  Figures/Tables limitation (#26).
+  figure/table numbering" section (#26).
+* New `.quartifyr_list_of_figures`/`.quartifyr_list_of_tables` divs build
+  a combined List of Figures/List of Tables spanning both `quarto-plus`'s
+  own continuous `fig_caption`/`tbl_caption` and all six of this
+  extension's scoped caption shortcodes (above), in true document order
+  -- unlike `quarto-plus`'s own `.list_of_figures`/`.list_of_tables`
+  (which stay as-is, continuous-only, and keep working unchanged), a
+  native Word `TOC` field switch can't merge multiple `SEQ` families into
+  one document-ordered list. A hand-built list, with live `REF`/`PAGEREF`
+  fields per entry, built by a new post-render step in
+  `quartifyr_styling.layout.apply_layout()` rather than a Lua filter --
+  see `inst/extensions/quartifyr/README.md`'s "Combined List of
+  Figures/Tables" section for why (#54).
 * Style YAML: new `code:` section (`font_size`, `background_color`,
   `padding_pt`) styles pandoc's `Source Code`/`Verbatim Char` docx styles
   for fenced code blocks/inline code, using `fonts.monospace` (previously
