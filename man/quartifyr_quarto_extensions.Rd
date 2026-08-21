@@ -27,3 +27,6 @@ itself. Doesn't include quartifyr's own extension: that one is
 installed and verified by \code{\link[=install_quartifyr_extension]{install_quartifyr_extension()}} directly,
 not \code{quarto::quarto_add_extension()}.
 }
+\examples{
+quartifyr_quarto_extensions
+}

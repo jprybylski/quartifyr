@@ -31,6 +31,21 @@
 # changelog.md: scratch file sync-release-metadata.R writes just before
 # R CMD build runs in the same release.yaml job; not meant to ship.
 ^changelog\.md$
+# LICENSE: DESCRIPTION's License field (GPL (>= 3)) doesn't reference the
+# file form, so R CMD check flags it as unmentioned (issue #62). Excluded
+# rather than switching to "GPL-3 + file LICENSE", which isn't what was
+# asked and would change the License field's meaning.
+^LICENSE$
+# man/figures/*.gif and the two examples' downloadable final .docx files:
+# pkgdown-site-only assets demo GIFs and real rendered output for download,
+# see scripts/render_doc_screenshots.py, that no .Rd's figure tag
+# references, confirmed by grep, and that made up most of this package's
+# ~4.8MB tarball, issue #62, not needed by the installed R package
+# itself. man/figures/*.png stays, small, and README.md's logo.png is
+# GitHub/pkgdown-rendered, not roxygen-referenced, but harmless to keep.
+^man/figures/.*\.gif$
+^man/figures/demo-report-final\.docx$
+^man/figures/memo-example-final\.docx$
 ^\.Rhistory$
 ^\.claude$
 ^\.pytest_cache$

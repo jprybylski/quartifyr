@@ -22,6 +22,12 @@
 #' @param force Overwrite an existing `_extensions/quartifyr/` in `path`.
 #'   Default `FALSE` (errors if one already exists and differs).
 #' @return The installed extension path (invisibly).
+#' @examples
+#' \dontrun{
+#' # Requires the quarto CLI on PATH (this function's own follow-up
+#' # check_quarto_extensions() call shells out to it).
+#' install_quartifyr_extension("path/to/project")
+#' }
 #' @export
 install_quartifyr_extension <- function(path = ".", force = FALSE) {
   source_dir <- system.file("extensions", "quartifyr", package = "quartifyr")

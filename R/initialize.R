@@ -8,6 +8,20 @@
 #' `render_report()` itself, since re-provisioning on every render would be
 #' wasteful.
 #'
+#' When `from_dir`/`from_repo` is given (issue #23), also scaffolds
+#' `directory`'s `_quarto.yml`/style YAML/shell `.qmd` from a template
+#' source instead of leaving `directory` empty: either a local directory
+#' (`from_dir`) or a git repo (`from_repo`), fetched and materialized the
+#' same way `../deckifyr`'s `initialize_deck_project()` does for its own
+#' `design.yaml`/`layouts.yaml`/`presentation.yaml`. A template source is
+#' either "flat" (a directory with its own `_quarto.yml` and exactly one
+#' `.qmd` file at its root -- its `_quarto.yml`/`style.yaml`, if present,
+#' are duplicated as-is, paired with a freshly generated, minimal shell
+#' `.qmd`) or "typed" (a directory with a `templates/` subdirectory, each
+#' holding its own named flat template -- select one with `type`; its
+#' shell `.qmd` is copied verbatim as a real minimal starter, not
+#' emptied).
+#'
 #' @section A stale-venv gotcha in existing reportifyr projects:
 #' On a project already initialized by reportifyr *before* it depended on
 #' pyro (reportifyr < 0.4.0), this can fail with an opaque error from
@@ -22,9 +36,43 @@
 #'
 #' @param directory Target project directory. Defaults to the current
 #'   directory.
+#' @param from_dir Use a local directory as the template source instead
+#'   of leaving `directory` empty. Mutually exclusive with `from_repo`.
+#' @param from_repo Fetch a git repo as the template source:
+#'   `"[host/]owner/repo[/subdir][@ref]"` shorthand (host defaults to
+#'   github.com -- an explicit host is how GitHub Enterprise is
+#'   supported) or a full URL. Requires `git` on PATH. Mutually
+#'   exclusive with `from_dir`.
+#' @param ref Branch/tag/SHA to check out. Only valid with `from_repo`;
+#'   overrides any `@ref` embedded in its shorthand.
+#' @param subdir Subdirectory of the resolved repo to use as the
+#'   template source. Only valid with `from_repo`; overrides any
+#'   subdirectory embedded in its shorthand.
+#' @param type Template name under a source's `templates/<name>/`
+#'   structure. Only valid alongside `from_dir`/`from_repo`.
+#' @param force Overwrite existing `_quarto.yml`/style YAML/shell `.qmd`
+#'   files in `directory`. Only meaningful alongside `from_dir`/`from_repo`.
+#'   Default `FALSE`.
 #' @return Invisibly, the result of `pyro::initialize_python()`.
+#' @examples
+#' \dontrun{
+#' # Provision the Python environment only (this mutates the calling
+#' # project's pyproject.toml and provisions a Python/uv environment --
+#' # run it somewhere disposable, not the current project).
+#' project_dir <- file.path(tempdir(), "my-report")
+#' initialize_quartifyr_project(project_dir)
+#'
+#' # Also scaffold _quarto.yml/style.yaml/report.qmd from an org-standard
+#' # template repo, pinned to a tag, selecting the "csr" template type.
+#' initialize_quartifyr_project(
+#'   project_dir,
+#'   from_repo = "acme-org/quartifyr-templates@v2",
+#'   type = "csr"
+#' )
+#' }
 #' @export
-initialize_quartifyr_project <- function(directory = ".") {
+initialize_quartifyr_project <- function(directory = ".", from_dir = NULL, from_repo = NULL,
+                                          ref = NULL, subdir = NULL, type = NULL, force = FALSE) {
   # Pass venv_dir/pyproject_dir explicitly rather than relying on
   # pyro::get_proj_dir()'s cwd-based default (`getOption("venv_dir") %||%
   # here::here()`) -- here::here() caches the first root it resolves in an
@@ -40,7 +88,7 @@ initialize_quartifyr_project <- function(directory = ".") {
     pyproject_dir = directory
   )
   .ensure_default_groups_all(file.path(directory, "pyproject.toml"))
-  invisible(tryCatch(
+  python_result <- tryCatch(
     pyro::initialize_python(
       venv_dir = directory,
       pyproject_dir = directory,
@@ -67,7 +115,32 @@ initialize_quartifyr_project <- function(directory = ".") {
         parent = e
       )
     }
-  ))
+  )
+
+  if (!is.null(from_dir) || !is.null(from_repo)) {
+    init_args <- c("init", directory)
+    if (!is.null(from_dir)) {
+      init_args <- c(init_args, "--from-dir", from_dir)
+    }
+    if (!is.null(from_repo)) {
+      init_args <- c(init_args, "--from-repo", from_repo)
+    }
+    if (!is.null(ref)) {
+      init_args <- c(init_args, "--ref", ref)
+    }
+    if (!is.null(subdir)) {
+      init_args <- c(init_args, "--subdir", subdir)
+    }
+    if (!is.null(type)) {
+      init_args <- c(init_args, "--type", type)
+    }
+    if (isTRUE(force)) {
+      init_args <- c(init_args, "--force")
+    }
+    withr::with_dir(directory, .run_quartifyr_styling_cli(init_args))
+  }
+
+  invisible(python_result)
 }
 
 #' Pre-seed a minimal pyproject.toml before pyro can seed it incorrectly

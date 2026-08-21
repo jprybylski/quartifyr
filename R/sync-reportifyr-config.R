@@ -21,6 +21,12 @@
 #' @param yes Skip the confirmation requirement and write directly.
 #' @return `TRUE` if `config_yaml` was changed, `FALSE` if it was already in
 #'   sync (invisibly).
+#' @examples
+#' \dontrun{
+#' # Requires a provisioned quartifyr Python environment and an existing
+#' # reportifyr report/config.yaml (see reportifyr::initialize_report_project()).
+#' styling_sync_reportifyr_config("style.yaml", config_yaml = "report/config.yaml", yes = TRUE)
+#' }
 #' @export
 styling_sync_reportifyr_config <- function(style, override = NULL, config_yaml = "report/config.yaml", yes = FALSE) {
   args <- c("sync-reportifyr-config", "--style", style)

@@ -26,7 +26,15 @@ style YAML instead.}
 The copied style YAML, parsed into a nested list.
 }
 \description{
-A convenience over \code{file.copy(system.file("python", "styles", "default.yaml", package = "quartifyr"), ...)} (issue #27) that also
-returns the copy's parsed content as an R list, ready to edit in place
-and hand to \code{\link[=styling_save_overrides]{styling_save_overrides()}}.
+A convenience over \code{file.copy(system.file("python", "styles", "default.yaml", package = "quartifyr"), ...)} that also returns the
+copy's parsed content as an R list, ready to edit in place and hand to
+\code{\link[=styling_save_overrides]{styling_save_overrides()}}.
+}
+\examples{
+\dontrun{
+# Requires a provisioned quartifyr Python environment (see
+# initialize_quartifyr_project()).
+style <- styling_example_style("path/to/project", file = "style.yaml")
+style$page$margins_in$top <- 1.25
+}
 }

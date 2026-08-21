@@ -18,3 +18,10 @@ The output path (invisibly).
 Delegates to \verb{quartifyr-styling abbrevs} in the bundled Python engine, for
 \code{quarto-plus}'s \code{terms_and_abbreviations.lua}.
 }
+\examples{
+\dontrun{
+# Requires a provisioned quartifyr Python environment (see
+# initialize_quartifyr_project()).
+styling_build_abbreviations_tex("report/standard_footnotes.yaml", out = "abbreviations.tex")
+}
+}

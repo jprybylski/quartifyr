@@ -87,6 +87,14 @@
 #' the end of the whole document). Put at least one line of real content (a
 #' sentence, a footnote lead-in, anything) after the last magic string in
 #' each section to avoid this -- confirmed via a real end-to-end render.
+#' @examples
+#' \dontrun{
+#' # Requires Quarto, a reportifyr-initialized project, and a provisioned
+#' # quartifyr Python environment (see initialize_quartifyr_project()) --
+#' # not something to run against arbitrary setup/resource usage here.
+#' render_report("path/to/project/report.qmd", status = "draft")
+#' render_report("path/to/project/report.qmd", status = "final")
+#' }
 #' @export
 render_report <- function(
   shell_qmd,

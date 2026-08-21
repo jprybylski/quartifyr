@@ -1,5 +1,42 @@
 # quartifyr
 
+# quartifyr (development version)
+
+## New features
+
+* `initialize_quartifyr_project()` can now scaffold a new project's
+  `_quarto.yml`/style YAML/shell `.qmd` from a template source instead of
+  leaving the directory empty (issue #23): `from_dir`/`from_repo` (with
+  `ref`/`subdir`/`type`/`force`) pull from a local directory or a git repo
+  (`"[host/]owner/repo[/subdir][@ref]"` shorthand, or a full URL),
+  mirroring `../deckifyr`'s identical `initialize_deck_project()` template
+  mechanism (issue #34 there). New `quartifyr-styling init` CLI
+  subcommand backs this.
+* New `quartifyr-styling skills [DIRECTORY]` / `styling_export_skills()`
+  (issue #57): exports two bundled Claude Skills-format `SKILL.md` files
+  (`quartifyr-style-config`, `quartifyr-shell-authoring`) to a directory of
+  your choice, for use with Claude Code or any other coding agent that
+  reads `SKILL.md` files.
+
+## Documentation
+
+* Removed the awkward "(All)" wording from the demo report's combined List
+  of Figures/List of Tables headings and docs-site screenshots/alt text,
+  and added a `section_fig_caption`/`subsection_fig_caption` code sample
+  to the "Scoped figure/table numbering" article section (issue #59).
+* Removed stray GitHub issue-number references from roxygen documentation
+  (issue #60).
+* Added `@examples` to every exported R function/data object that was
+  missing one (issue #61).
+
+## Bug fixes
+
+* Excluded `LICENSE` and the large `man/figures/` demo GIFs/downloadable
+  `.docx` files (pkgdown-site-only assets, not needed by the installed
+  package) from the built package tarball, fixing an "unmentioned
+  DESCRIPTION" `R CMD check` NOTE and shrinking the tarball from ~4.8MB to
+  ~2.2MB (issue #62).
+
 # quartifyr 0.3.1
 
 ## New features

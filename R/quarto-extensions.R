@@ -18,6 +18,8 @@
 #'   \item{required}{`TRUE` if a render is expected to fail (or silently misbehave) without it; `FALSE` if it's merely recommended.}
 #'   \item{reason}{One-line explanation of what quartifyr uses it for, shown in [check_quarto_extensions()]'s diagnostic messages.}
 #' }
+#' @examples
+#' quartifyr_quarto_extensions
 #' @export
 quartifyr_quarto_extensions <- data.frame(
   id = c("A2-ai/quarto-plus"),
@@ -85,6 +87,10 @@ quartifyr_quarto_extensions <- data.frame(
 #'   of this argument.
 #' @return `extensions` with an added logical `installed` column
 #'   (invisibly).
+#' @examples
+#' \dontrun{
+#' check_quarto_extensions("path/to/project")
+#' }
 #' @export
 check_quarto_extensions <- function(path = ".", extensions = quartifyr_quarto_extensions, error = TRUE) {
   installed <- tryCatch(

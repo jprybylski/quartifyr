@@ -21,3 +21,10 @@ runs against the same document have produced three different outcomes
 (hang, silent no-op, success), reproduced both sandboxed and in a plain
 terminal. Don't treat a clean return as proof it worked.
 }
+\examples{
+\dontrun{
+# Requires a provisioned quartifyr Python environment and LibreOffice
+# (soffice) on PATH -- experimental and known-flaky, see above.
+styling_recalculate_fields("report/final/report-final.docx")
+}
+}

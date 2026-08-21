@@ -1,7 +1,7 @@
 #' Save a (possibly edited) style list as an override YAML
 #'
-#' Complements [styling_example_style()] (issue #27): edit its returned
-#' list in place, then save just what changed back out as an override
+#' Complements [styling_example_style()]: edit its returned list in
+#' place, then save just what changed back out as an override
 #' YAML, ready to pass as `override`/`--override` to
 #' [styling_build_reference_docx()] or any other `styling_*()` function
 #' that takes one.
@@ -19,6 +19,14 @@
 #'   worth overriding if `style` didn't originate from
 #'   [styling_example_style()]'s default `base` either.
 #' @return The saved content, as a nested list (invisibly).
+#' @examples
+#' \dontrun{
+#' # Requires a provisioned quartifyr Python environment (see
+#' # initialize_quartifyr_project()).
+#' style <- styling_example_style("path/to/project")
+#' style$page$margins_in$top <- 1.25
+#' styling_save_overrides(style, file = "overrides.yaml")
+#' }
 #' @export
 styling_save_overrides <- function(style, file = "overrides.yaml", overwrite = FALSE, deconvolute = TRUE,
                                     base = system.file("python", "styles", "default.yaml", package = "quartifyr")) {

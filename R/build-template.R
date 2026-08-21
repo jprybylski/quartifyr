@@ -7,6 +7,13 @@
 #'   `style`. `NULL` (default) to skip.
 #' @param out Output docx path.
 #' @return The output docx path (invisibly).
+#' @examples
+#' \dontrun{
+#' # Requires a provisioned quartifyr Python environment (see
+#' # initialize_quartifyr_project()).
+#' style <- system.file("python", "styles", "default.yaml", package = "quartifyr")
+#' styling_build_reference_docx(style, out = "templates/org-reference.docx")
+#' }
 #' @export
 styling_build_reference_docx <- function(style, override = NULL, out = "templates/org-reference.docx") {
   args <- c("build", "--style", style)
