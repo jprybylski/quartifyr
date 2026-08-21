@@ -1,6 +1,6 @@
 # quartifyr
 
-# quartifyr (development version)
+# quartifyr 0.3.1
 
 ## New features
 
@@ -36,8 +36,6 @@
   package) from the built package tarball, fixing an "unmentioned
   DESCRIPTION" `R CMD check` NOTE and shrinking the tarball from ~4.8MB to
   ~2.2MB (issue #62).
-
-# quartifyr 0.3.1
 
 ## New features
 
