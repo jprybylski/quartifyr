@@ -71,3 +71,8 @@ rather than letting Quarto's raw (and, over \code{quarto_render()}'s R
 wrapper, deeply nested) failure propagate uninterpreted.
 }
 
+\examples{
+\dontrun{
+check_quarto_extensions("path/to/project")
+}
+}

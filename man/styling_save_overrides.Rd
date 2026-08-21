@@ -33,9 +33,18 @@ worth overriding if \code{style} didn't originate from
 The saved content, as a nested list (invisibly).
 }
 \description{
-Complements \code{\link[=styling_example_style]{styling_example_style()}} (issue #27): edit its returned
-list in place, then save just what changed back out as an override
+Complements \code{\link[=styling_example_style]{styling_example_style()}}: edit its returned list in
+place, then save just what changed back out as an override
 YAML, ready to pass as \code{override}/\code{--override} to
 \code{\link[=styling_build_reference_docx]{styling_build_reference_docx()}} or any other \verb{styling_*()} function
 that takes one.
+}
+\examples{
+\dontrun{
+# Requires a provisioned quartifyr Python environment (see
+# initialize_quartifyr_project()).
+style <- styling_example_style("path/to/project")
+style$page$margins_in$top <- 1.25
+styling_save_overrides(style, file = "overrides.yaml")
+}
 }

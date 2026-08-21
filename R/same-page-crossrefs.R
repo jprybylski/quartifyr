@@ -9,6 +9,13 @@
 #' @param docx Path to the filled docx to resolve (modified in place).
 #' @param timeout Timeout in seconds (default `120`).
 #' @return The docx path (invisibly).
+#' @examples
+#' \dontrun{
+#' # Requires a provisioned quartifyr Python environment and LibreOffice
+#' # (soffice) on PATH -- run this after reportifyr::build_report() has
+#' # filled in real content, so real page numbers exist to compare.
+#' styling_resolve_same_page_crossrefs("report/final/report-final.docx")
+#' }
 #' @export
 styling_resolve_same_page_crossrefs <- function(docx, timeout = 120) {
   result <- .run_quartifyr_styling_cli(c(

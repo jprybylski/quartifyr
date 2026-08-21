@@ -24,3 +24,11 @@ The output docx path (invisibly).
 \description{
 Delegates to \verb{quartifyr-styling build} in the bundled Python engine.
 }
+\examples{
+\dontrun{
+# Requires a provisioned quartifyr Python environment (see
+# initialize_quartifyr_project()).
+style <- system.file("python", "styles", "default.yaml", package = "quartifyr")
+styling_build_reference_docx(style, out = "templates/org-reference.docx")
+}
+}

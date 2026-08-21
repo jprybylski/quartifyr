@@ -32,3 +32,11 @@ page header resolved from the \code{.qmd}'s \verb{header-format:} frontmatter (i
 set). Both are opt-in per-project; a \code{.qmd} using neither is left
 untouched.
 }
+\examples{
+\dontrun{
+# Requires a provisioned quartifyr Python environment (see
+# initialize_quartifyr_project()) -- render_report() calls this
+# automatically, so it's rarely called directly.
+styling_apply_layout("report/shell/report.docx", "report.qmd", status = "draft")
+}
+}

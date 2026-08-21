@@ -35,3 +35,10 @@ courtesy nudge -- quartifyr's own extension layers on top of
 machinery, which this function doesn't install itself (it isn't
 bundled in this R package the way quartifyr's own extension is).
 }
+\examples{
+\dontrun{
+# Requires the quarto CLI on PATH (this function's own follow-up
+# check_quarto_extensions() call shells out to it).
+install_quartifyr_extension("path/to/project")
+}
+}

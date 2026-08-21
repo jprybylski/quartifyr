@@ -1,7 +1,7 @@
 #' Deep-merge an update onto an existing style YAML, in place
 #'
-#' A `modifyList()`-style edit of one section of a style YAML (issue
-#' #27), without hand-copying the rest of the file.
+#' A `modifyList()`-style edit of one section of a style YAML, without
+#' hand-copying the rest of the file.
 #'
 #' Requires `yes = TRUE`: there's no live stdin to confirm over via this R
 #' wrapper (it always calls the underlying CLI with `--json`, a
@@ -17,6 +17,12 @@
 #' @param yes Must be `TRUE` to actually write -- see above.
 #' @return The style YAML's full merged content, as a nested list
 #'   (invisibly).
+#' @examples
+#' \dontrun{
+#' # Requires a provisioned quartifyr Python environment (see
+#' # initialize_quartifyr_project()).
+#' styling_update_style(list(heading = list(all_caps = TRUE)), "style.yaml", yes = TRUE)
+#' }
 #' @export
 styling_update_style <- function(updates, file, yes = FALSE) {
   if (!isTRUE(yes)) {

@@ -9,6 +9,12 @@
 #' @param docx Path to the docx to recalculate (modified in place).
 #' @param timeout Timeout in seconds (default `120`).
 #' @return The docx path (invisibly).
+#' @examples
+#' \dontrun{
+#' # Requires a provisioned quartifyr Python environment and LibreOffice
+#' # (soffice) on PATH -- experimental and known-flaky, see above.
+#' styling_recalculate_fields("report/final/report-final.docx")
+#' }
 #' @export
 styling_recalculate_fields <- function(docx, timeout = 120) {
   result <- .run_quartifyr_styling_cli(c(

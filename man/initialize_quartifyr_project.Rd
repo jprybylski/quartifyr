@@ -4,11 +4,42 @@
 \alias{initialize_quartifyr_project}
 \title{Initialize a report project's quartifyr Python environment}
 \usage{
-initialize_quartifyr_project(directory = ".")
+initialize_quartifyr_project(
+  directory = ".",
+  from_dir = NULL,
+  from_repo = NULL,
+  ref = NULL,
+  subdir = NULL,
+  type = NULL,
+  force = FALSE
+)
 }
 \arguments{
 \item{directory}{Target project directory. Defaults to the current
 directory.}
+
+\item{from_dir}{Use a local directory as the template source instead
+of leaving \code{directory} empty. Mutually exclusive with \code{from_repo}.}
+
+\item{from_repo}{Fetch a git repo as the template source:
+\code{"[host/]owner/repo[/subdir][@ref]"} shorthand (host defaults to
+github.com -- an explicit host is how GitHub Enterprise is
+supported) or a full URL. Requires \code{git} on PATH. Mutually
+exclusive with \code{from_dir}.}
+
+\item{ref}{Branch/tag/SHA to check out. Only valid with \code{from_repo};
+overrides any \verb{@ref} embedded in its shorthand.}
+
+\item{subdir}{Subdirectory of the resolved repo to use as the
+template source. Only valid with \code{from_repo}; overrides any
+subdirectory embedded in its shorthand.}
+
+\item{type}{Template name under a source's \verb{templates/<name>/}
+structure. Only valid alongside \code{from_dir}/\code{from_repo}.}
+
+\item{force}{Overwrite existing \verb{_quarto.yml}/style YAML/shell \code{.qmd}
+files in \code{directory}. Only meaningful alongside \code{from_dir}/\code{from_repo}.
+Default \code{FALSE}.}
 }
 \value{
 Invisibly, the result of \code{pyro::initialize_python()}.
@@ -21,6 +52,21 @@ venv to run against. Call this once per report project, alongside
 \code{reportifyr::initialize_report_project()} -- not implied by
 \code{render_report()} itself, since re-provisioning on every render would be
 wasteful.
+}
+\details{
+When \code{from_dir}/\code{from_repo} is given (issue #23), also scaffolds
+\code{directory}'s \verb{_quarto.yml}/style YAML/shell \code{.qmd} from a template
+source instead of leaving \code{directory} empty: either a local directory
+(\code{from_dir}) or a git repo (\code{from_repo}), fetched and materialized the
+same way \code{../deckifyr}'s \code{initialize_deck_project()} does for its own
+\code{design.yaml}/\code{layouts.yaml}/\code{presentation.yaml}. A template source is
+either "flat" (a directory with its own \verb{_quarto.yml} and exactly one
+\code{.qmd} file at its root -- its \verb{_quarto.yml}/\code{style.yaml}, if present,
+are duplicated as-is, paired with a freshly generated, minimal shell
+\code{.qmd}) or "typed" (a directory with a \verb{templates/} subdirectory, each
+holding its own named flat template -- select one with \code{type}; its
+shell \code{.qmd} is copied verbatim as a real minimal starter, not
+emptied).
 }
 \section{A stale-venv gotcha in existing reportifyr projects}{
 
@@ -36,3 +82,20 @@ and re-raises with a pointer to the same fix, instead of letting
 pyro/uv's raw error propagate uninterpreted.
 }
 
+\examples{
+\dontrun{
+# Provision the Python environment only (this mutates the calling
+# project's pyproject.toml and provisions a Python/uv environment --
+# run it somewhere disposable, not the current project).
+project_dir <- file.path(tempdir(), "my-report")
+initialize_quartifyr_project(project_dir)
+
+# Also scaffold _quarto.yml/style.yaml/report.qmd from an org-standard
+# template repo, pinned to a tag, selecting the "csr" template type.
+initialize_quartifyr_project(
+  project_dir,
+  from_repo = "acme-org/quartifyr-templates@v2",
+  type = "csr"
+)
+}
+}

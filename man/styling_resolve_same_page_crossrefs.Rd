@@ -21,3 +21,11 @@ hyperlinked-vs-plain per cross-reference but never re-saves the docx
 itself beyond that). Shares \code{styling_recalculate_fields()}'s
 known-flaky headless-LibreOffice behavior.
 }
+\examples{
+\dontrun{
+# Requires a provisioned quartifyr Python environment and LibreOffice
+# (soffice) on PATH -- run this after reportifyr::build_report() has
+# filled in real content, so real page numbers exist to compare.
+styling_resolve_same_page_crossrefs("report/final/report-final.docx")
+}
+}

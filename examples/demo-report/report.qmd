@@ -129,7 +129,7 @@ List of Tables
      inst/extensions/quartifyr/README.md's "Combined List of Figures/
      Tables" section. -->
 ::: {custom-style="Heading 1"}
-List of Figures (All)
+List of Figures
 :::
 
 ::: .quartifyr_list_of_figures
@@ -138,7 +138,7 @@ List of Figures (All)
 {{< pagebreak >}}
 
 ::: {custom-style="Heading 1"}
-List of Tables (All)
+List of Tables
 :::
 
 ::: .quartifyr_list_of_tables

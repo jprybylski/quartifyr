@@ -17,6 +17,13 @@
 #' @param override Optional per-org/per-project style YAML, deep-merged
 #'   over `style`. Ignored unless `style` is also given.
 #' @return The docx path (invisibly).
+#' @examples
+#' \dontrun{
+#' # Requires a provisioned quartifyr Python environment (see
+#' # initialize_quartifyr_project()) -- render_report() calls this
+#' # automatically, so it's rarely called directly.
+#' styling_apply_layout("report/shell/report.docx", "report.qmd", status = "draft")
+#' }
 #' @export
 styling_apply_layout <- function(docx, qmd, status, style = NULL, override = NULL) {
   args <- c("apply-layout", "--docx", docx, "--qmd", qmd, "--status", status)

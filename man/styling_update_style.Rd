@@ -19,8 +19,8 @@ The style YAML's full merged content, as a nested list
 (invisibly).
 }
 \description{
-A \code{modifyList()}-style edit of one section of a style YAML (issue
-#27), without hand-copying the rest of the file.
+A \code{modifyList()}-style edit of one section of a style YAML, without
+hand-copying the rest of the file.
 }
 \details{
 Requires \code{yes = TRUE}: there's no live stdin to confirm over via this R
@@ -30,4 +30,11 @@ and this always has \emph{something} to change (unlike that function, which
 can no-op) -- passing \code{yes = TRUE} is this function's explicit
 acknowledgement that rewriting the file via \code{yaml.safe_dump} drops any
 comments/formatting it had.
+}
+\examples{
+\dontrun{
+# Requires a provisioned quartifyr Python environment (see
+# initialize_quartifyr_project()).
+styling_update_style(list(heading = list(all_caps = TRUE)), "style.yaml", yes = TRUE)
+}
 }

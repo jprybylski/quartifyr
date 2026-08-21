@@ -26,7 +26,9 @@ from .recalculate_fields import FieldRecalculationError, recalculate_fields
 from .reportifyr_sync import ReportifyrSyncError, sync_reportifyr_config
 from .same_page_crossrefs import SamePageCrossrefError, resolve_same_page_crossrefs
 from .schema import StyleConfig, StyleConfigError
+from .skills import SkillsError, export_skills
 from .style_editing import StyleEditingError, copy_example_style, save_overrides, update_style
+from .templates import TemplatesError, init_from_template
 
 
 def _ok(args: argparse.Namespace, message: str, **fields) -> int:
@@ -127,6 +129,45 @@ def _cmd_example_style(args: argparse.Namespace) -> int:
     except (StyleEditingError, FileNotFoundError) as exc:
         return _err(args, exc)
     return _ok(args, f"wrote {args.out}", path=str(args.out), style=parsed)
+
+
+def _cmd_init(args: argparse.Namespace) -> int:
+    # Template-based init (issue #23): --from-dir/--from-repo scaffold a
+    # new project's _quarto.yml/style.yaml/shell .qmd from a directory or
+    # git repo -- templates.py owns the actual mechanism, this handler
+    # only validates flag combinations and dispatches.
+    if (args.ref is not None or args.subdir is not None) and not args.from_repo:
+        return _err(args, TemplatesError("--ref/--subdir require --from-repo"))
+
+    try:
+        result = init_from_template(
+            Path(args.directory),
+            from_dir=args.from_dir,
+            from_repo=args.from_repo,
+            ref=args.ref,
+            subdir=args.subdir,
+            type_name=args.type,
+            force=args.force,
+        )
+    except TemplatesError as exc:
+        return _err(args, exc)
+    return _ok(
+        args,
+        f"wrote {len(result['created'])} file(s) to {result['directory']}",
+        **result,
+    )
+
+
+def _cmd_skills(args: argparse.Namespace) -> int:
+    try:
+        result = export_skills(args.directory, force=args.force)
+    except SkillsError as exc:
+        return _err(args, exc)
+    return _ok(
+        args,
+        f"wrote {len(result['created'])} skill file(s) to {result['directory']}",
+        **result,
+    )
 
 
 def _read_json_arg(path: str) -> dict:
@@ -259,6 +300,46 @@ def build_parser() -> argparse.ArgumentParser:
     update_style_p.add_argument("--updates-json", required=True, help="Path to a JSON file holding the updates to deep-merge onto --file")
     update_style_p.add_argument("--yes", action="store_true", help="Write without an interactive confirmation prompt")
     update_style_p.set_defaults(func=_cmd_update_style)
+
+    skills_p = subparsers.add_parser(
+        "skills",
+        help="Export bundled coding-agent skill files (SKILL.md) to a target directory",
+    )
+    skills_p.add_argument("directory", nargs="?", default=".", help="Target directory (default: current directory)")
+    skills_p.add_argument("--force", action="store_true", help="Overwrite an existing SKILL.md at the destination")
+    skills_p.set_defaults(func=_cmd_skills)
+
+    init_p = subparsers.add_parser(
+        "init",
+        help="Scaffold a new project's _quarto.yml/style.yaml/shell .qmd from a template directory or git repo",
+    )
+    init_p.add_argument("directory", nargs="?", default=".", help="Target directory (default: current directory)")
+    init_p.add_argument("--force", action="store_true", help="Overwrite existing destination files")
+    init_source = init_p.add_mutually_exclusive_group(required=True)
+    init_source.add_argument(
+        "--from-dir", default=None, metavar="PATH",
+        help="Use a local directory as the template source",
+    )
+    init_source.add_argument(
+        "--from-repo", default=None, metavar="SPEC",
+        help=(
+            "Fetch a git repo as the template source: '[host/]owner/repo[/subdir][@ref]' "
+            "(host defaults to github.com) or a full URL; requires git on PATH"
+        ),
+    )
+    init_p.add_argument(
+        "--ref", default=None,
+        help="Branch/tag/SHA to check out (only with --from-repo; overrides an embedded @ref)",
+    )
+    init_p.add_argument(
+        "--subdir", default=None,
+        help="Subdirectory of the resolved repo to use (only with --from-repo; overrides an embedded subdir)",
+    )
+    init_p.add_argument(
+        "--type", default=None, metavar="NAME",
+        help="Template name under a source's templates/<name>/ structure",
+    )
+    init_p.set_defaults(func=_cmd_init)
 
     return parser
 

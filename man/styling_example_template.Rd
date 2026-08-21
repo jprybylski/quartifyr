@@ -26,7 +26,12 @@ docx instead.}
 The destination path (invisibly).
 }
 \description{
-A convenience over \code{file.copy(system.file("templates", "org-reference.docx", package = "quartifyr"), ...)} (issue #27) -- the docx itself is an opaque
-binary either way, so this is a plain file copy, no Python engine
-involved.
+A convenience over \code{file.copy(system.file("templates", "org-reference.docx", package = "quartifyr"), ...)} -- the docx itself is an opaque binary
+either way, so this is a plain file copy, no Python engine involved.
+}
+\examples{
+dest_dir <- tempfile("quartifyr-project-")
+dir.create(dest_dir)
+styling_example_template(dest_dir)
+list.files(dest_dir)
 }

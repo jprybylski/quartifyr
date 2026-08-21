@@ -41,3 +41,10 @@ non-interactive/piped invocation), so \code{yes = TRUE} is required whenever
 \code{config_yaml}'s footnote keys are actually out of sync; a call that
 finds nothing to change succeeds either way.
 }
+\examples{
+\dontrun{
+# Requires a provisioned quartifyr Python environment and an existing
+# reportifyr report/config.yaml (see reportifyr::initialize_report_project()).
+styling_sync_reportifyr_config("style.yaml", config_yaml = "report/config.yaml", yes = TRUE)
+}
+}

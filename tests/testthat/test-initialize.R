@@ -203,3 +203,126 @@ test_that("initialize_quartifyr_project() adds default-groups = \"all\" to an ex
   lines <- readLines(file.path(project_dir, "pyproject.toml"), warn = FALSE)
   expect_true('default-groups = "all"' %in% lines)
 })
+
+# --- initialize_quartifyr_project() template scaffolding (#23) --------------
+
+test_that("initialize_quartifyr_project() never calls the init CLI when no template source is given", {
+  project_dir <- withr::local_tempdir()
+
+  cli_called <- FALSE
+  local_mocked_bindings(
+    write_group_to_pyproject = function(...) invisible(NULL),
+    initialize_python = function(...) invisible("initialized"),
+    .package = "pyro"
+  )
+  local_mocked_bindings(
+    .run_quartifyr_styling_cli = function(args) {
+      cli_called <<- TRUE
+      list(created = character(0))
+    }
+  )
+
+  initialize_quartifyr_project(project_dir)
+
+  expect_false(cli_called)
+})
+
+test_that("initialize_quartifyr_project() forwards from_dir to the init CLI", {
+  project_dir <- withr::local_tempdir()
+
+  captured_args <- NULL
+  local_mocked_bindings(
+    write_group_to_pyproject = function(...) invisible(NULL),
+    initialize_python = function(...) invisible("initialized"),
+    .package = "pyro"
+  )
+  local_mocked_bindings(
+    .run_quartifyr_styling_cli = function(args) {
+      captured_args <<- args
+      list(created = character(0))
+    }
+  )
+
+  initialize_quartifyr_project(project_dir, from_dir = "/some/template/source")
+
+  expect_identical(
+    captured_args,
+    c("init", normalizePath(project_dir), "--from-dir", "/some/template/source")
+  )
+})
+
+test_that("initialize_quartifyr_project() forwards from_repo/ref/subdir/type/force to the init CLI", {
+  project_dir <- withr::local_tempdir()
+
+  captured_args <- NULL
+  local_mocked_bindings(
+    write_group_to_pyproject = function(...) invisible(NULL),
+    initialize_python = function(...) invisible("initialized"),
+    .package = "pyro"
+  )
+  local_mocked_bindings(
+    .run_quartifyr_styling_cli = function(args) {
+      captured_args <<- args
+      list(created = character(0))
+    }
+  )
+
+  initialize_quartifyr_project(
+    project_dir,
+    from_repo = "acme-org/quartifyr-templates@v2",
+    ref = "v3",
+    subdir = "templates/csr",
+    type = "csr",
+    force = TRUE
+  )
+
+  expect_identical(
+    captured_args,
+    c(
+      "init", normalizePath(project_dir),
+      "--from-repo", "acme-org/quartifyr-templates@v2",
+      "--ref", "v3",
+      "--subdir", "templates/csr",
+      "--type", "csr",
+      "--force"
+    )
+  )
+})
+
+test_that("initialize_quartifyr_project() calls the init CLI with the project directory as cwd", {
+  project_dir <- withr::local_tempdir()
+
+  captured_wd <- NULL
+  local_mocked_bindings(
+    write_group_to_pyproject = function(...) invisible(NULL),
+    initialize_python = function(...) invisible("initialized"),
+    .package = "pyro"
+  )
+  local_mocked_bindings(
+    .run_quartifyr_styling_cli = function(args) {
+      captured_wd <<- getwd()
+      list(created = character(0))
+    }
+  )
+
+  initialize_quartifyr_project(project_dir, from_dir = "/some/template/source")
+
+  expect_identical(normalizePath(captured_wd), normalizePath(project_dir))
+})
+
+test_that("initialize_quartifyr_project() still returns pyro::initialize_python()'s result when scaffolding too", {
+  project_dir <- withr::local_tempdir()
+
+  local_mocked_bindings(
+    write_group_to_pyproject = function(...) invisible(NULL),
+    initialize_python = function(...) invisible("initialized"),
+    .package = "pyro"
+  )
+  local_mocked_bindings(
+    .run_quartifyr_styling_cli = function(args) list(created = character(0))
+  )
+
+  result <- initialize_quartifyr_project(project_dir, from_dir = "/some/template/source")
+
+  expect_identical(result, "initialized")
+})
