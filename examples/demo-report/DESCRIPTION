@@ -13,6 +13,5 @@ Imports:
     pyro,
     reportifyr,
     flextable,
-    officer,
-    quartifyr
+    officer
 Encoding: UTF-8

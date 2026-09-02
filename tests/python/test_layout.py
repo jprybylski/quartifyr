@@ -278,6 +278,53 @@ def test_apply_layout_without_bookmarks_is_single_section(tmp_path):
     assert result.sections[0].header.paragraphs[0].text == "Header Text\tFINAL"
 
 
+def test_apply_layout_nests_pandoc_header_id_bookmarks(tmp_path):
+    # Mirrors issue #64: pandoc's docx writer emits a heading's auto
+    # header-id bookmark (e.g. "section-b") as a bookmarkEnd/bookmarkStart
+    # pair that are direct w:body children -- siblings of the surrounding
+    # paragraphs, not nested inside one -- whenever nothing but a blank
+    # markdown line separates the previous block from the next heading.
+    # Right after a magic-string figure placeholder, that stray pair lands
+    # between it and the image drawing reportifyr expects next, and
+    # reportifyr's check_alt_text_magic_string crashes trying to
+    # `.xpath()` the un-nested bookmark element (a plain lxml element
+    # python-docx has no registered class for) with
+    # "XPathEvalError: Undefined namespace prefix".
+    docx_path = tmp_path / "header_id_bookmark.docx"
+    document = docx.Document()
+    document.add_paragraph("Intro")
+    magic_p = document.add_paragraph("{rpfy}:example.png")
+    body = document.element.body
+    sectPr = body.find(qn("w:sectPr"))
+    insert_at = list(body).index(sectPr)
+    for el_xml in [
+        f'<w:bookmarkEnd xmlns:w="{W_NS[1:-1]}" w:id="9"/>',
+        f'<w:bookmarkStart xmlns:w="{W_NS[1:-1]}" w:id="10" w:name="section-b"/>',
+    ]:
+        body.insert(insert_at, etree.fromstring(el_xml))
+        insert_at += 1
+    document.add_paragraph("Section B")
+    document.save(str(docx_path))
+
+    body_children = list(docx.Document(str(docx_path)).element.body)
+    assert any(el.tag == qn("w:bookmarkStart") for el in body_children), "test assumption: stray bookmark present"
+
+    apply_layout(docx_path)
+
+    result_body = docx.Document(str(docx_path)).element.body
+    body_children = list(result_body)
+    assert not any(el.tag in (qn("w:bookmarkStart"), qn("w:bookmarkEnd")) for el in body_children)
+
+    magic_idx = next(i for i, el in enumerate(body_children) if el.tag == qn("w:p") and "example.png" in (el.text or "".join(t.text or "" for t in el.xpath(".//w:t"))))
+    next_p = body_children[magic_idx + 1]
+    assert next_p.tag == qn("w:p")
+    assert "Section B" in "".join(t.text or "" for t in next_p.xpath(".//w:t"))
+
+    # The bookmark itself survived, just nested -- not dropped.
+    bookmark_starts = result_body.findall(f".//{qn('w:bookmarkStart')}")
+    assert any(b.get(qn("w:name")) == "section-b" for b in bookmark_starts)
+
+
 def test_apply_layout_missing_file_raises():
     with pytest.raises(FileNotFoundError):
         apply_layout("/does/not/exist.docx", header_left_text="x")

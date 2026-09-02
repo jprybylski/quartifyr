@@ -281,6 +281,26 @@ project's `renv.lock`-pinned library are entirely separate (see
 `action.yml`'s "renv restore (calling project)" and "Install the
 quartifyr R package" steps).
 
+**A calling project's DESCRIPTION must not list `quartifyr` in
+`Imports:`, even though it's a real runtime dependency.** Both
+`examples/*/DESCRIPTION` used to; confirmed via a real `renv::restore()`
+run against a clean library that this makes `restore()` itself try to
+resolve/download a package literally named "quartifyr" from the
+configured repos (CRAN/r-universe) and fail -- `[quartifyr]: failed to
+download`, cascading into every package depending on it -- since,
+per the note above, `quartifyr` is deliberately not in `renv.lock` and
+only ever installed via the separate `renv::install("local::...")`/
+`renv::install("jprybylski/quartifyr")` step that runs right after
+`restore()`. `renv::dependencies()` picks it up from `Imports:` (and
+separately from `render.R`'s own `library(quartifyr)` call) regardless
+of `snapshot.type: "explicit"`, and neither `restore(exclude = ...)` nor
+`renv/settings.json`'s `ignored.packages` was confirmed to suppress that
+resolution -- removing the `Imports:` entry is what actually fixed it,
+confirmed by reproducing the failure and then the fix locally.
+`library(quartifyr)` still works fine afterward: DESCRIPTION only drives
+`renv`'s own bookkeeping, not which packages are loadable from the
+project's already-populated library.
+
 **The `report/shell` → `report/draft`/`report/final` directory
 convention is load-bearing for `render_report()`, not just a naming
 convention.** `reportifyr::make_doc_dirs()` derives output paths by
