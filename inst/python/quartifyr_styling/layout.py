@@ -126,6 +126,10 @@ _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?\n)---\s*\n", re.DOTALL)
 _FRONT_MATTER_START_BOOKMARK = "quartifyr-front-matter-start"
 _BODY_START_BOOKMARK = "quartifyr-body-start"
 
+_BOOKMARK_START_TAG = qn("w:bookmarkStart")
+_BOOKMARK_END_TAG = qn("w:bookmarkEnd")
+_STRAY_BOOKMARK_TAGS = (_BOOKMARK_START_TAG, _BOOKMARK_END_TAG)
+
 
 class LayoutError(RuntimeError):
     """Raised when applying the post-render layout fails."""
@@ -437,6 +441,70 @@ def _set_equation_font(document, font_name: str) -> None:
     math_font.set(qn("m:val"), font_name)
 
 
+def _adjacent_paragraph(el, *, forward: bool):
+    """The nearest ``w:p`` sibling of ``el`` in ``document.element.body``,
+    skipping over any other stray bookmark elements in between (pandoc emits
+    a section's ``bookmarkEnd`` immediately followed by the next section's
+    ``bookmarkStart``, both as siblings), or ``None`` if there isn't one.
+    """
+    node = el.getnext() if forward else el.getprevious()
+    while node is not None and node.tag in _STRAY_BOOKMARK_TAGS:
+        node = node.getnext() if forward else node.getprevious()
+    return node if node is not None and node.tag == qn("w:p") else None
+
+
+def _nest_stray_bookmarks(document) -> None:
+    """Nests every ``w:bookmarkStart``/``w:bookmarkEnd`` pandoc left as a
+    direct ``w:body`` child back inside an adjacent paragraph.
+
+    Pandoc's docx writer emits a bookmark for every ``#``/``##`` heading's
+    auto-generated id (e.g. ``section-a``) as a *sibling* of the paragraphs
+    around it, not nested inside one -- confirmed against a plain ``quarto
+    render`` output, independent of ``number-sections:``. A hand-authored
+    Word bookmark is always nested inside a paragraph's run content instead,
+    which is why this doesn't reproduce against a real Word-made document:
+    anything that walks ``w:body``'s direct children expecting only
+    ``w:p``/``w:tbl`` -- as reportifyr's ``check_alt_text_magic_string``
+    does, treating "the element right after a magic-string paragraph" as
+    the next real content -- breaks on pandoc's sibling form instead (see
+    issue #64: a magic-string figure placeholder immediately followed by a
+    heading lands a stray ``bookmarkEnd``/``bookmarkStart`` pair between
+    them, and `lxml`'s default element class -- python-docx has no
+    registered class for a body-level bookmark -- raises
+    ``XPathEvalError: Undefined namespace prefix`` on the first attempt to
+    query it).
+
+    Moving each one into the nearest paragraph -- ``bookmarkStart`` to the
+    very start of the next paragraph, ``bookmarkEnd`` to the very end of
+    the previous one (falling back to the other side at the start/end of
+    the body, where only one neighbor exists) -- restores that
+    "only real content at the body level" assumption without changing the
+    bookmark's name, id, or effective position: it still marks the same
+    point in the document, just nested instead of a sibling, matching what
+    Word itself would have produced.
+    """
+    body = document.element.body
+    for stray in list(body.iterchildren(*_STRAY_BOOKMARK_TAGS)):
+        is_start = stray.tag == _BOOKMARK_START_TAG
+        preferred = _adjacent_paragraph(stray, forward=is_start)
+        target, at_start = (
+            (preferred, is_start)
+            if preferred is not None
+            else (_adjacent_paragraph(stray, forward=not is_start), not is_start)
+        )
+        if target is None:
+            continue
+        body.remove(stray)
+        if at_start:
+            pPr = target.find(qn("w:pPr"))
+            if pPr is not None:
+                pPr.addnext(stray)
+            else:
+                target.insert(0, stray)
+        else:
+            target.append(stray)
+
+
 def apply_layout(
     docx_path: str | Path,
     *,
@@ -469,6 +537,7 @@ def apply_layout(
     crossref_hyperlink_mode = _resolve_crossref_hyperlink_mode(crossref_hyperlinks)
 
     document = docx.Document(str(docx_path))
+    _nest_stray_bookmarks(document)
     front_matter_start_p = find_bookmark_paragraph(document, _FRONT_MATTER_START_BOOKMARK)
     body_start_p = find_bookmark_paragraph(document, _BODY_START_BOOKMARK)
 
