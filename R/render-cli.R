@@ -19,7 +19,7 @@
   "project", "shell", "status", "reference-doc", "style", "override",
   "quarto-timeout", "quarto-bin"
 )
-.render_cli_flag_options <- c("json", "strict", "recalculate-fields", "resolve-same-page-crossrefs", "help")
+.render_cli_flag_options <- c("json", "strict", "offline", "recalculate-fields", "resolve-same-page-crossrefs", "help")
 
 # `--project <dir> --shell <file>`: the shell is relative to the project
 # unless it is an existing absolute path.
@@ -38,6 +38,8 @@
     "  --json                          Print the result as JSON on stdout.",
     "  --strict                        Exit non-zero unless the result status is \"ok\". Without it,",
     "                                  exit 0 only means the render finished, not that it was complete.",
+    "  --offline                       No network: set UV_OFFLINE/UV_NO_INDEX/UV_NO_SYNC for the render.",
+    "                                  Default: on when quartifyr.offline or UV_OFFLINE is set.",
     "  --quarto-timeout <seconds>      Default 600; Inf disables.",
     "  --quarto-bin <path>             Quarto executable (default: QUARTO_PATH, then PATH).",
     "  --reference-doc <file>          docx reference-doc.",
@@ -129,6 +131,7 @@
     recalculate_fields = isTRUE(parsed$`recalculate-fields`),
     resolve_same_page_crossrefs = isTRUE(parsed$`resolve-same-page-crossrefs`)
   )
+  if (isTRUE(parsed$offline)) call_args$offline <- TRUE
   if (!is.null(parsed$`reference-doc`)) call_args$reference_doc <- parsed$`reference-doc`
   if (!is.null(parsed$style)) call_args$style <- parsed$style
   if (!is.null(parsed$override)) call_args$override <- parsed$override

@@ -172,3 +172,25 @@ test_that("--help says a non-strict exit 0 doesn't mean the render was complete"
   res <- .run_cli("--help")
   expect_match(paste(res$out, collapse = " "), "exit 0 only means the render finished")
 })
+
+test_that("--offline reaches render_report() and is off otherwise", {
+  seen <- NULL
+  local_mocked_bindings(render_report = function(...) {
+    seen <<- list(...)
+    .fake_result()
+  })
+
+  .run_cli(c("--project", "/p", "--shell", "report.qmd", "--offline"))
+  expect_true(seen$offline)
+  .run_cli(c("--project", "/p", "--shell", "report.qmd"))
+  expect_null(seen$offline)
+})
+
+test_that(".cli_shell_path() keeps an existing absolute shell and resolves anything else under the project", {
+  shell <- withr::local_tempfile(fileext = ".qmd")
+  writeLines("# s", shell)
+
+  expect_identical(.cli_shell_path("/proj", shell), shell)
+  expect_identical(.cli_shell_path("/proj", "report.qmd"), "/proj/report.qmd")
+  expect_identical(.cli_shell_path("/proj", "/does/not/exist.qmd"), "/proj//does/not/exist.qmd")
+})

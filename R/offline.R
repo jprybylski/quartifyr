@@ -166,3 +166,57 @@
   }
   conditionMessage(e)
 }
+
+# What an error says, including the stderr pyro hides on the processx
+# condition (see .process_error_detail()).
+.error_text <- function(e) {
+  paste(conditionMessage(e), .process_error_detail(e), sep = "\n")
+}
+
+# Whether an error looks like uv failing to sync, resolve or download
+# something, as opposed to the step's own logic failing. Deliberately narrow:
+# a render-time error is only re-labelled `quartifyr_offline_failure` when it
+# reads like a network or environment problem, never for an ordinary failure
+# such as a bad figure.
+.looks_like_uv_failure <- function(text) {
+  grepl(
+    paste(
+      "no solution found", "failed to fetch", "failed to download", "network",
+      "offline", "connect(ion)? (refused|error|timed out|reset)", "dns error",
+      "error sending request", "not found in the package registry",
+      "no matching distribution", "uv_setup\\.sh",
+      sep = "|"
+    ),
+    text,
+    ignore.case = TRUE
+  )
+}
+
+# Runs `expr`; in offline mode, turns a failure that looks like uv reaching
+# for the network into a `quartifyr_offline_failure` naming `step`. Errors
+# that already say what is wrong (a missing sidecar, an earlier offline
+# failure) and ones that don't look like uv passes through unchanged.
+.with_offline_context <- function(expr, step) {
+  tryCatch(
+    expr,
+    error = function(e) {
+      if (
+        !.offline_mode() ||
+          inherits(e, c("quartifyr_pass2_failed", "quartifyr_offline_failure")) ||
+          !.looks_like_uv_failure(.error_text(e))
+      ) {
+        stop(e)
+      }
+      detail <- .process_error_detail(e)
+      .abort_offline(
+        step = step,
+        resource = "uv to sync or download the project's Python environment, which a render in offline mode never does",
+        how = c(
+          "Provision the environment before rendering: run {.fn initialize_quartifyr_project} and {.code reportifyr::initialize_report_project()} once, with a populated uv cache or wheels.",
+          "The error was: {detail}"
+        ),
+        parent = e
+      )
+    }
+  )
+}

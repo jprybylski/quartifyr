@@ -86,6 +86,19 @@
 #'   render itself only warned. Without it, a returned result (and the
 #'   script's exit status 0) only means the render finished, not that it was
 #'   complete: check `status`.
+#' @param offline Whether to render without any network access. `NULL`
+#'   (default) follows offline mode as set by `options(quartifyr.offline =
+#'   TRUE)` or the `UV_OFFLINE` environment variable (see
+#'   `vignette("offline")`). When on, `render_report()` sets `UV_OFFLINE=1`,
+#'   `UV_NO_INDEX=1`, `UV_PYTHON_DOWNLOADS=never` and `UV_NO_SYNC=1` for the
+#'   whole call, so quartifyr's styling steps and reportifyr's pass 2 use the
+#'   already-provisioned Python environment as it is: nothing is synced,
+#'   recreated or downloaded, and a cold uv cache is fine. The environment must
+#'   have been provisioned beforehand, by `initialize_quartifyr_project()` and
+#'   `reportifyr::initialize_report_project()`. A uv failure then signals an
+#'   error of class `quartifyr_offline_failure` naming the step. `FALSE` sets
+#'   nothing. Renders of one project must not run concurrently: they share its
+#'   `.venv` and `report/` folders.
 #' @param quarto_timeout Seconds to allow the `quarto render` subprocess
 #'   before killing it and signalling an error of class
 #'   `quartifyr_quarto_timeout`. Default `600`; `Inf` disables the limit.
@@ -185,9 +198,29 @@ render_report <- function(
   resolve_same_page_crossrefs = FALSE,
   quarto_timeout = 600,
   quarto_bin = NULL,
-  strict = FALSE
+  strict = FALSE,
+  offline = NULL
 ) {
   status <- match.arg(status)
+
+  if (!is.null(offline) && !(is.logical(offline) && length(offline) == 1 && !is.na(offline))) {
+    stop("offline must be NULL, TRUE or FALSE.")
+  }
+  # Offline mode for the whole render, set once here so every uv call below
+  # inherits it, reportifyr's pass 2 included (it runs `uv run` many times and
+  # would otherwise re-sync, and re-resolve against the index, on each one):
+  # no index, no managed-Python download, and no re-sync of an environment
+  # initialisation already provisioned. `quartifyr.offline` is what the
+  # styling bridge and the error handling below look at.
+  if (is.null(offline)) {
+    offline <- .offline_mode()
+  }
+  if (offline) {
+    withr::local_options(quartifyr.offline = TRUE)
+    withr::local_envvar(
+      UV_OFFLINE = "1", UV_NO_INDEX = "1", UV_PYTHON_DOWNLOADS = "never", UV_NO_SYNC = "1"
+    )
+  }
 
   if (!is.numeric(quarto_timeout) || length(quarto_timeout) != 1 || is.na(quarto_timeout) || quarto_timeout <= 0) {
     stop("quarto_timeout must be a single positive number of seconds (or Inf).")
@@ -403,10 +436,13 @@ render_report <- function(
       out
     })
   }
-  paths <- .with_missing_metadata_context(
-    run_pass2(),
-    project_dir = project_dir, shell_qmd = shell_qmd,
-    figures_path = figures_path, tables_path = tables_path
+  paths <- .with_offline_context(
+    .with_missing_metadata_context(
+      run_pass2(),
+      project_dir = project_dir, shell_qmd = shell_qmd,
+      figures_path = figures_path, tables_path = tables_path
+    ),
+    step = "fill the shell with reportifyr (pass 2)"
   )
 
   # --- What pass 2 left behind ----------------------------------------------

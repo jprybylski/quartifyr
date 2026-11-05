@@ -342,3 +342,66 @@ test_that(".process_error_detail() prefers the subprocess's stderr, wherever pro
   expect_match(.process_error_detail(outer), "lxml wheel not in cache")
   expect_identical(.process_error_detail(simpleError("plain failure")), "plain failure")
 })
+
+# --- Render-time offline handling --------------------------------------------
+
+test_that(".looks_like_uv_failure() recognises uv/network failures and not ordinary ones", {
+  yes <- c(
+    "error: No solution found when resolving dependencies",
+    "Failed to fetch: https://pypi.org/simple/x/",
+    "failed to download distribution",
+    "Network is unreachable",
+    "Connection refused (os error 111)",
+    "dns error: failed to lookup address",
+    "error sending request for url",
+    "System command 'uv_setup.sh' failed",
+    "Because x was not found in the package registry",
+    "cannot run while uv is offline"
+  )
+  no <- c("Figure footnotes script failed.", "python exploded", "Metadata file not found for: a.png")
+  expect_true(all(.looks_like_uv_failure(yes)))
+  expect_false(any(.looks_like_uv_failure(no)))
+})
+
+test_that(".with_offline_context() relabels uv failures only in offline mode", {
+  uv_failure <- function() stop("error: Failed to fetch: https://pypi.org/simple/x/")
+  step <- "fill the shell with reportifyr (pass 2)"
+
+  err <- withr::with_options(
+    list(quartifyr.offline = TRUE),
+    suppressMessages(tryCatch(.with_offline_context(uv_failure(), step), error = function(e) e))
+  )
+  expect_s3_class(err, "quartifyr_offline_failure")
+  expect_match(conditionMessage(err), "fill the shell with reportifyr \\(pass 2\\)")
+  expect_match(conditionMessage(err), "Failed to fetch")
+
+  online <- withr::with_options(
+    list(quartifyr.offline = FALSE),
+    withr::with_envvar(c(UV_OFFLINE = ""), tryCatch(.with_offline_context(uv_failure(), step), error = function(e) e))
+  )
+  expect_false(inherits(online, "quartifyr_offline_failure"))
+  expect_match(conditionMessage(online), "Failed to fetch")
+})
+
+test_that(".with_offline_context() leaves ordinary and already-classed errors alone", {
+  step <- "pass 2"
+  withr::local_options(quartifyr.offline = TRUE)
+
+  ordinary <- tryCatch(.with_offline_context(stop("python exploded"), step), error = function(e) e)
+  expect_false(inherits(ordinary, "quartifyr_offline_failure"))
+  expect_match(conditionMessage(ordinary), "python exploded")
+
+  sidecar <- structure(
+    class = c("quartifyr_pass2_failed", "error", "condition"),
+    list(message = "offline sidecar problem", call = NULL)
+  )
+  expect_s3_class(tryCatch(.with_offline_context(stop(sidecar), step), error = function(e) e), "quartifyr_pass2_failed")
+
+  already <- structure(
+    class = c("quartifyr_offline_failure", "error", "condition"),
+    list(message = "network", call = NULL)
+  )
+  expect_identical(tryCatch(.with_offline_context(stop(already), step), error = function(e) e), already)
+
+  expect_identical(.with_offline_context("fine", step), "fine")
+})

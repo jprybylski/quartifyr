@@ -1112,3 +1112,108 @@ test_that("a relative shell path with a working directory outside the project re
     normalizePath(fixture$standard_footnotes_yaml)
   )
 })
+
+# --- Offline-safe render -------------------------------------------------------
+
+# Runs a mocked render and reports what the environment looked like at each
+# external boundary (the places a real uv call would inherit it from).
+.render_and_snapshot_env <- function(fixture, ...) {
+  snapshot <- function() {
+    c(
+      Sys.getenv(c("UV_OFFLINE", "UV_NO_INDEX", "UV_PYTHON_DOWNLOADS", "UV_NO_SYNC"), unset = "<unset>"),
+      option = as.character(getOption("quartifyr.offline", "<unset>"))
+    )
+  }
+  seen <- new.env()
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
+  local_mocked_bindings(
+    styling_build_abbreviations_tex = function(...) invisible(NULL),
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) {
+      assign("layout", snapshot(), envir = seen)
+      invisible(docx)
+    }
+  )
+  local_mocked_bindings(run = .mock_quarto_run(new.env()), .package = "processx")
+  local_mocked_bindings(
+    make_doc_dirs = .mock_make_doc_dirs,
+    build_report = function(docx_in, docx_out, ...) {
+      assign("pass2", snapshot(), envir = seen)
+      dir.create(dirname(docx_out), recursive = TRUE, showWarnings = FALSE)
+      writeLines("draft", docx_out)
+    },
+    .package = "reportifyr"
+  )
+  render_report(
+    fixture$shell_qmd,
+    reference_doc = fixture$reference_doc,
+    standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+    config_yaml = fixture$config_yaml,
+    ...
+  )
+  as.list(seen)
+}
+
+.offline_env <- c(
+  UV_OFFLINE = "1", UV_NO_INDEX = "1", UV_PYTHON_DOWNLOADS = "never", UV_NO_SYNC = "1", option = "TRUE"
+)
+
+test_that("offline = TRUE sets the uv variables for the whole render, reportifyr included, then restores them", {
+  fixture <- .render_report_fixture()
+  withr::local_envvar(UV_OFFLINE = NA, UV_NO_INDEX = NA, UV_PYTHON_DOWNLOADS = NA, UV_NO_SYNC = NA)
+  withr::local_options(quartifyr.offline = NULL)
+
+  seen <- .render_and_snapshot_env(fixture, offline = TRUE)
+
+  expect_identical(seen$layout, .offline_env)
+  expect_identical(seen$pass2, .offline_env)
+  expect_identical(Sys.getenv("UV_NO_SYNC", "<unset>"), "<unset>")
+  expect_null(getOption("quartifyr.offline"))
+})
+
+test_that("offline = NULL follows quartifyr.offline and UV_OFFLINE; offline = FALSE sets nothing", {
+  fixture <- .render_report_fixture()
+  withr::local_envvar(UV_OFFLINE = NA, UV_NO_INDEX = NA, UV_PYTHON_DOWNLOADS = NA, UV_NO_SYNC = NA)
+  withr::local_options(quartifyr.offline = NULL)
+
+  expect_identical(.render_and_snapshot_env(fixture)$pass2[["UV_NO_SYNC"]], "<unset>")
+
+  withr::with_options(list(quartifyr.offline = TRUE), {
+    expect_identical(.render_and_snapshot_env(fixture)$pass2, .offline_env)
+  })
+  withr::with_envvar(c(UV_OFFLINE = "1"), {
+    expect_identical(.render_and_snapshot_env(fixture)$pass2[["UV_NO_SYNC"]], "1")
+    expect_identical(.render_and_snapshot_env(fixture, offline = FALSE)$pass2[["UV_NO_SYNC"]], "<unset>")
+  })
+})
+
+test_that("rejects an invalid offline argument before doing any work", {
+  fixture <- .render_report_fixture()
+  expect_error(render_report(fixture$shell_qmd, offline = "yes"), "offline must be")
+  expect_error(render_report(fixture$shell_qmd, offline = NA), "offline must be")
+  expect_error(render_report(fixture$shell_qmd, offline = c(TRUE, FALSE)), "offline must be")
+})
+
+test_that("offline, a pass-2 uv failure is a quartifyr_offline_failure naming pass 2", {
+  fixture <- .render_report_fixture()
+  err <- suppressMessages(tryCatch(
+    .run_render(
+      fixture, offline = TRUE,
+      build = function(doc_dirs) stop("error: Failed to fetch: https://pypi.org/simple/lxml/")
+    ),
+    error = function(e) e
+  ))
+
+  expect_s3_class(err, "quartifyr_offline_failure")
+  expect_match(conditionMessage(err), "fill the shell with reportifyr \\(pass 2\\)")
+})
+
+test_that("offline, an ordinary pass-2 failure is not relabelled", {
+  fixture <- .render_report_fixture()
+  err <- tryCatch(
+    .run_render(fixture, offline = TRUE, build = function(doc_dirs) stop("python exploded")),
+    error = function(e) e
+  )
+
+  expect_false(inherits(err, "quartifyr_offline_failure"))
+  expect_match(conditionMessage(err), "python exploded")
+})

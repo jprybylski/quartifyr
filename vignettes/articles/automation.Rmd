@@ -85,6 +85,14 @@ began, so a file that predates it is reported as not produced.
 `abbreviations.tex` next to the shell `.qmd` is regenerated on every render,
 success or not.
 
+## Without network access
+
+`offline = TRUE` (or `--offline` on the script, or `options(quartifyr.offline =
+TRUE)`, or `UV_OFFLINE=1`) makes a render use the project's Python environment
+as it is: nothing is synced, recreated or downloaded, so it works from a cold
+uv cache. The project must have been initialised beforehand. See
+`vignette("offline")` for the variables it sets and the exact conditions.
+
 ## Read the outcome
 
 `render_report()` returns the three docx paths it always did (`shell`, `draft`,

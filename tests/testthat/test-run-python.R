@@ -141,3 +141,71 @@ test_that("scopes venv_dir to the caller's current working directory", {
   })
   expect_identical(normalizePath(seen_venv_dir), normalizePath(scoped_dir))
 })
+
+# --- Offline: no re-sync, and uv failures name the step ----------------------
+
+.mock_pyro_run <- function(run) {
+  local_mocked_bindings(
+    get_venv_uv_paths = function() list(uv = "FAKE_UV", venv = "FAKE_VENV"),
+    .package = "pyro",
+    .env = parent.frame()
+  )
+  local_mocked_bindings(run_python_script = run, .package = "pyro", .env = parent.frame())
+}
+
+test_that("offline mode adds --no-sync to the uv run, online mode does not", {
+  captured <- NULL
+  .mock_pyro_run(function(uv_path, args, ...) {
+    captured <<- args
+    list(status = 0, stdout = jsonlite::toJSON(list(status = "success"), auto_unbox = TRUE), stderr = "")
+  })
+
+  withr::with_options(list(quartifyr.offline = TRUE), .run_quartifyr_styling_cli("build"))
+  expect_identical(
+    captured,
+    c("run", "--all-groups", "--no-sync", "-m", "quartifyr_styling", "--json", "build")
+  )
+
+  withr::with_options(list(quartifyr.offline = FALSE), withr::with_envvar(c(UV_OFFLINE = ""), .run_quartifyr_styling_cli("build")))
+  expect_false("--no-sync" %in% captured)
+})
+
+test_that("offline, a uv failure with no CLI payload is a quartifyr_offline_failure naming the step", {
+  .mock_pyro_run(function(uv_path, args, stderr_callback = NULL, ...) {
+    stderr_callback("error: Failed to fetch: https://pypi.org/simple/python-docx/\n", NULL)
+    stop("quartifyr-styling failed.")
+  })
+
+  err <- withr::with_options(
+    list(quartifyr.offline = TRUE),
+    suppressMessages(tryCatch(.run_quartifyr_styling_cli("apply-layout"), error = function(e) e))
+  )
+
+  expect_s3_class(err, "quartifyr_offline_failure")
+  expect_match(conditionMessage(err), "run the quartifyr styling step \\(apply-layout\\)")
+  expect_match(conditionMessage(err), "Failed to fetch")
+})
+
+test_that("offline, a uv failure that printed nothing still reports the underlying error", {
+  .mock_pyro_run(function(uv_path, args, ...) stop("System command 'uv' failed"))
+
+  err <- withr::with_options(
+    list(quartifyr.offline = TRUE),
+    suppressMessages(tryCatch(.run_quartifyr_styling_cli("build"), error = function(e) e))
+  )
+
+  expect_s3_class(err, "quartifyr_offline_failure")
+  expect_match(conditionMessage(err), "System command 'uv' failed")
+})
+
+test_that("online, a failure with no payload stays the generic error", {
+  .mock_pyro_run(function(uv_path, args, ...) stop("quartifyr-styling failed."))
+
+  err <- withr::with_options(
+    list(quartifyr.offline = FALSE),
+    withr::with_envvar(c(UV_OFFLINE = ""), suppressMessages(tryCatch(.run_quartifyr_styling_cli("build"), error = function(e) e)))
+  )
+
+  expect_false(inherits(err, "quartifyr_offline_failure"))
+  expect_match(conditionMessage(err), "did not produce a parseable error payload")
+})

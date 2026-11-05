@@ -88,6 +88,17 @@
   package) from the built package tarball, fixing an "unmentioned
   DESCRIPTION" `R CMD check` NOTE and shrinking the tarball from ~4.8MB to
   ~2.2MB (issue #62).
+* `render_report()` is offline-safe by itself (#76). New `offline` argument
+  (and `--offline` on `render.R`), defaulting to offline mode as set by
+  `options(quartifyr.offline = TRUE)` or `UV_OFFLINE`: for the whole render it
+  sets `UV_OFFLINE`, `UV_NO_INDEX`, `UV_PYTHON_DOWNLOADS=never` and
+  `UV_NO_SYNC`, so quartifyr's styling step and every `uv run` in reportifyr's
+  pass 2 use the already-provisioned environment instead of re-syncing (and
+  recreating) `.venv`, even with a cold uv cache. A uv failure at render time
+  is now a `quartifyr_offline_failure` naming the step. The offline article
+  lists the variables and the exact conditions under which a render makes no
+  network calls, and says concurrent renders of one project are not
+  supported.
 * The render result is versioned and carries provenance (#78). Every JSON
   result, including the error object of a failed render, has
   `schema_version: 1`, and the schema is now

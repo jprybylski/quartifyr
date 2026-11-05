@@ -19,7 +19,8 @@ render_report(
   resolve_same_page_crossrefs = FALSE,
   quarto_timeout = 600,
   quarto_bin = NULL,
-  strict = FALSE
+  strict = FALSE,
+  offline = NULL
 )
 }
 \arguments{
@@ -119,6 +120,19 @@ success. With \code{strict = TRUE} the result carried on the condition has
 render itself only warned. Without it, a returned result (and the
 script's exit status 0) only means the render finished, not that it was
 complete: check \code{status}.}
+
+\item{offline}{Whether to render without any network access. \code{NULL}
+(default) follows offline mode as set by \code{options(quartifyr.offline = TRUE)} or the \code{UV_OFFLINE} environment variable (see
+\code{vignette("offline")}). When on, \code{render_report()} sets \code{UV_OFFLINE=1},
+\code{UV_NO_INDEX=1}, \code{UV_PYTHON_DOWNLOADS=never} and \code{UV_NO_SYNC=1} for the
+whole call, so quartifyr's styling steps and reportifyr's pass 2 use the
+already-provisioned Python environment as it is: nothing is synced,
+recreated or downloaded, and a cold uv cache is fine. The environment must
+have been provisioned beforehand, by \code{initialize_quartifyr_project()} and
+\code{reportifyr::initialize_report_project()}. A uv failure then signals an
+error of class \code{quartifyr_offline_failure} naming the step. \code{FALSE} sets
+nothing. Renders of one project must not run concurrently: they share its
+\code{.venv} and \verb{report/} folders.}
 }
 \value{
 An object of class \code{quartifyr_render_result}, a list with:
