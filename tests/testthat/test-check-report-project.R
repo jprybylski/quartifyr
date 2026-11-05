@@ -222,3 +222,51 @@ test_that("the demo report has no errors and the check is fast", {
   expect_false(any(findings$severity == "error"), info = paste(findings$message, collapse = "\n"))
   expect_lt(elapsed, 1)
 })
+
+test_that("with no reference-doc configured anywhere the bundled default is used and found", {
+  fx <- .check_fixture()
+  expect_identical(nrow(check_report_project(fx$qmd)), 0L)
+})
+
+test_that("an absolute reference-doc in the front matter is used as given", {
+  fx <- .check_fixture()
+  writeLines(
+    c("---", "title: T", "format:", "  docx:", paste0("    reference-doc: ", fx$ref), "---", "", "# H", "", "text"),
+    fx$qmd
+  )
+  expect_identical(nrow(check_report_project(fx$qmd)), 0L)
+
+  file.remove(fx$ref)
+  findings <- check_report_project(fx$qmd)
+  expect_identical(findings$check, "reference-doc")
+  expect_identical(findings$path, fx$ref)
+})
+
+test_that("a standard_footnotes.yaml that doesn't parse is one error, and sidecar details aren't checked against it", {
+  fx <- .check_fixture()
+  writeLines(c("abbreviations: [unclosed", "  PK: x:"), file.path(fx$dir, "report", "standard_footnotes.yaml"))
+
+  findings <- .check(fx)
+
+  expect_identical(findings$check, "footnotes-yaml-parse")
+  expect_match(findings$message, "does not parse as YAML")
+})
+
+test_that("a shell with no body placeholders has no placement findings", {
+  fx <- .check_fixture()
+  writeLines(c("# Only text", "", "Nothing to fill."), fx$qmd)
+
+  expect_identical(nrow(.check(fx)), 0L)
+  expect_identical(.check_placeholder_placement(.scan_placeholders(fx$qmd), fx$qmd), list())
+})
+
+test_that("print() shows warnings as well as errors", {
+  fx <- .check_fixture()
+  writeLines(c("# One", "", "{rpfy}:fig.png"), fx$qmd)
+  findings <- .check(fx)
+  expect_identical(findings$severity, "warning")
+
+  shown <- paste(capture.output(print(findings), type = "message"), collapse = "\n")
+  expect_match(shown, "0 errors, 1 warning")
+  expect_match(shown, "placeholder-last-in-section")
+})

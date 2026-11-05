@@ -112,3 +112,18 @@ test_that("a missing optional extension only warns", {
 
   expect_warning(install_quarto_extensions(project, from = empty, extensions = optional), "acme/optional-ext")
 })
+
+test_that("a source that is itself the extension directory is accepted", {
+  ext <- withr::local_tempdir()
+  quarto_plus <- file.path(ext, "quarto-plus")
+  dir.create(quarto_plus)
+  writeLines("title: direct", file.path(quarto_plus, "_extension.yml"))
+  project <- withr::local_tempdir()
+
+  install_quarto_extensions(project, from = quarto_plus)
+
+  expect_identical(
+    readLines(file.path(project, "_extensions", "A2-ai", "quarto-plus", "_extension.yml")),
+    "title: direct"
+  )
+})

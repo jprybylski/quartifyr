@@ -124,3 +124,37 @@ test_that("the JSON form matches the shipped schema's required shape", {
   expect_match(json$artifacts[[1]]$sha256, "^[0-9a-f]{64}$")
   expect_true(all(schema$properties$artifacts$items$required %in% names(json$artifacts[[1]])))
 })
+
+test_that("print() summarizes the status, paths, and every kind of problem", {
+  shell <- withr::local_tempfile(fileext = ".docx")
+  writeLines("x", shell)
+  result <- .new_render_result(
+    shell, NULL, NULL,
+    warnings = "reportifyr could not find figure file(s): gone.png",
+    errors = "styling_recalculate_fields() failed",
+    unfilled_placeholders = "{rpfy}:gone.png",
+    missing_metadata = "no-sidecar.png"
+  )
+
+  shown <- capture.output(print(result), type = "message")
+  shown <- paste(shown, collapse = "\n")
+
+  expect_match(shown, "quartifyr render: error")
+  expect_match(shown, "shell:")
+  expect_match(shown, "unfilled placeholder")
+  expect_match(shown, "gone.png")
+  expect_match(shown, "missing metadata sidecar")
+  expect_match(shown, "no-sidecar.png")
+  expect_match(shown, "styling_recalculate_fields\\(\\) failed")
+  expect_match(shown, "could not find figure")
+  expect_identical(invisible(print(result)), result)
+})
+
+test_that("print() of a clean result reports ok and nothing else", {
+  shell <- withr::local_tempfile(fileext = ".docx")
+  writeLines("x", shell)
+  shown <- paste(capture.output(print(.new_render_result(shell, NULL, NULL)), type = "message"), collapse = "\n")
+
+  expect_match(shown, "quartifyr render: ok")
+  expect_no_match(shown, "unfilled|missing metadata")
+})

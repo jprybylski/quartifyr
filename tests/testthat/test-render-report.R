@@ -818,3 +818,10 @@ test_that("a pass-2 failure unrelated to sidecars passes through unchanged", {
   expect_false(inherits(err, "quartifyr_pass2_failed"))
   expect_match(conditionMessage(err), "python exploded")
 })
+
+test_that("rejects an invalid quarto_bin before doing any work", {
+  fixture <- .render_report_fixture()
+  expect_error(render_report(fixture$shell_qmd, quarto_bin = ""), "quarto_bin")
+  expect_error(render_report(fixture$shell_qmd, quarto_bin = c("a", "b")), "quarto_bin")
+  expect_error(render_report(fixture$shell_qmd, quarto_bin = 1), "quarto_bin")
+})

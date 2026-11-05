@@ -118,3 +118,28 @@ test_that("a pass-2 failure over missing sidecars lists them in the JSON error",
   expect_identical(parsed$missing_metadata, c("a.png", "b.csv"))
   expect_identical(parsed$error_class, "quartifyr_pass2_failed")
 })
+
+test_that("--reference-doc, --style and --override reach render_report()", {
+  seen <- NULL
+  local_mocked_bindings(render_report = function(...) {
+    seen <<- list(...)
+    .fake_result()
+  })
+
+  .run_cli(c(
+    "--project", "/p", "--shell", "report.qmd",
+    "--reference-doc", "/r.docx", "--style", "/s.yaml", "--override", "/o.yaml"
+  ))
+
+  expect_identical(seen$reference_doc, "/r.docx")
+  expect_identical(seen$style, "/s.yaml")
+  expect_identical(seen$override, "/o.yaml")
+})
+
+test_that("a stray positional argument is bad usage", {
+  local_mocked_bindings(render_report = function(...) stop("must not render"))
+  res <- .run_cli(c("--project", "/p", "--shell", "report.qmd", "extra"))
+
+  expect_identical(res$code, 2L)
+  expect_match(res$err, "Unexpected argument: extra", all = FALSE)
+})
