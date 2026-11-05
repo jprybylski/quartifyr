@@ -119,6 +119,19 @@
 #' `system.file("schemas", "render-result.schema.json", package =
 #' "quartifyr")` for the shape).
 #'
+#' @section After a failed render:
+#' Once the project checks pass and the render starts, the outputs it is about
+#' to regenerate (`report/shell/<name>.docx`, `report/draft/<name>-*.docx` and
+#' `report/final/<name>-final.docx`) are moved to `report/.previous/` first,
+#' replacing the copy already there. A render that fails, times out or is
+#' killed therefore leaves nothing in `report/shell`, `report/draft` or
+#' `report/final` that came from an earlier render, and the last good outputs
+#' stay recoverable in `report/.previous/` (add it to `.gitignore`). A
+#' failure in the project checks that run first touches nothing. The
+#' `abbreviations.tex` next to the shell `.qmd` is regenerated regardless.
+#' An output counts as produced only if it was written after the render
+#' began.
+#'
 #' @section Known upstream gotcha:
 #' Pandoc's docx writer wraps every `#`-heading section in body-level
 #' `bookmarkStart`/`bookmarkEnd` markers (siblings of `<w:p>`, not nested in
@@ -239,6 +252,14 @@ render_report <- function(
   # `quarto render` itself raises when a filters:/shortcodes: entry in the
   # .qmd's frontmatter resolves to a missing _extensions/ directory.
   check_quarto_extensions(project_dir)
+
+  # Everything above only validates the project, and a failure there means no
+  # render was attempted, so nothing on disk has been touched. From here on a
+  # render is under way: move the previous render's outputs aside, so that if
+  # this one fails, times out or is killed, the live report/{shell,draft,final}
+  # folders hold nothing that could pass for its result.
+  started_at <- Sys.time()
+  .move_previous_outputs(project_dir, sub("\\.qmd$", "", basename(shell_qmd)))
 
   # Regenerate abbreviations.tex next to the shell .qmd -- that's where
   # quarto-plus's terms_and_abbreviations.lua looks for it by default -- so
@@ -363,8 +384,10 @@ render_report <- function(
   run_errors <- character(0)
   run_warnings <- character(0)
 
+  not_produced <- character(0)
   for (output_path in produced) {
-    if (!file.exists(output_path)) {
+    if (!.produced_since(output_path, started_at)) {
+      not_produced <- c(not_produced, output_path)
       run_errors <- c(run_errors, paste0("Expected output was not produced: ", output_path))
     }
   }
@@ -420,7 +443,8 @@ render_report <- function(
     errors = run_errors,
     unfilled_placeholders = unfilled,
     missing_metadata = missing_metadata,
-    log_dir = log_dir
+    log_dir = log_dir,
+    not_produced = not_produced
   )
 
   if (isTRUE(strict) && result$status != "ok") {

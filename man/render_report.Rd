@@ -150,6 +150,21 @@ the resulting shell to \code{reportifyr::build_report()} to fill in tables,
 figures, and footnotes from \verb{OUTPUTS/}, and (when \code{status = "final"})
 \code{reportifyr::finalize_document()} on top of that.
 }
+\section{After a failed render}{
+
+Once the project checks pass and the render starts, the outputs it is about
+to regenerate (\verb{report/shell/<name>.docx}, \verb{report/draft/<name>-*.docx} and
+\verb{report/final/<name>-final.docx}) are moved to \verb{report/.previous/} first,
+replacing the copy already there. A render that fails, times out or is
+killed therefore leaves nothing in \code{report/shell}, \code{report/draft} or
+\code{report/final} that came from an earlier render, and the last good outputs
+stay recoverable in \verb{report/.previous/} (add it to \code{.gitignore}). A
+failure in the project checks that run first touches nothing. The
+\code{abbreviations.tex} next to the shell \code{.qmd} is regenerated regardless.
+An output counts as produced only if it was written after the render
+began.
+}
+
 \section{Known upstream gotcha}{
 
 Pandoc's docx writer wraps every \verb{#}-heading section in body-level

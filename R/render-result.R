@@ -147,12 +147,61 @@
   paste(as.character(unclass(openssl::sha256(file(path)))), collapse = "")
 }
 
-.artifact_table <- function(shell, draft, final) {
+# Where render_report() leaves each output, relative to the project: the
+# shell docx quarto renders, and the files reportifyr's make_doc_dirs()
+# derives from it by swapping "shell" for "draft"/"final" in the directory.
+# make_doc_dirs() refuses a docx that doesn't exist yet, so the convention is
+# repeated here to know what is about to be regenerated (a test compares the
+# two so they can't drift apart).
+.render_output_paths <- function(project_dir, stem) {
+  list(
+    shell = file.path(project_dir, "report", "shell", paste0(stem, ".docx")),
+    draft = file.path(
+      project_dir, "report", "draft",
+      paste0(stem, c("-clean", "-tabs", "-tabsfigs", "-draft"), ".docx")
+    ),
+    final = file.path(project_dir, "report", "final", paste0(stem, "-final.docx"))
+  )
+}
+
+# A render that fails, times out or is killed must not leave an earlier
+# render's docx where a caller (or a person opening the folder) would take it
+# for this render's. So before rendering, whatever this render is about to
+# regenerate is moved to `report/.previous/<shell|draft|final>/`, replacing
+# the copy already there. Returns the new paths of what was moved.
+.move_previous_outputs <- function(project_dir, stem) {
+  moved <- character(0)
+  outputs <- .render_output_paths(project_dir, stem)
+  for (role in names(outputs)) {
+    existing <- outputs[[role]][file.exists(outputs[[role]])]
+    if (length(existing) == 0) {
+      next
+    }
+    dest_dir <- file.path(project_dir, "report", ".previous", role)
+    dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
+    for (path in existing) {
+      dest <- file.path(dest_dir, basename(path))
+      unlink(dest)
+      if (!file.rename(path, dest)) {
+        stop("Could not move the previous output ", path, " to ", dest, ".", call. = FALSE)
+      }
+      moved <- c(moved, dest)
+    }
+  }
+  moved
+}
+
+# TRUE when `path` exists and was written by the render that began at
+# `since`. The extra two seconds cover filesystems with coarse timestamps.
+.produced_since <- function(path, since) {
+  file.exists(path) && isTRUE(file.mtime(path) >= since - 2)
+}
+
+.artifact_table <- function(shell, draft, final, skip = character(0)) {
   roles <- c(shell = shell, draft = draft, final = final)
   roles <- roles[!vapply(roles, is.null, logical(1))]
   paths <- unlist(roles, use.names = TRUE)
-  exists <- file.exists(paths)
-  paths <- paths[exists]
+  paths <- paths[file.exists(paths) & !(paths %in% skip)]
   data.frame(
     role = names(paths),
     path = unname(paths),
@@ -168,7 +217,7 @@
 # missing metadata sidecar); "ok" = nothing to report.
 .new_render_result <- function(shell, draft, final, warnings = character(0), errors = character(0),
                                unfilled_placeholders = character(0), missing_metadata = character(0),
-                               log_dir = NULL) {
+                               log_dir = NULL, not_produced = character(0)) {
   status <- if (length(errors) > 0 || length(unfilled_placeholders) > 0) {
     "error"
   } else if (length(warnings) > 0 || length(missing_metadata) > 0) {
@@ -182,7 +231,7 @@
       draft = draft,
       final = final,
       status = status,
-      artifacts = .artifact_table(shell, draft, final),
+      artifacts = .artifact_table(shell, draft, final, skip = not_produced),
       warnings = unique(as.character(warnings)),
       errors = unique(as.character(errors)),
       unfilled_placeholders = unique(as.character(unfilled_placeholders)),

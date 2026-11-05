@@ -68,6 +68,10 @@ test_that("any render error exits 1 with a JSON error object naming its class", 
   expect_identical(parsed$error_class, "quartifyr_quarto_timeout")
   expect_match(parsed$errors, "timed out")
   expect_match(res$err, "timed out", all = FALSE)
+  # A failed render reports no output at all, so nothing can be mistaken for one.
+  expect_null(parsed$artifacts)
+  expect_null(parsed$draft)
+  expect_null(parsed$final)
 })
 
 test_that("a strict incomplete render exits 1 and still reports the whole result", {

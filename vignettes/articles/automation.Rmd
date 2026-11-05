@@ -63,6 +63,28 @@ error of class `quartifyr_quarto_timeout` whose message includes the tail of
 Quarto's stderr. To use an app-local Quarto instead of the one on `PATH`, pass
 `quarto_bin = "/path/to/quarto"` or set `QUARTO_PATH`.
 
+## What is on disk after a failure
+
+A render that fails, times out or is killed must not leave an earlier render's
+output where it could pass for the new one. Once the project checks pass and
+the render starts, `render_report()` first moves the outputs it is about to
+regenerate (`report/shell/<name>.docx`, `report/draft/<name>-*.docx`,
+`report/final/<name>-final.docx`) to `report/.previous/`, replacing the copy
+already there. After a failure:
+
+* `report/draft` and `report/final` hold nothing from an earlier render, and
+  `report/shell` holds the shell only if Quarto got as far as writing it;
+* the last good outputs are in `report/.previous/{shell,draft,final}/` (add
+  that folder to `.gitignore`);
+* the JSON error object has no `artifacts`, `draft` or `final`;
+* a failure in the project checks that run first (a missing reference-doc, for
+  example) touches nothing, because no render started.
+
+An output also counts as produced only if it was written after the render
+began, so a file that predates it is reported as not produced.
+`abbreviations.tex` next to the shell `.qmd` is regenerated on every render,
+success or not.
+
 ## Read the outcome
 
 `render_report()` returns the three docx paths it always did (`shell`, `draft`,

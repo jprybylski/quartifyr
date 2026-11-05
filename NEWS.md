@@ -88,6 +88,11 @@
   package) from the built package tarball, fixing an "unmentioned
   DESCRIPTION" `R CMD check` NOTE and shrinking the tarball from ~4.8MB to
   ~2.2MB (issue #62).
+* A failed, timed-out or interrupted `render_report()` no longer leaves the
+  previous render's `report/draft` and `report/final` documents in place
+  looking complete. Once the render starts, the outputs it will regenerate
+  are first moved to `report/.previous/`, and an output only counts as
+  produced if it was written after the render began (#77).
 * The release workflow no longer rewrites a published release: a refresh
   (moving the tag, replacing the tarball) only happens while the release is
   under 24 hours old, and is skipped with a warning after that, so a

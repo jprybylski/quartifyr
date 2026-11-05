@@ -628,16 +628,16 @@ test_that("the leak probe used for the timeout test can see a live child", {
 # lets a test shape what pass 2 leaves behind (write the draft docx, append
 # to a reportifyr log, ...) and `unfilled` stands in for the docx scan.
 .run_render <- function(fixture, status = "draft", build = function(doc_dirs) NULL,
-                        unfilled = character(0), ...) {
-  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL), .env = parent.frame())
+                        unfilled = character(0), .mock_env = parent.frame(), ...) {
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL), .env = .mock_env)
   local_mocked_bindings(
     styling_build_abbreviations_tex = function(...) invisible(NULL),
     styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) invisible(docx),
     .scan_unfilled_placeholders = function(docx) unfilled,
-    .env = parent.frame()
+    .env = .mock_env
   )
   record <- new.env()
-  local_mocked_bindings(run = .mock_quarto_run(record), .package = "processx", .env = parent.frame())
+  local_mocked_bindings(run = .mock_quarto_run(record), .package = "processx", .env = .mock_env)
   local_mocked_bindings(
     make_doc_dirs = .mock_make_doc_dirs,
     build_report = function(docx_in, docx_out, ...) {
@@ -652,7 +652,7 @@ test_that("the leak probe used for the timeout test can see a live child", {
       invisible(NULL)
     },
     .package = "reportifyr",
-    .env = parent.frame()
+    .env = .mock_env
   )
   render_report(
     fixture$shell_qmd,
@@ -824,4 +824,175 @@ test_that("rejects an invalid quarto_bin before doing any work", {
   expect_error(render_report(fixture$shell_qmd, quarto_bin = ""), "quarto_bin")
   expect_error(render_report(fixture$shell_qmd, quarto_bin = c("a", "b")), "quarto_bin")
   expect_error(render_report(fixture$shell_qmd, quarto_bin = 1), "quarto_bin")
+})
+
+# --- A failed render leaves no stale outputs ---------------------------------
+
+# A first, successful render of `fixture` (shell, draft and final on disk).
+.first_render <- function(fixture, env = parent.frame()) {
+  result <- .run_render(fixture, status = "final", .mock_env = env)
+  expect_true(all(file.exists(c(result$shell, result$draft, result$final))))
+  result
+}
+
+# After a failed second render: nothing from the first one is left in the
+# live folders, and its files are kept under report/.previous/.
+.expect_outputs_moved_aside <- function(fixture, first, shell_rendered = FALSE) {
+  expect_identical(file.exists(first$shell), shell_rendered)
+  expect_false(file.exists(first$draft))
+  expect_false(file.exists(first$final))
+  previous <- file.path(fixture$project_dir, "report", ".previous")
+  expect_identical(readLines(file.path(previous, "draft", basename(first$draft))), "draft")
+  expect_identical(readLines(file.path(previous, "final", basename(first$final))), "final")
+  expect_true(file.exists(file.path(previous, "shell", basename(first$shell))))
+}
+
+.render_again <- function(fixture, ...) {
+  render_report(
+    fixture$shell_qmd,
+    status = "final",
+    reference_doc = fixture$reference_doc,
+    standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+    config_yaml = fixture$config_yaml,
+    ...
+  )
+}
+
+test_that("a Quarto timeout on a second render leaves no draft or final from the first", {
+  fixture <- .render_report_fixture()
+  first <- .first_render(fixture)
+  local_mocked_bindings(
+    run = function(...) list(status = NA_integer_, timeout = TRUE, stdout = "", stderr = "slow"),
+    .package = "processx"
+  )
+
+  expect_error(suppressWarnings(.render_again(fixture, quarto_timeout = 5)), class = "quartifyr_quarto_timeout")
+  .expect_outputs_moved_aside(fixture, first)
+})
+
+test_that("a failing Quarto render on a second render leaves no draft or final from the first", {
+  fixture <- .render_report_fixture()
+  first <- .first_render(fixture)
+  local_mocked_bindings(
+    run = function(...) list(status = 1L, timeout = FALSE, stdout = "", stderr = "boom"),
+    .package = "processx"
+  )
+
+  expect_error(suppressWarnings(.render_again(fixture)), "quarto render failed")
+  .expect_outputs_moved_aside(fixture, first)
+})
+
+test_that("a pass-2 failure on a second render leaves no draft or final from the first", {
+  fixture <- .render_report_fixture()
+  first <- .first_render(fixture)
+  local_mocked_bindings(build_report = function(...) stop("python exploded"), .package = "reportifyr")
+
+  expect_error(.render_again(fixture), "python exploded")
+  # Pass 1 had already written this render's own shell by then.
+  .expect_outputs_moved_aside(fixture, first, shell_rendered = TRUE)
+})
+
+test_that("a second successful render replaces the outputs and refreshes .previous/", {
+  fixture <- .render_report_fixture()
+  first <- .first_render(fixture)
+  second <- .run_render(fixture, status = "final", build = function(doc_dirs) NULL)
+
+  expect_identical(second$status, "ok")
+  expect_true(all(file.exists(c(second$shell, second$draft, second$final))))
+  expect_true(file.exists(file.path(fixture$project_dir, "report", ".previous", "final", basename(first$final))))
+})
+
+test_that("project check failures touch no existing output", {
+  fixture <- .render_report_fixture()
+  first <- .first_render(fixture)
+
+  expect_error(
+    render_report(fixture$shell_qmd, reference_doc = file.path(fixture$project_dir, "missing.docx")),
+    "reference-doc not found"
+  )
+  expect_true(all(file.exists(c(first$shell, first$draft, first$final))))
+  expect_false(dir.exists(file.path(fixture$project_dir, "report", ".previous")))
+})
+
+test_that("an output older than the render's start is reported as not produced, and not listed", {
+  fixture <- .render_report_fixture()
+  result <- .run_render(fixture, build = function(doc_dirs) {
+    Sys.setFileTime(doc_dirs$doc_draft, Sys.time() - 3600)
+  })
+
+  expect_identical(result$status, "error")
+  expect_match(result$errors, "Expected output was not produced")
+  expect_identical(result$artifacts$role, "shell")
+  expect_identical(basename(result$draft), "report-draft.docx")
+})
+
+test_that("a previous output that can't be moved aside stops the render", {
+  skip_on_os("windows")
+  fixture <- .render_report_fixture()
+  first <- .first_render(fixture)
+  blocker <- file.path(fixture$project_dir, "report", ".previous", "draft", basename(first$draft))
+  dir.create(blocker, recursive = TRUE)
+  file.create(file.path(blocker, "keep"))
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
+
+  expect_error(
+    suppressWarnings(.render_again(fixture)),
+    "Could not move the previous output"
+  )
+  expect_true(file.exists(first$draft))
+})
+
+test_that(".move_previous_outputs() moves only what exists and reports where it went", {
+  project <- withr::local_tempdir()
+  expect_identical(.move_previous_outputs(project, "report"), character(0))
+  expect_false(dir.exists(file.path(project, "report", ".previous")))
+
+  paths <- .render_output_paths(project, "report")
+  for (p in c(paths$shell, paths$draft[c(1, 4)])) {
+    dir.create(dirname(p), recursive = TRUE, showWarnings = FALSE)
+    writeLines(basename(p), p)
+  }
+  moved <- .move_previous_outputs(project, "report")
+
+  expect_setequal(basename(moved), c("report.docx", "report-clean.docx", "report-draft.docx"))
+  expect_true(all(file.exists(moved)))
+  expect_false(any(file.exists(c(paths$shell, paths$draft))))
+  expect_true(all(grepl("[/\\\\]report[/\\\\]\\.previous[/\\\\](shell|draft)[/\\\\]", moved)))
+})
+
+test_that(".move_previous_outputs() replaces an older .previous copy", {
+  project <- withr::local_tempdir()
+  paths <- .render_output_paths(project, "report")
+  dir.create(dirname(paths$final), recursive = TRUE)
+  writeLines("old", paths$final)
+  .move_previous_outputs(project, "report")
+  writeLines("new", paths$final)
+  .move_previous_outputs(project, "report")
+
+  kept <- file.path(project, "report", ".previous", "final", "report-final.docx")
+  expect_identical(readLines(kept), "new")
+})
+
+test_that(".render_output_paths() agrees with reportifyr::make_doc_dirs()", {
+  skip_if_not_installed("reportifyr")
+  project <- withr::local_tempdir()
+  paths <- .render_output_paths(project, "report")
+  dir.create(dirname(paths$shell), recursive = TRUE)
+  file.create(paths$shell)
+  theirs <- withr::with_dir(project, reportifyr::make_doc_dirs(paths$shell))
+
+  expect_setequal(
+    normalizePath(c(paths$shell, paths$draft, paths$final), mustWork = FALSE),
+    normalizePath(unlist(theirs, use.names = FALSE), mustWork = FALSE)
+  )
+})
+
+test_that(".produced_since() needs the file to exist and be recent", {
+  path <- withr::local_tempfile()
+  now <- Sys.time()
+  expect_false(.produced_since(path, now))
+  file.create(path)
+  expect_true(.produced_since(path, now))
+  Sys.setFileTime(path, now - 3600)
+  expect_false(.produced_since(path, now))
 })
