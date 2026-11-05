@@ -16,7 +16,9 @@ render_report(
   figures_path = file.path(dirname(shell_qmd), "OUTPUTS", "figures"),
   tables_path = file.path(dirname(shell_qmd), "OUTPUTS", "tables"),
   recalculate_fields = FALSE,
-  resolve_same_page_crossrefs = FALSE
+  resolve_same_page_crossrefs = FALSE,
+  quarto_timeout = 600,
+  quarto_bin = NULL
 )
 }
 \arguments{
@@ -85,6 +87,19 @@ mechanism and inherits its intermittent-hang behavior (see
 using \code{crossref-hyperlinks: "same-page"} just stays hyperlinked
 everywhere -- the same safe fallback \code{apply-layout} already leaves in
 place. A failure here only warns, same as \code{recalculate_fields}.}
+
+\item{quarto_timeout}{Seconds to allow the \verb{quarto render} subprocess
+before killing it and signalling an error of class
+\code{quartifyr_quarto_timeout}. Default \code{600}; \code{Inf} disables the limit.
+The whole process tree is cleaned up on timeout or interrupt (Quarto
+spawns Deno, Pandoc and possibly R/knitr children that would otherwise
+outlive it).}
+
+\item{quarto_bin}{Path to the Quarto executable. \code{NULL} (default) uses
+the \code{QUARTO_PATH} environment variable if set, else \code{quarto} on
+\code{PATH}. When given, it is also exported as \code{QUARTO_PATH} for the
+duration of the call, so the \code{quarto} R package's own helpers
+(\code{quarto_inspect()}, \code{quarto_list_extensions()}) use the same binary.}
 }
 \value{
 A list with \code{shell}, \code{draft}, and (when \code{status = "final"}) \code{final}

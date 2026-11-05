@@ -1,5 +1,16 @@
 # quartifyr
 
+# quartifyr (development version)
+
+## New features
+
+* `render_report()` gains `quarto_timeout` (default 600 seconds, `Inf`
+  disables) and `quarto_bin`. A hung Quarto render is now killed along
+  with its whole process tree (Deno/Pandoc/knitr children) and signals an
+  error of class `quartifyr_quarto_timeout` that includes the tail of
+  Quarto's stderr. `quarto_bin` (or the `QUARTO_PATH` environment variable)
+  selects the Quarto executable instead of relying on `PATH` (#71).
+
 # quartifyr 0.3.1
 
 ## New features

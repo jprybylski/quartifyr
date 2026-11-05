@@ -470,3 +470,131 @@ test_that("a failing styling_resolve_same_page_crossrefs() only warns, and the r
   )
   expect_false(is.null(result$draft))
 })
+
+# --- quarto_timeout / quarto_bin / process-tree cleanup ---------------------
+
+test_that("rejects an invalid quarto_timeout before doing any work", {
+  fixture <- .render_report_fixture()
+  expect_error(render_report(fixture$shell_qmd, quarto_timeout = -1), "quarto_timeout")
+  expect_error(render_report(fixture$shell_qmd, quarto_timeout = "soon"), "quarto_timeout")
+})
+
+test_that("passes quarto_timeout and cleanup_tree through to processx::run()", {
+  fixture <- .render_report_fixture()
+  seen <- new.env()
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
+  local_mocked_bindings(
+    styling_build_abbreviations_tex = function(...) invisible(NULL),
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) invisible(docx)
+  )
+  local_mocked_bindings(
+    run = function(command, args, wd = ".", error_on_status = TRUE, timeout = NULL, cleanup_tree = NULL, ...) {
+      assign("timeout", timeout, envir = seen)
+      assign("cleanup_tree", cleanup_tree, envir = seen)
+      output_name <- args[which(args == "--output") + 1]
+      dir.create(file.path(wd, "report", "shell"), recursive = TRUE, showWarnings = FALSE)
+      file.create(file.path(wd, "report", "shell", output_name))
+      list(status = 0, stdout = "", stderr = "")
+    },
+    .package = "processx"
+  )
+  local_mocked_bindings(
+    make_doc_dirs = .mock_make_doc_dirs,
+    build_report = function(...) invisible(NULL),
+    .package = "reportifyr"
+  )
+
+  render_report(
+    fixture$shell_qmd,
+    reference_doc = fixture$reference_doc,
+    standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+    config_yaml = fixture$config_yaml,
+    quarto_timeout = 42
+  )
+
+  expect_identical(seen$timeout, 42)
+  expect_true(seen$cleanup_tree)
+})
+
+test_that("quarto_bin overrides the command and QUARTO_PATH is honoured as a fallback", {
+  fixture <- .render_report_fixture()
+  record <- new.env()
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
+  local_mocked_bindings(
+    styling_build_abbreviations_tex = function(...) invisible(NULL),
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) invisible(docx)
+  )
+  local_mocked_bindings(run = .mock_quarto_run(record), .package = "processx")
+  local_mocked_bindings(
+    make_doc_dirs = .mock_make_doc_dirs,
+    build_report = function(...) invisible(NULL),
+    .package = "reportifyr"
+  )
+  args <- list(
+    fixture$shell_qmd,
+    reference_doc = fixture$reference_doc,
+    standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+    config_yaml = fixture$config_yaml
+  )
+
+  do.call(render_report, c(args, list(quarto_bin = "/opt/app/quarto")))
+  expect_identical(record$quarto_run$command, "/opt/app/quarto")
+
+  withr::local_envvar(QUARTO_PATH = "/env/quarto")
+  do.call(render_report, args)
+  expect_identical(record$quarto_run$command, "/env/quarto")
+})
+
+# A stub `quarto` that hangs, with a long-lived child of its own: the real
+# processx::run() is exercised (nothing mocked for the render step) so the
+# timeout and cleanup_tree behaviour are verified for real, not assumed.
+test_that("a hung quarto is killed on timeout with a classed error and leaves no children behind", {
+  skip_on_os("windows")
+  skip_if_not_installed("ps")
+  fixture <- .render_report_fixture()
+  marker <- paste0("quartifyr-timeout-", Sys.getpid(), "-", as.integer(runif(1) * 1e6))
+  stub_dir <- withr::local_tempdir()
+  stub <- file.path(stub_dir, "quarto")
+  writeLines(
+    c(
+      "#!/bin/sh",
+      "echo 'rendering something slow' >&2",
+      # `; true` keeps this sh alive (rather than exec'ing sleep) so its own
+      # command line, which carries the marker, stays findable by pgrep -f.
+      sprintf("sh -c 'sleep 300; true' %s &", marker),
+      "sleep 300"
+    ),
+    stub
+  )
+  Sys.chmod(stub, "0755")
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
+  local_mocked_bindings(styling_build_abbreviations_tex = function(...) invisible(NULL))
+
+  err <- tryCatch(
+    suppressWarnings(render_report(
+      fixture$shell_qmd,
+      reference_doc = fixture$reference_doc,
+      standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+      config_yaml = fixture$config_yaml,
+      quarto_timeout = 1,
+      quarto_bin = stub
+    )),
+    error = function(e) e
+  )
+
+  expect_s3_class(err, "quartifyr_quarto_timeout")
+  expect_match(conditionMessage(err), "timed out after 1 seconds")
+  expect_match(conditionMessage(err), "rendering something slow")
+
+  # cleanup_tree is best-effort-asynchronous at the OS level; give the
+  # kernel a moment to reap before declaring a leak.
+  survivors <- function() {
+    out <- suppressWarnings(system2("pgrep", c("-f", marker), stdout = TRUE, stderr = FALSE))
+    length(out)
+  }
+  for (i in 1:20) {
+    if (survivors() == 0) break
+    Sys.sleep(0.25)
+  }
+  expect_identical(survivors(), 0L)
+})

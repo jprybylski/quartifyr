@@ -72,6 +72,17 @@
 #'   using `crossref-hyperlinks: "same-page"` just stays hyperlinked
 #'   everywhere -- the same safe fallback `apply-layout` already leaves in
 #'   place. A failure here only warns, same as `recalculate_fields`.
+#' @param quarto_timeout Seconds to allow the `quarto render` subprocess
+#'   before killing it and signalling an error of class
+#'   `quartifyr_quarto_timeout`. Default `600`; `Inf` disables the limit.
+#'   The whole process tree is cleaned up on timeout or interrupt (Quarto
+#'   spawns Deno, Pandoc and possibly R/knitr children that would otherwise
+#'   outlive it).
+#' @param quarto_bin Path to the Quarto executable. `NULL` (default) uses
+#'   the `QUARTO_PATH` environment variable if set, else `quarto` on
+#'   `PATH`. When given, it is also exported as `QUARTO_PATH` for the
+#'   duration of the call, so the `quarto` R package's own helpers
+#'   (`quarto_inspect()`, `quarto_list_extensions()`) use the same binary.
 #'
 #' @return A list with `shell`, `draft`, and (when `status = "final"`) `final`
 #'   docx paths.
@@ -107,9 +118,28 @@ render_report <- function(
   figures_path = file.path(dirname(shell_qmd), "OUTPUTS", "figures"),
   tables_path = file.path(dirname(shell_qmd), "OUTPUTS", "tables"),
   recalculate_fields = FALSE,
-  resolve_same_page_crossrefs = FALSE
+  resolve_same_page_crossrefs = FALSE,
+  quarto_timeout = 600,
+  quarto_bin = NULL
 ) {
   status <- match.arg(status)
+
+  if (!is.numeric(quarto_timeout) || length(quarto_timeout) != 1 || is.na(quarto_timeout) || quarto_timeout <= 0) {
+    stop("quarto_timeout must be a single positive number of seconds (or Inf).")
+  }
+  if (!is.null(quarto_bin)) {
+    if (!is.character(quarto_bin) || length(quarto_bin) != 1 || !nzchar(quarto_bin)) {
+      stop("quarto_bin must be a single path to a Quarto executable.")
+    }
+    withr::local_envvar(QUARTO_PATH = quarto_bin)
+  }
+  quarto_command <- if (!is.null(quarto_bin)) {
+    quarto_bin
+  } else if (nzchar(Sys.getenv("QUARTO_PATH"))) {
+    Sys.getenv("QUARTO_PATH")
+  } else {
+    "quarto"
+  }
 
   if (!file.exists(shell_qmd)) {
     stop("shell_qmd not found: ", shell_qmd)
@@ -211,7 +241,7 @@ render_report <- function(
   # --output here only fixes the filename, not the directory.
   shell_docx_name <- sub("\\.qmd$", ".docx", basename(shell_qmd))
   quarto_result <- processx::run(
-    command = "quarto",
+    command = quarto_command,
     args = c(
       "render", basename(shell_qmd),
       "--to", "docx",
@@ -220,15 +250,38 @@ render_report <- function(
       "-M", paste0("document-status:", toupper(status))
     ),
     wd = project_dir,
-    error_on_status = FALSE
+    error_on_status = FALSE,
+    # Bound the render and kill its whole process tree (Deno/Pandoc/knitr
+    # children) on timeout or interrupt, so a hung Quarto can't block CI or
+    # a background job indefinitely, or leave orphans behind.
+    timeout = quarto_timeout,
+    cleanup_tree = TRUE
   )
-  if (quarto_result$status != 0) {
-    # cat() straight to stderr rather than folding the subprocess's stderr
-    # into stop()'s own condition message -- R's default top-level handler
-    # truncates printed error messages to getOption("warning.length")
-    # (1000 chars), which has been observed to silently cut off the actual
-    # failure reason from a long subprocess stderr, leaving only a
-    # generic-looking partial dump in CI logs.
+  # cat() straight to stderr rather than folding the subprocess's stderr
+  # into stop()'s own condition message -- R's default top-level handler
+  # truncates printed error messages to getOption("warning.length")
+  # (1000 chars), which has been observed to silently cut off the actual
+  # failure reason from a long subprocess stderr, leaving only a
+  # generic-looking partial dump in CI logs.
+  if (isTRUE(quarto_result$timeout)) {
+    cat(quarto_result$stderr, file = stderr())
+    stderr_lines <- strsplit(paste(quarto_result$stderr, collapse = "\n"), "\n", fixed = TRUE)[[1]]
+    stderr_tail <- if (length(stderr_lines) > 20) stderr_lines[(length(stderr_lines) - 19):length(stderr_lines)] else stderr_lines
+    stop(structure(
+      class = c("quartifyr_quarto_timeout", "error", "condition"),
+      list(
+        message = paste0(
+          "quarto render timed out after ", format(quarto_timeout), " seconds and was killed ",
+          "(raise `quarto_timeout`, or pass Inf to disable). Last stderr lines:\n",
+          paste(stderr_tail, collapse = "\n")
+        ),
+        call = NULL,
+        timeout = quarto_timeout,
+        stderr_tail = stderr_tail
+      )
+    ))
+  }
+  if (!isTRUE(quarto_result$status == 0)) {
     cat(quarto_result$stderr, file = stderr())
     stop("quarto render failed (see stderr above)")
   }
