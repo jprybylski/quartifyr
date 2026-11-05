@@ -34,6 +34,24 @@
 #' and re-raises with a pointer to the same fix, instead of letting
 #' pyro/uv's raw error propagate uninterpreted.
 #'
+#' @section Offline use:
+#' Nothing here needs the network if what it would download is already
+#' local; see the "Offline use" article on the package website for the whole
+#' recipe.
+#' Offline mode is on when `options(quartifyr.offline = TRUE)` or uv's own
+#' `UV_OFFLINE=1` is set. In it:
+#' * pyro's provisioning runs with `UV_OFFLINE=1`, so `uv lock`/`uv sync`
+#'   resolve from uv's cache or `UV_FIND_LINKS` wheels instead of PyPI;
+#' * if `uv` isn't installed it stops with a message saying so, rather than
+#'   letting pyro download and install uv from GitHub (into
+#'   `~/.local/bin`);
+#' * `from_repo` is refused (clone the repository yourself and use
+#'   `from_dir`);
+#' * a failure that needed the network says which step, which resource, and
+#'   how to provide it locally (error class `quartifyr_offline_failure`).
+#'
+#' Alternatively, `python_env` skips pyro and uv altogether.
+#'
 #' @param directory Target project directory. Defaults to the current
 #'   directory.
 #' @param from_dir Use a local directory as the template source instead
@@ -53,7 +71,26 @@
 #' @param force Overwrite existing `_quarto.yml`/style YAML/shell `.qmd`
 #'   files in `directory`. Only meaningful alongside `from_dir`/`from_repo`.
 #'   Default `FALSE`.
-#' @return Invisibly, the result of `pyro::initialize_python()`.
+#' @param python_env Path to an existing Python environment (a venv, or a
+#'   project directory holding a `.venv`) that already has `python-docx` and
+#'   `pyyaml`. It is checked (naming any missing module; `quartifyr_styling`
+#'   itself comes from the copy bundled in this package) and then pyro and
+#'   uv are skipped entirely: nothing is written to `pyproject.toml` and no
+#'   environment is created. Defaults to `getOption("quartifyr.python_env")`.
+#'   For the `styling_*()` calls in `render_report()` to use it too, set that
+#'   option (or the `QUARTIFYR_PYTHON_ENV` environment variable) in the
+#'   project's `.Rprofile`. Note that `reportifyr`'s own pass 2 has its own
+#'   Python environment, provisioned by
+#'   `reportifyr::initialize_report_project()`, which this does not replace.
+#' @param install_extensions Also install the Quarto extensions the project
+#'   needs: `quarto-plus` via [install_quarto_extensions()] (from
+#'   `extensions_from`, default the copy bundled in this package) and
+#'   quartifyr's own via [install_quartifyr_extension()], unless already
+#'   present. Neither touches the network. Default `FALSE`.
+#' @param extensions_from Passed as `from` to [install_quarto_extensions()].
+#'   Only used with `install_extensions = TRUE`.
+#' @return Invisibly, the result of `pyro::initialize_python()` (`NULL` when
+#'   `python_env` is used).
 #' @examples
 #' \dontrun{
 #' # Provision the Python environment only (this mutates the calling
@@ -72,50 +109,47 @@
 #' }
 #' @export
 initialize_quartifyr_project <- function(directory = ".", from_dir = NULL, from_repo = NULL,
-                                          ref = NULL, subdir = NULL, type = NULL, force = FALSE) {
-  # Pass venv_dir/pyproject_dir explicitly rather than relying on
-  # pyro::get_proj_dir()'s cwd-based default (`getOption("venv_dir") %||%
-  # here::here()`) -- here::here() caches the first root it resolves in an
-  # R session and ignores later working-directory changes, confirmed
-  # directly (see R/run-python.R's .run_quartifyr_styling_cli() for the
-  # same issue and a longer explanation). A bare withr::with_dir() around
-  # this call is not sufficient on its own.
+                                          ref = NULL, subdir = NULL, type = NULL, force = FALSE,
+                                          python_env = getOption("quartifyr.python_env"),
+                                          install_extensions = FALSE, extensions_from = NULL) {
   directory <- normalizePath(directory, mustWork = TRUE)
-  .seed_pyproject_stub(directory)
-  pyro::write_group_to_pyproject(
-    name = "quartifyr",
-    deps = c("python-docx", "pyyaml"),
-    pyproject_dir = directory
-  )
-  .ensure_default_groups_all(file.path(directory, "pyproject.toml"))
-  python_result <- tryCatch(
-    pyro::initialize_python(
-      venv_dir = directory,
-      pyproject_dir = directory,
-      groups = "quartifyr"
-    ),
-    error = function(e) {
-      cli::cli_abort(
-        c(
-          "x" = "pyro failed to provision a Python environment in {.path {directory}}.",
-          "!" = paste(
-            "This can happen in an existing reportifyr project created before",
-            "reportifyr 0.4.0 added its own pyro dependency -- its Python setup",
-            "predates pyro/uv, and pyro's {.code uv sync} against that stale",
-            "environment is what's failing below, not this function itself."
-          ),
-          "i" = paste(
-            "Run {.code reportifyr::initialize_report_project(project_dir = \"{directory}\")}",
-            "first (safe to re-run on an already-initialized project) to bring the",
-            "environment up to a pyro-compatible state, then retry."
-          ),
-          "i" = "Underlying error: {conditionMessage(e)}"
-        ),
-        call = NULL,
-        parent = e
+  offline <- .offline_mode()
+
+  if (offline && !is.null(from_repo)) {
+    .abort_offline(
+      step = "fetch the template repository for {.arg from_repo}",
+      resource = "{.val {from_repo}} (a git clone from the network)",
+      how = c(
+        "Clone it somewhere reachable while you have access, then pass that checkout as {.arg from_dir}.",
+        "Or run {.fn initialize_quartifyr_project} without {.arg from_repo} and copy the template files in yourself."
       )
+    )
+  }
+
+  python_result <- NULL
+  python_env <- .configured_python_env(python_env)
+  if (!is.null(python_env)) {
+    # A pre-provisioned environment replaces pyro/uv entirely, so nothing in
+    # the project is touched and nothing can reach for the network. The
+    # option is set for the rest of this call so the `init` CLI below
+    # (from_dir/from_repo) runs in it too.
+    .verify_python_env(python_env)
+    withr::local_options(quartifyr.python_env = python_env)
+    snippet <- sprintf("options(quartifyr.python_env = \"%s\")", python_env)
+    cli::cli_inform(c(
+      "v" = "Using the Python environment {.path {python_env}}; pyro/uv provisioning skipped.",
+      "i" = "Set {.code {snippet}} in this project's {.file .Rprofile} so {.fn render_report} uses it as well."
+    ))
+  } else {
+    python_result <- .provision_python_with_pyro(directory, offline)
+  }
+
+  if (isTRUE(install_extensions)) {
+    install_quarto_extensions(directory, from = extensions_from)
+    if (!dir.exists(file.path(directory, "_extensions", "quartifyr"))) {
+      install_quartifyr_extension(directory)
     }
-  )
+  }
 
   if (!is.null(from_dir) || !is.null(from_repo)) {
     init_args <- c("init", directory)
@@ -141,6 +175,92 @@ initialize_quartifyr_project <- function(directory = ".", from_dir = NULL, from_
   }
 
   invisible(python_result)
+}
+
+# Provisions the "quartifyr" dependency group in `directory` through pyro.
+#
+# Pass venv_dir/pyproject_dir explicitly rather than relying on
+# pyro::get_proj_dir()'s cwd-based default (`getOption("venv_dir") %||%
+# here::here()`) -- here::here() caches the first root it resolves in an
+# R session and ignores later working-directory changes, confirmed
+# directly (see R/run-python.R's .run_quartifyr_styling_cli() for the
+# same issue and a longer explanation). A bare withr::with_dir() around
+# this call is not sufficient on its own.
+#
+# Offline: pyro's uv_setup.sh only reaches for the network when `uv` is
+# missing (curl-installing it into ~/.local/bin) or when its version
+# differs from the requested one, and `uv lock`/`uv sync` honour
+# UV_OFFLINE=1. So an offline run sets that variable, refuses up front when
+# uv isn't installed, and passes the installed uv's own version so pyro
+# can't decide a "mismatch" calls for a download.
+.provision_python_with_pyro <- function(directory, offline) {
+  initialize_args <- list(
+    venv_dir = directory,
+    pyproject_dir = directory,
+    groups = "quartifyr"
+  )
+
+  if (offline) {
+    withr::local_envvar(UV_OFFLINE = "1")
+    uv_path <- pyro::get_uv_path(quiet = TRUE)
+    if (is.null(uv_path)) {
+      .abort_offline(
+        step = "provision the Python environment",
+        resource = "{.code uv}, which isn't installed (pyro would download it from github.com/astral-sh/uv and install it into {.path ~/.local/bin})",
+        how = c(
+          "Install uv yourself and put it on {.envvar PATH} (a single static binary; any recent version works).",
+          "Or skip uv altogether: pass {.arg python_env} (or set {.code options(quartifyr.python_env = ...)}) to an existing environment with python-docx and pyyaml."
+        )
+      )
+    }
+    initialize_args$uv_version <- pyro::get_uv_version(uv_path)
+  }
+
+  .seed_pyproject_stub(directory)
+  pyro::write_group_to_pyproject(
+    name = "quartifyr",
+    deps = c("python-docx", "pyyaml"),
+    pyproject_dir = directory
+  )
+  .ensure_default_groups_all(file.path(directory, "pyproject.toml"))
+
+  tryCatch(
+    do.call(pyro::initialize_python, initialize_args),
+    error = function(e) {
+      detail <- .process_error_detail(e)
+      if (offline) {
+        .abort_offline(
+          step = "resolve and install the {.val quartifyr} Python dependency group (uv lock / uv sync)",
+          resource = "python-docx and pyyaml (and their dependencies) from a local source, but uv found them neither in its cache nor in {.envvar UV_FIND_LINKS}",
+          how = c(
+            "Populate uv's cache while online ({.envvar UV_CACHE_DIR}), or download the wheels and point {.envvar UV_FIND_LINKS} at that directory (add {.envvar UV_NO_INDEX}=1 to skip the index entirely).",
+            "Or pass {.arg python_env} to an environment that already has them.",
+            "uv said: {detail}"
+          ),
+          parent = e
+        )
+      }
+      cli::cli_abort(
+        c(
+          "x" = "pyro failed to provision a Python environment in {.path {directory}}.",
+          "!" = paste(
+            "This can happen in an existing reportifyr project created before",
+            "reportifyr 0.4.0 added its own pyro dependency -- its Python setup",
+            "predates pyro/uv, and pyro's {.code uv sync} against that stale",
+            "environment is what's failing below, not this function itself."
+          ),
+          "i" = paste(
+            "Run {.code reportifyr::initialize_report_project(project_dir = \"{directory}\")}",
+            "first (safe to re-run on an already-initialized project) to bring the",
+            "environment up to a pyro-compatible state, then retry."
+          ),
+          "i" = "Underlying error: {detail}"
+        ),
+        call = NULL,
+        parent = e
+      )
+    }
+  )
 }
 
 #' Pre-seed a minimal pyproject.toml before pyro can seed it incorrectly

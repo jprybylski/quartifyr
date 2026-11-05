@@ -43,6 +43,18 @@
   and is drift-checked against the examples' copies by
   `scripts/sync_demo_extension.py`. `check_quarto_extensions()` now points
   at it (#72).
+* Offline and pre-provisioned setup (#72). `initialize_quartifyr_project()`
+  gains `python_env` (an existing environment with `python-docx` and
+  `pyyaml`: verified by name, then pyro and uv are skipped entirely, and
+  `render_report()`'s Python steps run in it via
+  `options(quartifyr.python_env = ...)`), `install_extensions` and
+  `extensions_from`. With `options(quartifyr.offline = TRUE)` or
+  `UV_OFFLINE=1`, pyro's provisioning runs offline, stops up front if `uv`
+  isn't installed instead of letting pyro download and install it into
+  `~/.local/bin`, and refuses `from_repo`. Every network-dependent failure
+  names the step, the resource and how to provide it locally (error class
+  `quartifyr_offline_failure`), including uv's own stderr, which pyro
+  otherwise hides.
 
 # quartifyr 0.3.1
 
