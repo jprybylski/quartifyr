@@ -348,6 +348,61 @@ run with `--check` (as both examples' `smoke_test.py` already do) to
 catch drift from `inst/python/styles/default.yaml`, same pattern as
 `scripts/sync_demo_extension.py` for the Lua extension copies.
 
+**A filled *draft* docx still contains its `{rpfy}:` strings; only the
+final one doesn't.** `reportifyr::build_report()` leaves each magic string
+in place as its own text paragraph (so a re-render can find it) and marks
+the placeholder as filled by stamping the inserted figure/table's alt text
+with `{rpfy}:<name> [hash:...]`; `finalize_document()` is what removes the
+text paragraphs. `render_report()`'s `unfilled_placeholders`
+(`.scan_unfilled_placeholders()` in `R/render-result.R`) therefore counts
+text occurrences against alt-text markers per string, rather than just
+looking for `{rpfy}:` text -- the naive version reports every placeholder
+of a perfectly good draft as unfilled. Separately, with reportifyr's
+default `footnotes_fail_on_missing_metadata = TRUE`, a missing sidecar
+makes `build_report()` *fail* (generic "Figure footnotes script failed."),
+while a missing figure is only a logged warning and a placeholder left
+behind; `.with_missing_metadata_context()` names the sidecars in the first
+case. `action.yml` deliberately still calls `render_report()` rather than
+`inst/scripts/render.R`, and only passes `strict` when asked: its "Install
+the quartifyr R package" step installs the default branch, so a PR's own
+action smoke test runs against `main`'s package, which can't have the
+script or the argument yet.
+
+**Offline mode leans on uv's `UV_OFFLINE`, not on bypassing pyro.** pyro's
+`uv_setup.sh` only `curl`-installs uv when uv is missing or its version
+differs from the requested `uv_version` (which defaults to the *installed*
+uv's), and `uv lock`/`uv sync` honour `UV_OFFLINE=1` natively. So
+`.provision_python_with_pyro()` (`R/initialize.R`) sets that variable,
+refuses up front when uv isn't installed, and passes the installed version
+explicitly. pyro also hides uv's stderr (it's only on the processx condition),
+which `.process_error_detail()` digs out. A configured `python_env`
+(`R/offline.R`) bypasses pyro entirely, and its interpreter must be invoked by
+the venv's own `bin/python` path: `normalizePath()` resolves that symlink to
+the base interpreter, which silently loses the venv's site-packages (every
+module then looks "missing"). `reportifyr`'s own pyro/uv setup stays upstream.
+`inst/extensions/quarto-plus/` is an unmodified MIT-licensed upstream copy;
+see `inst/extensions/README.md`. `scripts/offline_pipeline_check.sh` (run by
+the `offline-pipeline` CI job inside `unshare --net`) is the only real "no
+network" check, and can't be reproduced on macOS.
+
+**Restore the examples' `renv.lock` against a dated CRAN snapshot, never
+Posit Package Manager's moving `latest`.** Once `latest` moves past a pinned
+version (curl 8.0.0 -> 8.1.0), renv fetches the old one from the CRAN
+archive, and renv (confirmed in 1.2.3 and 1.3.1) mishandles a package from
+that path that declares no `Imports:` (curl): in *project mode*,
+`renv_graph_resolve()` fills the missing field via
+`renv_description_read(package = "curl")`, which for a package that isn't
+installed resolves to the working directory's own `DESCRIPTION`. curl then
+"imports" the project's `reportifyr`, closing a loop with `reportifyr ->
+gert -> credentials -> curl`, and `renv::restore()` ends with "failed to
+install credentials, curl, gert, reportifyr: dependency failed" and no real
+error. It only reproduces with a `DESCRIPTION` in the cwd (so not with
+`restore(lockfile = ...)` from elsewhere) and only once a pin is stale, which
+is why it looked like random CI rot (it already caused the "stale curl"
+re-snapshot). Both locks' `Repositories` CRAN entry, ci.yml's
+`CRAN_SNAPSHOT_URL`, and `action.yml`'s `cran-repo` input all carry the
+snapshot; bump them together with re-snapshotting.
+
 **YAML lists, not maps, for `synopsis:`/`title-page-extra:`/`address:`.**
 Deliberate: pandoc's Lua metadata tables don't preserve map key order
 (confirmed by testing), so these are lists specifically to keep row/line

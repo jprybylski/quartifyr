@@ -1,5 +1,61 @@
 # quartifyr
 
+# quartifyr (development version)
+
+## New features
+
+* `render_report()` gains `quarto_timeout` (default 600 seconds, `Inf`
+  disables) and `quarto_bin`. A hung Quarto render is now killed along
+  with its whole process tree (Deno/Pandoc/knitr children) and signals an
+  error of class `quartifyr_quarto_timeout` that includes the tail of
+  Quarto's stderr. `quarto_bin` (or the `QUARTO_PATH` environment variable)
+  selects the Quarto executable instead of relying on `PATH` (#71).
+* New `check_report_project()` is a render-free preflight (it never invokes
+  Quarto). It returns a data frame of findings (`check`, `severity`,
+  `path`, `message`) covering the project preconditions `render_report()`
+  enforces, the required Quarto extensions, every `{rpfy}:` placeholder's
+  artifact and metadata sidecar, the abbreviation keys and `meta_type`
+  those sidecars reference in `standard_footnotes.yaml`, and placeholders
+  that end their section. `render_report()` now shares the precondition
+  checks with it, with unchanged error messages (#70).
+* `render_report()` now returns a structured `quartifyr_render_result`
+  (still containing `shell`/`draft`/`final`): `status` (`"ok"`,
+  `"warning"` or `"error"`), `artifacts` with SHA-256 hashes,
+  `unfilled_placeholders` (scanned from the produced docx),
+  `missing_metadata`, `warnings`, `errors` and `log_dir`. New
+  `strict = TRUE` signals an error of class `quartifyr_render_incomplete`
+  instead of returning an incomplete result; the default stays `FALSE`. A
+  failed LibreOffice step still only warns, but is now recorded in the
+  result. When `build_report()` fails because a metadata sidecar is
+  missing, the error (class `quartifyr_pass2_failed`) now names it (#69).
+* New `inst/scripts/render.R` entry point for CI and background jobs:
+  `--project <dir> --shell report.qmd --status draft --json [--strict]`
+  prints the result as JSON on stdout (shape in
+  `inst/schemas/render-result.schema.json`), sends everything else to
+  stderr, and exits non-zero on any error or, with `--strict`, any non-ok
+  status. The GitHub Action gains a `strict` input and a `status` output
+  (#69).
+* New `install_quarto_extensions()` installs the required third-party Quarto
+  extension (`A2-ai/quarto-plus`) without network access, from a copy now
+  bundled in the package or from a directory or `.zip`/`.tar.gz` archive of
+  your choosing. The bundled copy is unmodified upstream (MIT-licensed, with
+  its `LICENSE` kept alongside; provenance in `inst/extensions/README.md`)
+  and is drift-checked against the examples' copies by
+  `scripts/sync_demo_extension.py`. `check_quarto_extensions()` now points
+  at it (#72).
+* Offline and pre-provisioned setup (#72). `initialize_quartifyr_project()`
+  gains `python_env` (an existing environment with `python-docx` and
+  `pyyaml`: verified by name, then pyro and uv are skipped entirely, and
+  `render_report()`'s Python steps run in it via
+  `options(quartifyr.python_env = ...)`), `install_extensions` and
+  `extensions_from`. With `options(quartifyr.offline = TRUE)` or
+  `UV_OFFLINE=1`, pyro's provisioning runs offline, stops up front if `uv`
+  isn't installed instead of letting pyro download and install it into
+  `~/.local/bin`, and refuses `from_repo`. Every network-dependent failure
+  names the step, the resource and how to provide it locally (error class
+  `quartifyr_offline_failure`), including uv's own stderr, which pyro
+  otherwise hides.
+
 # quartifyr 0.3.1
 
 ## New features

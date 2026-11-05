@@ -326,3 +326,13 @@ test_that("initialize_quartifyr_project() still returns pyro::initialize_python(
 
   expect_identical(result, "initialized")
 })
+
+test_that(".seed_pyproject_stub() falls back to a valid name when the directory name has no usable characters", {
+  parent <- withr::local_tempdir()
+  project_dir <- file.path(parent, "___")
+  dir.create(project_dir)
+
+  .seed_pyproject_stub(project_dir)
+
+  expect_match(readLines(file.path(project_dir, "pyproject.toml"))[2], 'name = "project"', fixed = TRUE)
+})

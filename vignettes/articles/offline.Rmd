@@ -1,0 +1,128 @@
+---
+title: "Offline use"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+Firewalled analysis environments, common in regulated (GxP) settings, can't
+download anything while a report is being set up or built. quartifyr works
+there as long as what it would have downloaded is already on the machine. This
+page lists what needs the network, how to provide each piece locally, and what
+quartifyr cannot fix because it happens in a dependency.
+
+## What needs the network
+
+Only setup does. Rendering a report makes no network calls of its own.
+
+| Step | Why it reaches the network | Offline replacement |
+| --- | --- | --- |
+| Python packages for `render_report()`'s styling steps | pyro runs `uv lock` and `uv sync` | `UV_OFFLINE=1` with a pre-populated cache or wheel directory, or `python_env` |
+| Installing `uv` | pyro downloads and installs it into `~/.local/bin` when it is missing | install `uv` yourself |
+| The `quarto-plus` Quarto extension | `quarto add` fetches from GitHub | `install_quarto_extensions()`, which has a copy bundled |
+| Templates with `from_repo` | `git clone` | clone elsewhere, use `from_dir` |
+
+## Offline mode
+
+Set `options(quartifyr.offline = TRUE)` (or uv's own `UV_OFFLINE=1`, which
+quartifyr also honours) and `initialize_quartifyr_project()` changes how it
+behaves:
+
+* pyro's provisioning runs with `UV_OFFLINE=1`, so uv resolves from its cache
+  or from `UV_FIND_LINKS` wheels instead of PyPI;
+* if `uv` isn't installed it stops with a message saying so. Without this, pyro's
+  setup script would download uv from GitHub and install it into
+  `~/.local/bin`;
+* the installed uv's own version is passed to pyro, so a version mismatch can't
+  be treated as a reason to download a different one;
+* `from_repo` is refused, with a pointer to `from_dir`.
+
+Whenever a step that needs the network fails, the error says which step, which
+resource it was after and how to provide it locally. The error class is
+`quartifyr_offline_failure`, and it includes uv's own stderr (pyro otherwise
+hides it).
+
+## Recipe
+
+While you still have network access, on a machine that matches the target
+(same OS and Python version), fill uv's cache and collect the wheels:
+
+```bash
+# Installs the packages into uv's cache as a side effect.
+uv pip install --python .venv python-docx pyyaml
+
+# Or keep the wheels in a directory you can copy across.
+pip download --dest wheels python-docx pyyaml
+```
+
+Then, on the firewalled machine:
+
+```{r}
+options(quartifyr.offline = TRUE)
+
+# Point uv at the wheels if you aren't using its cache, and skip the index.
+Sys.setenv(UV_FIND_LINKS = "/path/to/wheels", UV_NO_INDEX = "1")
+
+# The bundled quarto-plus and quartifyr's own extension install with no
+# network, and so does Python provisioning.
+quartifyr::initialize_quartifyr_project(
+  "report-project",
+  install_extensions = TRUE,
+  from_dir = "/path/to/templates"   # optional: an org template, already cloned
+)
+```
+
+`install_quarto_extensions()` can also install a different copy of an
+extension, such as a version your site has vetted, from a directory or a
+`.zip`/`.tar.gz` archive: `install_quarto_extensions(path, from = "quarto-plus.zip")`.
+
+### An existing Python environment
+
+If you would rather not use uv on that machine at all, point quartifyr at an
+environment that already has `python-docx` and `pyyaml`:
+
+```{r}
+quartifyr::initialize_quartifyr_project("report-project", python_env = "/opt/envs/quartifyr")
+```
+
+The environment is checked, and a missing module is named along with the
+package to install. Nothing in the project is touched. Put the same setting in
+the project's `.Rprofile` so `render_report()` uses it too:
+
+```{r}
+options(quartifyr.python_env = "/opt/envs/quartifyr")
+```
+
+The `QUARTIFYR_PYTHON_ENV` environment variable works as well. The
+`quartifyr_styling` module itself doesn't need installing: the copy bundled in
+the R package is put on `PYTHONPATH`.
+
+## Not covered
+
+`reportifyr`, which fills the shell in pass 2, has its own Python environment
+and provisions it through pyro and uv when you call
+`reportifyr::initialize_report_project()`. That code is upstream (A2-ai), and
+`python_env` does not replace it. It works offline under the same conditions as
+above: uv installed at any version, `UV_OFFLINE=1`, and a populated cache or
+wheel directory. If a step in it needs the network, the error comes from
+there, not from quartifyr.
+
+## The `quarto-plus` licence
+
+`A2-ai/quarto-plus` is MIT-licensed (Copyright (c) 2024 Posit Software, PBC).
+Bundling it is allowed so long as its copyright and permission notice stay with
+the copy, which is why its `LICENSE` is kept inside the bundled directory and
+installed with it into `_extensions/A2-ai/quarto-plus/`. The bundled files are
+unmodified upstream at a recorded commit (see `inst/extensions/README.md`), and
+`scripts/sync_demo_extension.py --check` fails if the examples' copies drift
+from them.
+
+## How this is tested
+
+The `offline-pipeline` CI job provisions the demo project online, then runs
+`scripts/offline_pipeline_check.sh` inside a network namespace with no network
+interface and an empty `HOME`. It initializes and renders the demo (once with
+uv, once with `python_env`) and fails if anything needs the network or writes
+to `~/.local/bin`. The same script can be run by hand on Linux; the header of
+the script shows how.

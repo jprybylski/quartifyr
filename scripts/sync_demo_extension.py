@@ -7,6 +7,11 @@ _extensions/quartifyr/ that makes `quarto add jprybylski/quartifyr`
 work (see scripts/quarto_add_smoke_test.py and CLAUDE.md's "Quarto
 extension host" note -- issue #16).
 
+Also keeps both examples' _extensions/A2-ai/quarto-plus/ in sync with the
+bundled inst/extensions/quarto-plus/ (installed offline via
+install_quarto_extensions(); see inst/extensions/README.md for its
+provenance and MIT licence).
+
 Quarto's extension loader doesn't follow symlinks (confirmed: `quarto
 render` fails outright with a symlinked _extensions/quartifyr/), so each
 of these has to carry a real, physical copy rather than a link that
@@ -36,6 +41,13 @@ DESTS = [
     # extension at the repo root, the way GitHub-hosted extensions work.
     REPO_ROOT / "_extensions" / "quartifyr",
 ]
+QUARTO_PLUS_SOURCE = REPO_ROOT / "inst" / "extensions" / "quarto-plus"
+QUARTO_PLUS_DESTS = [
+    REPO_ROOT / "examples" / "demo-report" / "_extensions" / "A2-ai" / "quarto-plus",
+    REPO_ROOT / "examples" / "memo-example" / "_extensions" / "A2-ai" / "quarto-plus",
+]
+# (source, destinations) pairs, checked and synced independently.
+SYNC_GROUPS = [(SOURCE, DESTS), (QUARTO_PLUS_SOURCE, QUARTO_PLUS_DESTS)]
 
 
 def _diff_files(source: Path, dest: Path) -> list[str]:
@@ -55,22 +67,26 @@ def _diff_files(source: Path, dest: Path) -> list[str]:
 def main() -> int:
     check_only = "--check" in sys.argv
 
-    all_problems: dict[Path, list[str]] = {}
-    for dest in DESTS:
-        problems = _diff_files(SOURCE, dest)
-        if problems:
-            all_problems[dest] = problems
-        elif not check_only:
-            print(f"{dest} is in sync with {SOURCE}")
+    all_problems: dict[Path, tuple[Path, list[str]]] = {}
+    for source, dests in SYNC_GROUPS:
+        for dest in dests:
+            problems = _diff_files(source, dest)
+            if problems:
+                all_problems[dest] = (source, problems)
+            elif not check_only:
+                print(f"{dest} is in sync with {source}")
 
     if not all_problems:
         if check_only:
-            print(f"All examples' _extensions/quartifyr/ copies are in sync with {SOURCE}")
+            print(
+                "All extension copies (quartifyr, quarto-plus) are in sync with "
+                "their inst/extensions/ sources"
+            )
         return 0
 
     if check_only:
-        for dest, problems in all_problems.items():
-            print(f"error: {dest} has drifted from {SOURCE}:", file=sys.stderr)
+        for dest, (source, problems) in all_problems.items():
+            print(f"error: {dest} has drifted from {source}:", file=sys.stderr)
             for p in problems:
                 print(f"  - {p}", file=sys.stderr)
         print(
@@ -79,11 +95,11 @@ def main() -> int:
         )
         return 1
 
-    for dest in all_problems:
+    for dest, (source, _) in all_problems.items():
         if dest.exists():
             shutil.rmtree(dest)
-        shutil.copytree(SOURCE, dest)
-        print(f"Synced {SOURCE} -> {dest}")
+        shutil.copytree(source, dest)
+        print(f"Synced {source} -> {dest}")
     return 0
 
 

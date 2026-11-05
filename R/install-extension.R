@@ -15,8 +15,9 @@
 #' Also runs [check_quarto_extensions()] (`error = FALSE`) afterward as a
 #' courtesy nudge -- quartifyr's own extension layers on top of
 #' `quarto-plus`'s ToC/List of Tables/List of Figures/abbreviations
-#' machinery, which this function doesn't install itself (it isn't
-#' bundled in this R package the way quartifyr's own extension is).
+#' machinery, which this function doesn't install itself. Use
+#' [install_quarto_extensions()] for that (it works offline, from the copy
+#' bundled in this package).
 #'
 #' @param path Target project directory. Defaults to the current directory.
 #' @param force Overwrite an existing `_extensions/quartifyr/` in `path`.

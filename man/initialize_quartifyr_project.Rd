@@ -11,7 +11,10 @@ initialize_quartifyr_project(
   ref = NULL,
   subdir = NULL,
   type = NULL,
-  force = FALSE
+  force = FALSE,
+  python_env = getOption("quartifyr.python_env"),
+  install_extensions = FALSE,
+  extensions_from = NULL
 )
 }
 \arguments{
@@ -40,9 +43,31 @@ structure. Only valid alongside \code{from_dir}/\code{from_repo}.}
 \item{force}{Overwrite existing \verb{_quarto.yml}/style YAML/shell \code{.qmd}
 files in \code{directory}. Only meaningful alongside \code{from_dir}/\code{from_repo}.
 Default \code{FALSE}.}
+
+\item{python_env}{Path to an existing Python environment (a venv, or a
+project directory holding a \code{.venv}) that already has \code{python-docx} and
+\code{pyyaml}. It is checked (naming any missing module; \code{quartifyr_styling}
+itself comes from the copy bundled in this package) and then pyro and
+uv are skipped entirely: nothing is written to \code{pyproject.toml} and no
+environment is created. Defaults to \code{getOption("quartifyr.python_env")}.
+For the \verb{styling_*()} calls in \code{render_report()} to use it too, set that
+option (or the \code{QUARTIFYR_PYTHON_ENV} environment variable) in the
+project's \code{.Rprofile}. Note that \code{reportifyr}'s own pass 2 has its own
+Python environment, provisioned by
+\code{reportifyr::initialize_report_project()}, which this does not replace.}
+
+\item{install_extensions}{Also install the Quarto extensions the project
+needs: \code{quarto-plus} via \code{\link[=install_quarto_extensions]{install_quarto_extensions()}} (from
+\code{extensions_from}, default the copy bundled in this package) and
+quartifyr's own via \code{\link[=install_quartifyr_extension]{install_quartifyr_extension()}}, unless already
+present. Neither touches the network. Default \code{FALSE}.}
+
+\item{extensions_from}{Passed as \code{from} to \code{\link[=install_quarto_extensions]{install_quarto_extensions()}}.
+Only used with \code{install_extensions = TRUE}.}
 }
 \value{
-Invisibly, the result of \code{pyro::initialize_python()}.
+Invisibly, the result of \code{pyro::initialize_python()} (\code{NULL} when
+\code{python_env} is used).
 }
 \description{
 Provisions a project-local Python environment via pyro (writing a
@@ -80,6 +105,28 @@ something \code{uv} can adopt as-is. Run
 state before calling this function. This function catches that failure
 and re-raises with a pointer to the same fix, instead of letting
 pyro/uv's raw error propagate uninterpreted.
+}
+
+\section{Offline use}{
+
+Nothing here needs the network if what it would download is already
+local; see the "Offline use" article on the package website for the whole
+recipe.
+Offline mode is on when \code{options(quartifyr.offline = TRUE)} or uv's own
+\code{UV_OFFLINE=1} is set. In it:
+\itemize{
+\item pyro's provisioning runs with \code{UV_OFFLINE=1}, so \verb{uv lock}/\verb{uv sync}
+resolve from uv's cache or \code{UV_FIND_LINKS} wheels instead of PyPI;
+\item if \code{uv} isn't installed it stops with a message saying so, rather than
+letting pyro download and install uv from GitHub (into
+\verb{~/.local/bin});
+\item \code{from_repo} is refused (clone the repository yourself and use
+\code{from_dir});
+\item a failure that needed the network says which step, which resource, and
+how to provide it locally (error class \code{quartifyr_offline_failure}).
+}
+
+Alternatively, \code{python_env} skips pyro and uv altogether.
 }
 
 \examples{

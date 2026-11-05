@@ -16,7 +16,10 @@ render_report(
   figures_path = file.path(dirname(shell_qmd), "OUTPUTS", "figures"),
   tables_path = file.path(dirname(shell_qmd), "OUTPUTS", "tables"),
   recalculate_fields = FALSE,
-  resolve_same_page_crossrefs = FALSE
+  resolve_same_page_crossrefs = FALSE,
+  quarto_timeout = 600,
+  quarto_bin = NULL,
+  strict = FALSE
 )
 }
 \arguments{
@@ -70,7 +73,9 @@ has been observed to hang intermittently in some environments for
 reasons not yet root-caused (see \code{recalculate_fields.py}'s docstring)
 -- opt in once you've confirmed it's reliable in your own environment.
 A failure here only warns, it never fails the overall render (the doc
-is still fully usable, just needs a manual "select all, F9" in Word).}
+is still fully usable, just needs a manual "select all, F9" in Word).
+The failure is recorded in the result (\code{status} becomes \code{"error"}, see
+\code{strict}).}
 
 \item{resolve_same_page_crossrefs}{Whether to run
 \code{styling_resolve_same_page_crossrefs()} (headless LibreOffice,
@@ -85,10 +90,53 @@ mechanism and inherits its intermittent-hang behavior (see
 using \code{crossref-hyperlinks: "same-page"} just stays hyperlinked
 everywhere -- the same safe fallback \code{apply-layout} already leaves in
 place. A failure here only warns, same as \code{recalculate_fields}.}
+
+\item{quarto_timeout}{Seconds to allow the \verb{quarto render} subprocess
+before killing it and signalling an error of class
+\code{quartifyr_quarto_timeout}. Default \code{600}; \code{Inf} disables the limit.
+The whole process tree is cleaned up on timeout or interrupt (Quarto
+spawns Deno, Pandoc and possibly R/knitr children that would otherwise
+outlive it).}
+
+\item{quarto_bin}{Path to the Quarto executable. \code{NULL} (default) uses
+the \code{QUARTO_PATH} environment variable if set, else \code{quarto} on
+\code{PATH}. When given, it is also exported as \code{QUARTO_PATH} for the
+duration of the call, so the \code{quarto} R package's own helpers
+(\code{quarto_inspect()}, \code{quarto_list_extensions()}) use the same binary.}
+
+\item{strict}{If \code{TRUE}, signal an error of class
+\code{quartifyr_render_incomplete} (carrying the result as \verb{$result}) when
+the render finished but the result's \code{status} is not \code{"ok"}: unfilled
+\verb{\{rpfy\}:} placeholders, missing metadata sidecars, or a requested
+LibreOffice step that failed. Default \code{FALSE}, which returns the result
+either way so existing callers keep working; use \code{TRUE} in CI and
+background jobs where an incomplete document must not look like
+success.}
 }
 \value{
-A list with \code{shell}, \code{draft}, and (when \code{status = "final"}) \code{final}
-docx paths.
+An object of class \code{quartifyr_render_result}, a list with:
+\describe{
+\item{\code{shell}, \code{draft}, \code{final}}{Paths to the docx files (\code{final} is
+\code{NULL} unless \code{status = "final"}).}
+\item{\code{status}}{\code{"ok"}, \code{"warning"} or \code{"error"}. \code{"error"} means the
+delivered document is incomplete: placeholders were left unfilled,
+or a requested LibreOffice step failed. \code{"warning"} means it is
+complete but reportifyr flagged something (e.g. a missing metadata
+sidecar).}
+\item{\code{artifacts}}{Data frame of the files that exist: \code{role}, \code{path},
+\code{sha256}, \code{bytes}.}
+\item{\code{unfilled_placeholders}}{\verb{\{rpfy\}:} magic strings still present
+in the draft/final docx.}
+\item{\code{missing_metadata}}{Artifacts the shell references that have no
+\verb{<stem>_<ext>_metadata.json} sidecar (from the project files, plus
+reportifyr's own log for this run).}
+\item{\code{warnings}, \code{errors}}{Messages behind a non-\code{"ok"} status.}
+\item{\code{log_dir}}{reportifyr's log directory for the project.}
+}
+Everything before pass 2 (a failed Quarto render, a timeout, a failed
+precondition) signals an ordinary error instead. The same fields are
+available as JSON from the \code{inst/scripts/render.R} script (see
+\code{system.file("schemas", "render-result.schema.json", package = "quartifyr")} for the shape).
 }
 \description{
 Two-pass report generation in one call: (1) regenerates

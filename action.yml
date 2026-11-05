@@ -40,6 +40,27 @@ inputs:
     description: 'R version to install (passed to r-lib/actions/setup-r).'
     required: false
     default: 'release'
+  strict:
+    description: >-
+      Fail the step when the render finishes but is incomplete: unfilled
+      {rpfy}: placeholders, missing metadata sidecars, or a failed
+      post-processing step (render_report(strict = TRUE)). Defaults to
+      'false', which reports the result's status in the `status` output
+      without failing. Needs a quartifyr release that has `strict`.
+    required: false
+    default: 'false'
+  cran-repo:
+    description: >-
+      CRAN repository URL `renv::restore()` resolves against (set as the
+      CRAN entry of RENV_CONFIG_REPOS_OVERRIDE). Defaults to Posit Package
+      Manager's moving `latest`. If the calling project's renv.lock pins
+      older versions, point this at the dated snapshot it was taken from
+      (e.g. https://packagemanager.posit.co/cran/2026-09-01): once `latest`
+      moves past a pinned version, renv takes the CRAN-archive path for it,
+      and a package that declares no `Imports:` can then make the restore
+      fail with a bogus "dependency failed" cycle.
+    required: false
+    default: 'https://packagemanager.posit.co/cran/latest'
   initialize-project:
     description: >-
       Run reportifyr::initialize_report_project() on the project directory
@@ -49,6 +70,12 @@ inputs:
     default: 'true'
 
 outputs:
+  status:
+    description: >-
+      The render's completeness status: 'ok', 'warning' or 'error' (see
+      render_report()'s return value). Empty with a quartifyr release that
+      predates the structured result.
+    value: ${{ steps.render.outputs.status }}
   shell-docx:
     description: 'Path to the rendered shell docx (report/shell/).'
     value: ${{ steps.render.outputs.shell-docx }}
@@ -80,7 +107,9 @@ runs:
     # them the same way local dev does.
     - name: Restore a2-ai.r-universe.dev to the effective repos list
       shell: bash
-      run: echo "RENV_CONFIG_REPOS_OVERRIDE=a2-ai=https://a2-ai.r-universe.dev;CRAN=https://packagemanager.posit.co/cran/latest" >> "$GITHUB_ENV"
+      env:
+        CRAN_REPO: ${{ inputs.cran-repo }}
+      run: echo "RENV_CONFIG_REPOS_OVERRIDE=a2-ai=https://a2-ai.r-universe.dev;CRAN=$CRAN_REPO" >> "$GITHUB_ENV"
 
     # Runtime/build libraries reportifyr/pyro's own transitive dependencies
     # need against Ubuntu's binary R packages: libuv for `fs` (pyro),
@@ -181,6 +210,7 @@ runs:
         SHELL_QMD: ${{ inputs.shell-qmd }}
         FINAL: ${{ inputs.final }}
         REFERENCE_DOC: ${{ inputs.reference-doc }}
+        STRICT: ${{ inputs.strict }}
       run: |
         reference_doc <- Sys.getenv("REFERENCE_DOC")
         args <- list(
@@ -190,6 +220,12 @@ runs:
         if (nzchar(reference_doc)) {
           args$reference_doc <- file.path(Sys.getenv("GITHUB_WORKSPACE"), reference_doc)
         }
+        # Only passed when asked for, so the default path keeps working
+        # against a quartifyr that predates `strict` (this step installs
+        # the default branch, not the ref the action itself was pinned to).
+        if (Sys.getenv("STRICT") == "true") {
+          args$strict <- TRUE
+        }
         result <- do.call(quartifyr::render_report, args)
 
         gh_output <- Sys.getenv("GITHUB_OUTPUT")
@@ -197,6 +233,9 @@ runs:
           paste0("shell-docx=", result$shell),
           paste0("draft-docx=", result$draft)
         )
+        if (!is.null(result$status)) {
+          lines <- c(lines, paste0("status=", result$status))
+        }
         if (!is.null(result$final)) {
           lines <- c(lines, paste0("final-docx=", result$final))
         }

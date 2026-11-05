@@ -6,6 +6,18 @@ on:
   pull_request:
   workflow_dispatch: # manual re-run for a dependabot/combined-prs branch skipped below
 
+# The CRAN snapshot the examples' renv.lock files were taken from. Restores
+# must resolve against it, not Posit Package Manager's moving "latest":
+# once latest moves past a pinned version, renv fetches the old one from the
+# CRAN archive, and renv (1.2.3 and 1.3.1) then mishandles any such package
+# that declares no `Imports:` (curl): in project mode it fills the missing
+# field from the project's own DESCRIPTION, so curl appears to import
+# reportifyr, which loops back to curl via gert and credentials. renv then
+# reports reportifyr, gert, credentials and curl as "dependency failed" with
+# no real error. Bump this together with re-snapshotting the lock files.
+env:
+  CRAN_SNAPSHOT_URL: https://packagemanager.posit.co/cran/2026-09-01
+
 jobs:
   styling-tests:
     name: styling pytest (${{ matrix.os }})
@@ -86,7 +98,7 @@ jobs:
       # local dev does.
       - name: Restore a2-ai.r-universe.dev to the effective repos list
         shell: bash
-        run: echo "RENV_CONFIG_REPOS_OVERRIDE=a2-ai=https://a2-ai.r-universe.dev;CRAN=https://packagemanager.posit.co/cran/latest" >> "$GITHUB_ENV"
+        run: echo "RENV_CONFIG_REPOS_OVERRIDE=a2-ai=https://a2-ai.r-universe.dev;CRAN=$CRAN_SNAPSHOT_URL" >> "$GITHUB_ENV"
 
       - uses: astral-sh/setup-uv@v7
         with:
@@ -217,6 +229,84 @@ jobs:
       - name: Run bare-bones pieces-only integration test
         run: uv run python scripts/bare_bones_integration_test.py
 
+  offline-pipeline:
+    name: offline init + render (no network)
+    # Proves quartifyr's setup and render work with no network at all, as in
+    # a firewalled (GxP) environment. Everything that needs the network
+    # happens first, in "Provision (online)": renv restore, installing this
+    # checkout, and initializing the reportifyr and quartifyr Python
+    # environments, which leaves the wheels in uv's cache. The check itself
+    # then runs in a fresh network namespace (`unshare --net`, which needs
+    # root, hence sudo, and then drops back to this user) with an empty
+    # HOME, so anything that reaches for the network fails, and anything
+    # written to ~/.local/bin (where pyro's uv_setup.sh would install uv) is
+    # caught. See scripts/offline_pipeline_check.sh for the steps.
+    #
+    # See styling-tests' identical condition above.
+    if: github.event_name != 'pull_request' || (!startsWith(github.head_ref, 'dependabot/') && github.head_ref != 'combined-prs-branch')
+    runs-on: ubuntu-latest
+    steps:
+      # Explicit locations, so the offline phase, which runs with a
+      # different HOME, finds what the online phase provisioned. Set from a
+      # step rather than a job-level `env:` because the `runner` context
+      # isn't available there (the whole workflow is rejected if it's used).
+      - name: Pin tool cache locations
+        run: |
+          {
+            echo "UV_CACHE_DIR=$RUNNER_TEMP/uv-cache"
+            echo "UV_PYTHON_INSTALL_DIR=$RUNNER_TEMP/uv-python"
+            echo "RENV_PATHS_CACHE=$RUNNER_TEMP/renv-cache"
+          } >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: quarto-dev/quarto-actions/setup@v2
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "release"
+
+      # See full-pipeline's identically-named step.
+      - name: Restore a2-ai.r-universe.dev to the effective repos list
+        run: echo "RENV_CONFIG_REPOS_OVERRIDE=a2-ai=https://a2-ai.r-universe.dev;CRAN=$CRAN_SNAPSHOT_URL" >> "$GITHUB_ENV"
+
+      - uses: astral-sh/setup-uv@v7
+
+      # See full-pipeline's identically-named step.
+      - name: Install R package system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libuv1-dev libgit2-dev libcurl4-openssl-dev libssl-dev libxml2-dev \
+            libfontconfig1-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev \
+            libharfbuzz-dev libfribidi-dev libcairo2-dev
+
+      - name: Configure git identity for reportifyr
+        run: |
+          git config --global user.name "quartifyr CI"
+          git config --global user.email "quartifyr-ci@users.noreply.github.com"
+
+      - name: Provision (online)
+        working-directory: examples/demo-report
+        env:
+          QUARTIFYR_SRC: ${{ github.workspace }}
+        run: |
+          Rscript -e 'renv::restore()'
+          Rscript -e 'renv::install(paste0("local::", Sys.getenv("QUARTIFYR_SRC")))'
+          Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'
+          Rscript -e 'quartifyr::initialize_quartifyr_project(getwd())'
+
+      - name: Initialize and render with the network disabled
+        run: |
+          offline_home="$(mktemp -d)"
+          sudo -E unshare --net -- \
+            setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups \
+            env PATH="$PATH" HOME="$offline_home" \
+            bash scripts/offline_pipeline_check.sh
+
   action-smoke-test:
     name: composite action smoke test (dogfood)
     # Exercises action.yml (the repo-root reusable action from issue #9)
@@ -239,6 +329,7 @@ jobs:
         with:
           shell-qmd: examples/demo-report/report.qmd
           final: 'true'
+          cran-repo: ${{ env.CRAN_SNAPSHOT_URL }}
 
       - name: Assert rendered docx exists with no leftover magic strings
         shell: bash

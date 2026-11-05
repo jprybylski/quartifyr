@@ -25,56 +25,56 @@
 #' @return A parsed list from the CLI's JSON output.
 #' @keywords internal
 .run_quartifyr_styling_cli <- function(args) {
-  python_src <- system.file("python", package = "quartifyr")
-  if (!nzchar(python_src)) {
-    stop(
-      "quartifyr's bundled Python source (inst/python) was not found in ",
-      "the installed package -- reinstall the quartifyr R package.",
-      call. = FALSE
-    )
+  python_src <- .python_src()
+
+  # A pre-provisioned environment (options(quartifyr.python_env) or
+  # QUARTIFYR_PYTHON_ENV, see initialize_quartifyr_project()) is run
+  # directly, bypassing pyro and uv entirely -- no `uv run` resync, so
+  # nothing here can reach for the network.
+  python_env <- .configured_python_env()
+  if (is.null(python_env)) {
+    # pyro::get_venv_uv_paths() takes no arguments -- it resolves the
+    # project/venv directory via pyro::get_proj_dir(), which is
+    # `getOption("venv_dir") %||% here::here()`. here::here() caches the
+    # *first* root it resolves in an R session and ignores later
+    # setwd()/withr::with_dir() calls (confirmed directly: calling
+    # get_proj_dir() from two different withr::with_dir()-scoped
+    # directories in the same session returns the *first* directory both
+    # times) -- exactly the class of cwd-based footgun this repo's CLAUDE.md
+    # already warns about for reportifyr/pyro's own project detection.
+    # Setting `venv_dir` explicitly here, scoped to the caller's *current*
+    # getwd() (which callers set via withr::with_dir(project_dir, ...)
+    # before calling any styling_*() wrapper), sidesteps here::here()
+    # entirely rather than relying on it.
+    withr::local_options(venv_dir = getwd())
+    paths <- pyro::get_venv_uv_paths()
+
+    # `--all-groups` is load-bearing, not optional flourish. The
+    # "quartifyr" dependency group `initialize_quartifyr_project()` writes
+    # (via `pyro::write_group_to_pyproject()`) is a PEP 735
+    # `[dependency-groups]` entry -- opt-in, not part of the project's base
+    # `[project.dependencies]` or `uv`'s default sync set. `uv run` restricts
+    # the environment it syncs to *exactly* the groups/extras requested by
+    # that invocation, dropping any others already present: a bare
+    # `uv run -m quartifyr_styling ...` with no group flag resyncs the venv
+    # down to zero groups (silently uninstalling python-docx/pyyaml), and
+    # `--group quartifyr` alone is just as broken the other direction --
+    # it resyncs to *only* "quartifyr", silently uninstalling whatever
+    # `reportifyr::initialize_report_project()` already provisioned under
+    # its own "reportifyr" group in this same shared venv/pyproject.toml,
+    # since this project's `[dependency-groups]` table holds both tools'
+    # groups side by side. Confirmed the hard way in CI against a fully
+    # fresh .venv (not reproduced in a long-lived local dev session, where
+    # repeated init/test calls kept re-adding whichever group got dropped
+    # often enough to mask it): first `initialize_quartifyr_project()` then
+    # `styling_build_abbreviations_tex()` succeeded, but the *next*
+    # `reportifyr::build_report()` call failed with "validate-docx returned
+    # no output" -- reportifyr's own pyro-bridged Python step, silently
+    # missing its dependencies because this call's `--group quartifyr` had
+    # just resynced them away. `--all-groups` is the only invocation that
+    # doesn't clobber whichever other tool's group already exists here.
+    cli_args <- c("run", "--all-groups", "-m", "quartifyr_styling", "--json", args)
   }
-
-  # pyro::get_venv_uv_paths() takes no arguments -- it resolves the
-  # project/venv directory via pyro::get_proj_dir(), which is
-  # `getOption("venv_dir") %||% here::here()`. here::here() caches the
-  # *first* root it resolves in an R session and ignores later
-  # setwd()/withr::with_dir() calls (confirmed directly: calling
-  # get_proj_dir() from two different withr::with_dir()-scoped
-  # directories in the same session returns the *first* directory both
-  # times) -- exactly the class of cwd-based footgun this repo's CLAUDE.md
-  # already warns about for reportifyr/pyro's own project detection.
-  # Setting `venv_dir` explicitly here, scoped to the caller's *current*
-  # getwd() (which callers set via withr::with_dir(project_dir, ...)
-  # before calling any styling_*() wrapper), sidesteps here::here()
-  # entirely rather than relying on it.
-  withr::local_options(venv_dir = getwd())
-  paths <- pyro::get_venv_uv_paths()
-
-  # `--all-groups` is load-bearing, not optional flourish. The
-  # "quartifyr" dependency group `initialize_quartifyr_project()` writes
-  # (via `pyro::write_group_to_pyproject()`) is a PEP 735
-  # `[dependency-groups]` entry -- opt-in, not part of the project's base
-  # `[project.dependencies]` or `uv`'s default sync set. `uv run` restricts
-  # the environment it syncs to *exactly* the groups/extras requested by
-  # that invocation, dropping any others already present: a bare
-  # `uv run -m quartifyr_styling ...` with no group flag resyncs the venv
-  # down to zero groups (silently uninstalling python-docx/pyyaml), and
-  # `--group quartifyr` alone is just as broken the other direction --
-  # it resyncs to *only* "quartifyr", silently uninstalling whatever
-  # `reportifyr::initialize_report_project()` already provisioned under
-  # its own "reportifyr" group in this same shared venv/pyproject.toml,
-  # since this project's `[dependency-groups]` table holds both tools'
-  # groups side by side. Confirmed the hard way in CI against a fully
-  # fresh .venv (not reproduced in a long-lived local dev session, where
-  # repeated init/test calls kept re-adding whichever group got dropped
-  # often enough to mask it): first `initialize_quartifyr_project()` then
-  # `styling_build_abbreviations_tex()` succeeded, but the *next*
-  # `reportifyr::build_report()` call failed with "validate-docx returned
-  # no output" -- reportifyr's own pyro-bridged Python step, silently
-  # missing its dependencies because this call's `--group quartifyr` had
-  # just resynced them away. `--all-groups` is the only invocation that
-  # doesn't clobber whichever other tool's group already exists here.
-  cli_args <- c("run", "--all-groups", "-m", "quartifyr_styling", "--json", args)
 
   stderr_lines <- character(0)
   capture_stderr <- function(chunk, proc) {
@@ -93,18 +93,35 @@
   # way via an earlier version that silently left "captured" stdout
   # permanently NULL.
   outcome <- tryCatch(
-    pyro::run_python_script(
-      uv_path = paths$uv,
-      venv_path = paths$venv,
-      args = cli_args,
-      script_name = "quartifyr-styling",
-      pythonpath = python_src,
-      stderr_callback = capture_stderr
-    ),
+    if (is.null(python_env)) {
+      pyro::run_python_script(
+        uv_path = paths$uv,
+        venv_path = paths$venv,
+        args = cli_args,
+        script_name = "quartifyr-styling",
+        pythonpath = python_src,
+        stderr_callback = capture_stderr
+      )
+    } else {
+      # Same stderr-JSON handshake as the pyro path: processx hands each
+      # chunk to the callback while the process runs, so the diagnostic
+      # survives the non-zero exit that error_on_status turns into an error.
+      processx::run(
+        .python_exe(python_env),
+        c("-m", "quartifyr_styling", "--json", args),
+        env = .python_env_vars(),
+        stderr_callback = capture_stderr,
+        error_on_status = TRUE
+      )
+    },
     error = function(e) e
   )
 
-  command_desc <- paste("uv run -m quartifyr_styling", paste(args, collapse = " "))
+  command_desc <- if (is.null(python_env)) {
+    paste("uv run -m quartifyr_styling", paste(args, collapse = " "))
+  } else {
+    paste("python -m quartifyr_styling", paste(args, collapse = " "))
+  }
 
   if (inherits(outcome, "error")) {
     # The process exited non-zero; pyro's own error message is generic

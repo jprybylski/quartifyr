@@ -133,7 +133,11 @@ check_quarto_extensions <- function(path = ".", extensions = quartifyr_quarto_ex
     unlist(lapply(seq_len(nrow(rows)), function(i) {
       stats::setNames(
         sprintf(
-          "%s -- %s Install it with {.run quarto::quarto_add_extension(\"%s\")}.",
+          paste(
+            "%s -- %s Install it with {.run quarto::quarto_add_extension(\"%s\")},",
+            "or without network access with {.run quartifyr::install_quarto_extensions()}",
+            "(uses the copy bundled in this package)."
+          ),
           rows$id[i], rows$reason[i], rows$id[i]
         ),
         "*"

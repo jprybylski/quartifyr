@@ -66,17 +66,23 @@ navbar:
           href: articles/templated-workflows.html
         - text: GitHub Action
           href: articles/github-action.html
+        - text: Noninteractive builds
+          href: articles/automation.html
+        - text: Offline use
+          href: articles/offline.html
 
 reference:
   - title: Render a report
     desc: The main pass-1 + pass-2 orchestration driver.
     contents:
       - render_report
+      - check_report_project
   - title: Project setup
     desc: One-time-per-project setup, alongside `reportifyr::initialize_report_project()`.
     contents:
       - initialize_quartifyr_project
       - install_quartifyr_extension
+      - install_quarto_extensions
       - check_quarto_extensions
       - quartifyr_quarto_extensions
   - title: Front matter
@@ -106,3 +112,5 @@ articles:
       - articles/examples
       - articles/templated-workflows
       - articles/github-action
+      - articles/automation
+      - articles/offline
