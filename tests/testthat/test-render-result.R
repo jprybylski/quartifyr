@@ -103,26 +103,110 @@ test_that(".parse_rpfy_log picks out the two placeholder-left-alone warnings", {
   expect_identical(.parse_rpfy_log(character(0))$missing_figures, character(0))
 })
 
-test_that("the JSON form matches the shipped schema's required shape", {
+.validate_render_json <- function(json) {
+  skip_if_not_installed("jsonvalidate")
+  schema_path <- system.file("schemas", "render-result-v1.schema.json", package = "quartifyr")
+  skip_if(!nzchar(schema_path), "schema not installed")
+  validator <- jsonvalidate::json_validator(schema_path, engine = "ajv")
+  validator(as.character(json), verbose = TRUE, greedy = TRUE)
+}
+
+test_that("the JSON form validates against the full v1 schema", {
   shell <- withr::local_tempfile(fileext = ".docx")
   writeLines("x", shell)
   result <- .new_render_result(
     shell, NULL, NULL,
-    unfilled_placeholders = "{rpfy}:a.png", log_dir = "/p/.rpfy-logs"
+    unfilled_placeholders = "{rpfy}:a.png", log_dir = "/p/.rpfy-logs",
+    inputs = .file_table("shell_qmd", shell),
+    versions = list(quartifyr = "0.3.2", reportifyr = NULL, quarto = "1.9.0", quartifyr_styling = "0.1.0", r = "4.5.0"),
+    started_at = .timestamp_utc(), finished_at = .timestamp_utc()
   )
-  json <- jsonlite::fromJSON(as.character(.render_result_json(result)), simplifyVector = FALSE)
-  schema_path <- system.file("schemas", "render-result.schema.json", package = "quartifyr")
-  skip_if(!nzchar(schema_path), "schema not installed")
-  schema <- jsonlite::fromJSON(schema_path, simplifyVector = FALSE)
+  json <- .render_result_json(result)
+  expect_true(.validate_render_json(json), info = format(attr(.validate_render_json(json), "errors")))
 
-  expect_true(all(schema$required %in% names(json)))
-  expect_true(json$status %in% unlist(schema$properties$status$enum))
-  expect_true(all(names(json) %in% names(schema$properties)))
-  expect_null(json$final)
-  expect_identical(json$unfilled_placeholders, list("{rpfy}:a.png"))
-  expect_identical(json$warnings, list())
-  expect_match(json$artifacts[[1]]$sha256, "^[0-9a-f]{64}$")
-  expect_true(all(schema$properties$artifacts$items$required %in% names(json$artifacts[[1]])))
+  parsed <- jsonlite::fromJSON(as.character(json), simplifyVector = FALSE)
+  expect_identical(parsed$schema_version, 1L)
+  expect_null(parsed$final)
+  expect_identical(parsed$unfilled_placeholders, list("{rpfy}:a.png"))
+  expect_identical(parsed$warnings, list())
+  expect_match(parsed$artifacts[[1]]$sha256, "^[0-9a-f]{64}$")
+  expect_identical(parsed$inputs[[1]]$role, "shell_qmd")
+  expect_null(parsed$versions$reportifyr)
+  expect_true("reportifyr" %in% names(parsed$versions))
+})
+
+test_that("a result built without provenance still validates and carries empty provenance", {
+  shell <- withr::local_tempfile(fileext = ".docx")
+  writeLines("x", shell)
+  json <- .render_result_json(.new_render_result(shell, NULL, NULL))
+  expect_true(.validate_render_json(json))
+  parsed <- jsonlite::fromJSON(as.character(json), simplifyVector = FALSE)
+  expect_identical(parsed$inputs, list())
+  expect_identical(parsed$versions, structure(list(), names = character(0)))
+})
+
+test_that("the early-failure JSON payload validates and carries schema_version", {
+  err <- simpleError("quarto render timed out")
+  class(err) <- c("quartifyr_quarto_timeout", class(err))
+  json <- .render_cli_error_json(err, .timestamp_utc(), .timestamp_utc())
+  expect_true(.validate_render_json(json))
+  expect_identical(jsonlite::fromJSON(as.character(json))$schema_version, 1L)
+})
+
+test_that(".abort_incomplete() reports status error even when the render only warned", {
+  shell <- withr::local_tempfile(fileext = ".docx")
+  writeLines("x", shell)
+  result <- .new_render_result(shell, NULL, NULL, missing_metadata = "a.png")
+  expect_identical(result$status, "warning")
+
+  err <- tryCatch(.abort_incomplete(result), error = function(e) e)
+  expect_s3_class(err, "quartifyr_render_incomplete")
+  expect_identical(err$result$status, "error")
+  expect_match(err$result$errors, "missing metadata for: a.png")
+  expect_true(.validate_render_json(.render_result_json(err$result)))
+})
+
+test_that(".input_table() lists the shell, support files, artifacts and sidecars that exist", {
+  project <- withr::local_tempdir()
+  figs <- file.path(project, "figs"); tabs <- file.path(project, "tabs")
+  dir.create(figs); dir.create(tabs)
+  qmd <- file.path(project, "report.qmd")
+  writeLines(c("# s", "", "{rpfy}:a.png", "", "text", "", "{rpfy}:t.csv", "", "{rpfy}:gone.png", "", "text"), qmd)
+  writeLines("x", file.path(figs, "a.png")); writeLines("{}", file.path(figs, "a_png_metadata.json"))
+  writeLines("x", file.path(tabs, "t.csv"))
+  yaml <- file.path(project, "fn.yaml"); writeLines("a: 1", yaml)
+
+  inputs <- .input_table(qmd, figs, tabs, yaml, file.path(project, "no-config.yaml"), NULL)
+
+  expect_setequal(inputs$role, c("shell_qmd", "standard_footnotes", "figure", "sidecar", "table"))
+  expect_false(any(grepl("gone.png|no-config", inputs$path)))
+  expect_true(all(grepl("^[0-9a-f]{64}$", inputs$sha256)))
+
+  with_ref <- .input_table(qmd, figs, tabs, yaml, yaml, yaml)
+  expect_true(all(c("config", "reference_doc") %in% with_ref$role))
+})
+
+test_that(".tool_versions() reports what it can and NULL for what it cannot", {
+  local_mocked_bindings(run = function(...) list(status = 0, stdout = "1.9.9\n", stderr = ""), .package = "processx")
+  v <- .tool_versions("quarto")
+  expect_identical(v$quarto, "1.9.9")
+  expect_identical(v$r, as.character(getRversion()))
+  expect_identical(v$quartifyr_styling, "0.1.0")
+
+  local_mocked_bindings(run = function(...) list(status = 1, stdout = "", stderr = "no"), .package = "processx")
+  expect_null(.tool_versions("quarto")$quarto)
+  local_mocked_bindings(run = function(...) stop("no such executable"), .package = "processx")
+  expect_null(.tool_versions("quarto")$quarto)
+  expect_match(.timestamp_utc(as.POSIXct("2026-01-02 03:04:05", tz = "UTC")), "^2026-01-02T03:04:05Z$")
+})
+
+test_that(".styling_version() is NULL without the bundled source or a version line", {
+  expect_null(.styling_version(init = ""))
+  init <- withr::local_tempfile(fileext = ".py")
+  writeLines("# no version here", init)
+  expect_null(.styling_version(init = init))
+  writeLines("__version__ = '9.8.7'", init)
+  expect_identical(.styling_version(init = init), "9.8.7")
 })
 
 test_that("print() summarizes the status, paths, and every kind of problem", {

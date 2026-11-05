@@ -34,6 +34,9 @@
 # (mocked below, per-test) has something real to reason about.
 .mock_quarto_run <- function(record_into) {
   function(command, args, wd = ".", error_on_status = TRUE, ...) {
+    if (!identical(args[[1]], "render")) {
+      return(list(status = 0, stdout = "1.9.9\n", stderr = ""))
+    }
     assign("quarto_run", list(command = command, args = args, wd = wd), envir = record_into)
     output_name <- args[which(args == "--output") + 1]
     dir.create(file.path(wd, "report", "shell"), recursive = TRUE, showWarnings = FALSE)
@@ -489,6 +492,9 @@ test_that("passes quarto_timeout and cleanup_tree through to processx::run()", {
   )
   local_mocked_bindings(
     run = function(command, args, wd = ".", error_on_status = TRUE, timeout = NULL, cleanup_tree = NULL, ...) {
+      if (!identical(args[[1]], "render")) {
+        return(list(status = 0, stdout = "1.9.9\n", stderr = ""))
+      }
       assign("timeout", timeout, envir = seen)
       assign("cleanup_tree", cleanup_tree, envir = seen)
       output_name <- args[which(args == "--output") + 1]
@@ -549,6 +555,11 @@ test_that("quarto_bin overrides the command and QUARTO_PATH is honoured as a fal
 # processx::run() is exercised (nothing mocked for the render step) so the
 # timeout and cleanup_tree behaviour are verified for real, not assumed.
 test_that("a hung quarto is killed on timeout with a classed error and leaves no children behind", {
+  # Not run on Windows: the stub quarto and the leak probe are POSIX (`sh`,
+  # `sleep`, `pgrep`), and processx's cleanup_tree uses a different mechanism
+  # there (job objects) that this test could not exercise anyway. A Windows
+  # variant would need its own stub and probe, and can only be validated on a
+  # Windows runner.
   skip_on_os("windows")
   skip_if_not_installed("ps")
   fixture <- .render_report_fixture()
@@ -995,4 +1006,109 @@ test_that(".produced_since() needs the file to exist and be recent", {
   expect_true(.produced_since(path, now))
   Sys.setFileTime(path, now - 3600)
   expect_false(.produced_since(path, now))
+})
+
+# --- Provenance and path resolution ------------------------------------------
+
+test_that("the result records inputs, tool versions and timestamps", {
+  fixture <- .render_report_fixture()
+  writeLines(c("# shell", "", "{rpfy}:fig.png", "", "text"), fixture$shell_qmd)
+  figs <- file.path(fixture$project_dir, "OUTPUTS", "figures")
+  dir.create(figs, recursive = TRUE)
+  writeLines("png", file.path(figs, "fig.png"))
+  writeLines("{}", file.path(figs, "fig_png_metadata.json"))
+
+  result <- .run_render(fixture)
+
+  expect_setequal(
+    result$inputs$role,
+    c("shell_qmd", "standard_footnotes", "config", "reference_doc", "figure", "sidecar")
+  )
+  expect_identical(
+    result$inputs$sha256[result$inputs$role == "figure"],
+    .sha256_file(file.path(figs, "fig.png"))
+  )
+  expect_identical(result$versions$quarto, "1.9.9")
+  expect_identical(result$versions$quartifyr, as.character(utils::packageVersion("quartifyr")))
+  expect_match(result$started_at, "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$")
+  expect_gte(result$finished_at, result$started_at)
+})
+
+test_that("a reference-doc configured in Quarto is recorded among the inputs", {
+  fixture <- .render_report_fixture()
+  file.copy(fixture$reference_doc, file.path(fixture$project_dir, "configured.docx"))
+  local_mocked_bindings(
+    quarto_inspect = function(...) list(formats = list(docx = list(pandoc = list(`reference-doc` = "configured.docx")))),
+    .package = "quarto"
+  )
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
+  local_mocked_bindings(
+    styling_build_abbreviations_tex = function(...) invisible(NULL),
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) invisible(docx)
+  )
+  local_mocked_bindings(run = .mock_quarto_run(new.env()), .package = "processx")
+  local_mocked_bindings(
+    make_doc_dirs = .mock_make_doc_dirs,
+    build_report = function(docx_in, docx_out, ...) {
+      dir.create(dirname(docx_out), recursive = TRUE, showWarnings = FALSE)
+      writeLines("draft", docx_out)
+    },
+    .package = "reportifyr"
+  )
+
+  result <- render_report(
+    fixture$shell_qmd,
+    standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+    config_yaml = fixture$config_yaml
+  )
+
+  ref <- result$inputs$path[result$inputs$role == "reference_doc"]
+  expect_identical(basename(ref), "configured.docx")
+})
+
+# A relative path from `from` to `path`, without needing an extra package.
+fs_relative <- function(path, from) {
+  path <- strsplit(normalizePath(path, winslash = "/"), "/", fixed = TRUE)[[1]]
+  from <- strsplit(normalizePath(from, winslash = "/"), "/", fixed = TRUE)[[1]]
+  common <- 0L
+  while (common < min(length(path), length(from)) && path[common + 1L] == from[common + 1L]) {
+    common <- common + 1L
+  }
+  paste(c(rep("..", length(from) - common), path[seq_len(length(path) - common) + common]), collapse = "/")
+}
+
+test_that("a relative shell path with a working directory outside the project resolves inside the project", {
+  fixture <- .render_report_fixture()
+  outside <- withr::local_tempdir()
+  relative_shell <- fs_relative(fixture$shell_qmd, outside)
+  expect_false(file.exists(file.path(outside, "report.qmd")))
+
+  seen <- new.env()
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
+  local_mocked_bindings(
+    styling_build_abbreviations_tex = function(yaml, out) {
+      assign("footnotes_for_abbrevs", yaml, envir = seen)
+      invisible(NULL)
+    },
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) invisible(docx)
+  )
+  local_mocked_bindings(run = .mock_quarto_run(new.env()), .package = "processx")
+  local_mocked_bindings(
+    make_doc_dirs = .mock_make_doc_dirs,
+    build_report = function(docx_in, docx_out, figures_path, tables_path, standard_footnotes_yaml, config_yaml) {
+      assign("paths", list(figures_path, tables_path, standard_footnotes_yaml, config_yaml), envir = seen)
+      dir.create(dirname(docx_out), recursive = TRUE, showWarnings = FALSE)
+      writeLines("draft", docx_out)
+    },
+    .package = "reportifyr"
+  )
+
+  withr::with_dir(outside, render_report(relative_shell, reference_doc = fixture$reference_doc))
+
+  project <- normalizePath(fixture$project_dir)
+  expect_true(all(startsWith(normalizePath(unlist(seen$paths), mustWork = FALSE), project)))
+  expect_identical(
+    normalizePath(seen$footnotes_for_abbrevs),
+    normalizePath(fixture$standard_footnotes_yaml)
+  )
 })

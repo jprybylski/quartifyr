@@ -88,6 +88,29 @@
   package) from the built package tarball, fixing an "unmentioned
   DESCRIPTION" `R CMD check` NOTE and shrinking the tarball from ~4.8MB to
   ~2.2MB (issue #62).
+* The render result is versioned and carries provenance (#78). Every JSON
+  result, including the error object of a failed render, has
+  `schema_version: 1`, and the schema is now
+  `inst/schemas/render-result-v1.schema.json` (renamed from
+  `render-result.schema.json`; new optional fields keep the version, removing
+  or renaming one bumps it). Results gain `inputs` (path, SHA-256 and size of
+  the shell `.qmd`, each figure, table and metadata sidecar used,
+  `standard_footnotes.yaml`, `config.yaml` and the reference-doc), `versions`
+  (quartifyr, reportifyr, Quarto, `quartifyr_styling`, R) and
+  `started_at`/`finished_at`.
+* New `inst/scripts/check.R --project <dir> --shell report.qmd [--json]` runs
+  `check_report_project()` for scripts and launchers: JSON with
+  `schema_version` and `findings`, exit status 0 without error findings, 1
+  with, 2 on bad usage (#78).
+* A strict render that is incomplete now always reports `status: "error"`,
+  also when the render itself only warned. `--help` and the docs say that
+  exit status 0 without `--strict` only means the render finished (#78).
+* `render_report()` resolves a relative `shell_qmd` and the default
+  `standard_footnotes_yaml`, `config_yaml`, `figures_path` and `tables_path`
+  against the calling directory before changing into the project, so a
+  relative `--shell` works from outside the project (#78).
+* The docs now state which steps `quarto_timeout` does not bound, and why the
+  timeout cleanup test does not run on Windows (#78).
 * A failed, timed-out or interrupted `render_report()` no longer leaves the
   previous render's `report/draft` and `report/final` documents in place
   looking complete. Once the render starts, the outputs it will regenerate

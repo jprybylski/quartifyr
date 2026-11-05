@@ -1,0 +1,202 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://jprybylski.github.io/quartifyr/render-result-v1.schema.json",
+  "title": "quartifyr render result",
+  "description": "What `Rscript inst/scripts/render.R --json` prints on stdout, and the fields of render_report()'s return value. `status` describes whether the delivered document is complete: \"error\" means unfilled placeholders or a failed requested post-processing step (or, for a render that stopped early, the error in `errors`); \"warning\" means complete but flagged (e.g. a missing metadata sidecar); \"ok\" means nothing to report. Version 1 of the shape: new optional fields may be added without changing the version (consumers should ignore fields they do not know); removing or renaming a field, or changing its meaning, publishes render-result-v2.schema.json and bumps `schema_version`.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "status",
+    "errors"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "description": "Version of this shape."
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "warning",
+        "error"
+      ],
+      "description": "Under --strict, an incomplete render is always \"error\"."
+    },
+    "shell": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Path to the rendered shell docx."
+    },
+    "draft": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Path to the draft docx filled by reportifyr."
+    },
+    "final": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Path to the final docx; null unless status was final."
+    },
+    "artifacts": {
+      "type": "array",
+      "description": "The files that exist, with SHA-256 hashes.",
+      "items": {
+        "type": "object",
+        "required": [
+          "role",
+          "path",
+          "sha256",
+          "bytes"
+        ],
+        "properties": {
+          "role": {
+            "enum": [
+              "shell",
+              "draft",
+              "final"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "bytes": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "unfilled_placeholders": {
+      "type": "array",
+      "description": "{rpfy}: magic strings still present in the draft/final docx.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "missing_metadata": {
+      "type": "array",
+      "description": "Artifacts referenced by the shell that have no metadata sidecar.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "log_dir": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "reportifyr's log directory for the project."
+    },
+    "error_class": {
+      "type": "string",
+      "description": "Only present on failure: the R condition class, e.g. quartifyr_quarto_timeout, quartifyr_render_incomplete."
+    },
+    "inputs": {
+      "type": "array",
+      "description": "The files the render read (only those that exist), with SHA-256 hashes. Absent on a render that stopped early.",
+      "items": {
+        "type": "object",
+        "required": [
+          "role",
+          "path",
+          "sha256",
+          "bytes"
+        ],
+        "properties": {
+          "role": {
+            "enum": [
+              "shell_qmd",
+              "figure",
+              "table",
+              "sidecar",
+              "standard_footnotes",
+              "config",
+              "reference_doc"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "bytes": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "versions": {
+      "type": "object",
+      "description": "Tool versions; null where one could not be determined. Absent on a render that stopped early.",
+      "properties": {
+        "quartifyr": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reportifyr": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quarto": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quartifyr_styling": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "r": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "started_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "UTC ISO-8601 time the render began."
+    },
+    "finished_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "UTC ISO-8601 time the render ended."
+    }
+  }
+}

@@ -96,7 +96,10 @@ before killing it and signalling an error of class
 \code{quartifyr_quarto_timeout}. Default \code{600}; \code{Inf} disables the limit.
 The whole process tree is cleaned up on timeout or interrupt (Quarto
 spawns Deno, Pandoc and possibly R/knitr children that would otherwise
-outlive it).}
+outlive it). Only this step is bounded: \verb{quarto inspect},
+\verb{quarto list extensions}, the Python styling step and reportifyr's pass 2
+have no timeout of their own, so a caller that needs a hard limit on the
+whole job must enforce it itself.}
 
 \item{quarto_bin}{Path to the Quarto executable. \code{NULL} (default) uses
 the \code{QUARTO_PATH} environment variable if set, else \code{quarto} on
@@ -111,7 +114,11 @@ the render finished but the result's \code{status} is not \code{"ok"}: unfilled
 LibreOffice step that failed. Default \code{FALSE}, which returns the result
 either way so existing callers keep working; use \code{TRUE} in CI and
 background jobs where an incomplete document must not look like
-success.}
+success. With \code{strict = TRUE} the result carried on the condition has
+\code{status = "error"}, with the reason added to \code{errors}, even if the
+render itself only warned. Without it, a returned result (and the
+script's exit status 0) only means the render finished, not that it was
+complete: check \code{status}.}
 }
 \value{
 An object of class \code{quartifyr_render_result}, a list with:
@@ -132,11 +139,23 @@ in the draft/final docx.}
 reportifyr's own log for this run).}
 \item{\code{warnings}, \code{errors}}{Messages behind a non-\code{"ok"} status.}
 \item{\code{log_dir}}{reportifyr's log directory for the project.}
+\item{\code{inputs}}{Data frame (\code{role}, \code{path}, \code{sha256}, \code{bytes}) of the
+files the render read: the shell \code{.qmd}, each figure, table and metadata
+sidecar it references, \code{standard_footnotes.yaml}, \code{config.yaml} and the
+reference-doc.}
+\item{\code{versions}}{List of the quartifyr, reportifyr, Quarto,
+\code{quartifyr_styling} (Python) and R versions; \code{NULL} where one could not
+be determined.}
+\item{\code{started_at}, \code{finished_at}}{UTC timestamps (ISO 8601) of the
+render.}
 }
 Everything before pass 2 (a failed Quarto render, a timeout, a failed
 precondition) signals an ordinary error instead. The same fields are
-available as JSON from the \code{inst/scripts/render.R} script (see
-\code{system.file("schemas", "render-result.schema.json", package = "quartifyr")} for the shape).
+available as JSON, with a \code{schema_version} field, from the
+\code{inst/scripts/render.R} script (see
+\code{system.file("schemas", "render-result-v1.schema.json", package = "quartifyr")} for the shape). Within a schema version, new optional fields
+may appear, so consumers should ignore fields they don't know; removing or
+renaming a field bumps the version.
 }
 \description{
 Two-pass report generation in one call: (1) regenerates

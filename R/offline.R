@@ -56,9 +56,9 @@
 # Python finds its `pyvenv.cfg` (hence its site-packages) from the path it was
 # *invoked* as, so normalizePath() -- which follows symlinks -- would run the
 # base interpreter and make every module in the venv look missing.
-.absolute_path <- function(path) {
+.absolute_path <- function(path, dir = getwd()) {
   path <- path.expand(path)
-  if (grepl("^(/|[A-Za-z]:[/\\\\])", path)) path else file.path(getwd(), path)
+  if (grepl("^(/|[A-Za-z]:[/\\\\])", path)) path else file.path(dir, path)
 }
 
 # The interpreter inside an environment directory: a venv itself, or a

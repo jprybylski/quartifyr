@@ -33,7 +33,8 @@ Suggests:
     covr,
     rmarkdown,
     pkgdown,
-    clipr
+    clipr,
+    jsonvalidate
 Config/testthat/edition: 3
 License: GPL (>= 3)
 Encoding: UTF-8

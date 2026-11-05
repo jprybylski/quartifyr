@@ -98,6 +98,9 @@ success or not.
 | `missing_metadata` | artifacts the shell references that have no metadata sidecar |
 | `warnings`, `errors` | the messages behind a non-`"ok"` status |
 | `log_dir` | reportifyr's log directory for the project |
+| `inputs` | `role`, `path`, `sha256` and `bytes` for the files the render read: the shell `.qmd`, each figure, table and metadata sidecar it uses, `standard_footnotes.yaml`, `config.yaml` and the reference-doc |
+| `versions` | quartifyr, reportifyr, Quarto, the `quartifyr_styling` Python package and R (`NULL` where unknown) |
+| `started_at`, `finished_at` | UTC ISO 8601 timestamps |
 
 `status` describes whether the delivered document is complete. `"error"` means
 placeholders were left unfilled, or a LibreOffice step you asked for
@@ -118,7 +121,11 @@ result <- tryCatch(
 )
 ```
 
-The default is `strict = FALSE`, so existing callers keep receiving a value.
+The default is `strict = FALSE`, so existing callers keep receiving a value. A
+returned result, and the script's exit status 0 without `--strict`, only mean
+that the render finished: always read `status`. With `strict = TRUE` the result
+on the condition has `status = "error"` (the reason is added to `errors`), even
+if the render itself only warned.
 
 With reportifyr's default settings, a missing metadata sidecar makes
 `build_report()` itself fail rather than leaving a placeholder behind. In that
@@ -139,7 +146,8 @@ Rscript "$(Rscript -e 'cat(system.file("scripts", "render.R", package = "quartif
 
 The JSON result goes to stdout and nothing else does; progress and errors go to
 stderr. The exit status is 0 only when the render finished (and, with
-`--strict`, its status is `"ok"`). Any error, including a Quarto failure or
+`--strict`, its status is `"ok"`; without it, exit 0 does not mean the document
+is complete). Any error, including a Quarto failure or
 timeout, prints a JSON object with `status: "error"`, an `errors` array and an
 `error_class`, and exits 1. Bad usage exits 2. Run it with `--help` for the
 remaining options (`--quarto-timeout`, `--quarto-bin`, `--reference-doc`,
@@ -165,8 +173,47 @@ A successful result looks like this:
 }
 ```
 
-The shape is documented as a JSON Schema in
-`system.file("schemas", "render-result.schema.json", package = "quartifyr")`.
+### Versioning
+
+Every result, including the error object a failed render prints, carries
+`schema_version` (currently `1`). The shape is documented as a JSON Schema in
+`system.file("schemas", "render-result-v1.schema.json", package = "quartifyr")`.
+Within a version, new optional fields can appear, so ignore fields you don't
+know. Removing or renaming a field, or changing its meaning, publishes
+`render-result-v2.schema.json` and bumps `schema_version`.
+
+## Preflight from a script
+
+`inst/scripts/check.R` is the same check as `check_report_project()` for a shell
+or a launcher, with the same working-directory requirement as `render.R`:
+
+```bash
+cd path/to/project
+Rscript "$(Rscript -e 'cat(system.file("scripts", "check.R", package = "quartifyr"))')" \
+  --project . --shell report.qmd --json
+```
+
+With `--json` it prints `{"schema_version": 1, "findings": [{"check", "severity",
+"path", "message"}]}` on stdout (shape in `check-result-v1.schema.json`);
+without it, one line per finding. The exit status is 0 when there are no error
+findings (warnings are fine), 1 when there is at least one, and 2 for bad usage.
+
+## What is not time-limited
+
+`quarto_timeout` bounds `quarto render` only. `quarto inspect`,
+`quarto list extensions`, the Python styling step and reportifyr's pass 2 have no
+timeout of their own, so a caller that needs a hard limit on the whole job has to
+enforce it itself (for example with `timeout` around the script, or the job
+runner's own limit). The process-tree cleanup on timeout is tested on Linux and
+macOS only: the test uses a POSIX stub and `pgrep`, and Windows cleans up the tree
+through a different mechanism that is not exercised in CI.
+
+## Relative paths
+
+`--shell` is relative to `--project`, and `render_report()` resolves its own path
+arguments against the calling directory before it changes into the project, so a
+relative `shell_qmd` works from any working directory. The renv library that
+activates is still the one of the directory `Rscript` started in.
 
 ## In GitHub Actions
 
