@@ -385,6 +385,24 @@ see `inst/extensions/README.md`. `scripts/offline_pipeline_check.sh` (run by
 the `offline-pipeline` CI job inside `unshare --net`) is the only real "no
 network" check, and can't be reproduced on macOS.
 
+**Restore the examples' `renv.lock` against a dated CRAN snapshot, never
+Posit Package Manager's moving `latest`.** Once `latest` moves past a pinned
+version (curl 8.0.0 -> 8.1.0), renv fetches the old one from the CRAN
+archive, and renv (confirmed in 1.2.3 and 1.3.1) mishandles a package from
+that path that declares no `Imports:` (curl): in *project mode*,
+`renv_graph_resolve()` fills the missing field via
+`renv_description_read(package = "curl")`, which for a package that isn't
+installed resolves to the working directory's own `DESCRIPTION`. curl then
+"imports" the project's `reportifyr`, closing a loop with `reportifyr ->
+gert -> credentials -> curl`, and `renv::restore()` ends with "failed to
+install credentials, curl, gert, reportifyr: dependency failed" and no real
+error. It only reproduces with a `DESCRIPTION` in the cwd (so not with
+`restore(lockfile = ...)` from elsewhere) and only once a pin is stale, which
+is why it looked like random CI rot (it already caused the "stale curl"
+re-snapshot). Both locks' `Repositories` CRAN entry, ci.yml's
+`CRAN_SNAPSHOT_URL`, and `action.yml`'s `cran-repo` input all carry the
+snapshot; bump them together with re-snapshotting.
+
 **YAML lists, not maps, for `synopsis:`/`title-page-extra:`/`address:`.**
 Deliberate: pandoc's Lua metadata tables don't preserve map key order
 (confirmed by testing), so these are lists specifically to keep row/line

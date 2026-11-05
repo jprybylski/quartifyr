@@ -6,6 +6,18 @@ on:
   pull_request:
   workflow_dispatch: # manual re-run for a dependabot/combined-prs branch skipped below
 
+# The CRAN snapshot the examples' renv.lock files were taken from. Restores
+# must resolve against it, not Posit Package Manager's moving "latest":
+# once latest moves past a pinned version, renv fetches the old one from the
+# CRAN archive, and renv (1.2.3 and 1.3.1) then mishandles any such package
+# that declares no `Imports:` (curl): in project mode it fills the missing
+# field from the project's own DESCRIPTION, so curl appears to import
+# reportifyr, which loops back to curl via gert and credentials. renv then
+# reports reportifyr, gert, credentials and curl as "dependency failed" with
+# no real error. Bump this together with re-snapshotting the lock files.
+env:
+  CRAN_SNAPSHOT_URL: https://packagemanager.posit.co/cran/2026-09-01
+
 jobs:
   styling-tests:
     name: styling pytest (${{ matrix.os }})
@@ -86,7 +98,7 @@ jobs:
       # local dev does.
       - name: Restore a2-ai.r-universe.dev to the effective repos list
         shell: bash
-        run: echo "RENV_CONFIG_REPOS_OVERRIDE=a2-ai=https://a2-ai.r-universe.dev;CRAN=https://packagemanager.posit.co/cran/latest" >> "$GITHUB_ENV"
+        run: echo "RENV_CONFIG_REPOS_OVERRIDE=a2-ai=https://a2-ai.r-universe.dev;CRAN=$CRAN_SNAPSHOT_URL" >> "$GITHUB_ENV"
 
       - uses: astral-sh/setup-uv@v7
         with:
@@ -260,7 +272,7 @@ jobs:
 
       # See full-pipeline's identically-named step.
       - name: Restore a2-ai.r-universe.dev to the effective repos list
-        run: echo "RENV_CONFIG_REPOS_OVERRIDE=a2-ai=https://a2-ai.r-universe.dev;CRAN=https://packagemanager.posit.co/cran/latest" >> "$GITHUB_ENV"
+        run: echo "RENV_CONFIG_REPOS_OVERRIDE=a2-ai=https://a2-ai.r-universe.dev;CRAN=$CRAN_SNAPSHOT_URL" >> "$GITHUB_ENV"
 
       - uses: astral-sh/setup-uv@v7
 
@@ -317,6 +329,7 @@ jobs:
         with:
           shell-qmd: examples/demo-report/report.qmd
           final: 'true'
+          cran-repo: ${{ env.CRAN_SNAPSHOT_URL }}
 
       - name: Assert rendered docx exists with no leftover magic strings
         shell: bash

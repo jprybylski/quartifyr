@@ -8,7 +8,7 @@
       },
       {
         "Name": "CRAN",
-        "URL": "https://cloud.r-project.org"
+        "URL": "https://packagemanager.posit.co/cran/2026-09-01"
       }
     ]
   },
