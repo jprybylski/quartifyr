@@ -10,6 +10,14 @@
   error of class `quartifyr_quarto_timeout` that includes the tail of
   Quarto's stderr. `quarto_bin` (or the `QUARTO_PATH` environment variable)
   selects the Quarto executable instead of relying on `PATH` (#71).
+* New `check_report_project()` is a render-free preflight (it never invokes
+  Quarto). It returns a data frame of findings (`check`, `severity`,
+  `path`, `message`) covering the project preconditions `render_report()`
+  enforces, the required Quarto extensions, every `{rpfy}:` placeholder's
+  artifact and metadata sidecar, the abbreviation keys and `meta_type`
+  those sidecars reference in `standard_footnotes.yaml`, and placeholders
+  that end their section. `render_report()` now shares the precondition
+  checks with it, with unchanged error messages (#70).
 
 # quartifyr 0.3.1
 

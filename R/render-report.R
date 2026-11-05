@@ -141,17 +141,12 @@ render_report <- function(
     "quarto"
   }
 
-  if (!file.exists(shell_qmd)) {
-    stop("shell_qmd not found: ", shell_qmd)
-  }
+  # The project preconditions below are shared with check_report_project()
+  # (R/check-report-project.R), so the render-free preflight and the render
+  # itself can't disagree about what a valid project looks like.
+  .stop_on_finding(.check_shell_qmd(shell_qmd))
   quarto_yml <- file.path(dirname(shell_qmd), "_quarto.yml")
-  if (!file.exists(quarto_yml) || !any(grepl("output-dir:\\s*report/shell", readLines(quarto_yml)))) {
-    stop(
-      "Expected ", quarto_yml, " to set `project: {output-dir: report/shell}` -- ",
-      "reportifyr::make_doc_dirs() derives draft/final paths from the rendered docx living in ",
-      "report/shell/, and without that _quarto.yml setting the render won't land there."
-    )
-  }
+  .stop_on_finding(.check_output_dir(dirname(shell_qmd)))
 
   # reportifyr/pyro locate their Python venv and project config by walking
   # *up from R's current working directory* looking for a `.*_init.json`
@@ -167,13 +162,7 @@ render_report <- function(
   # get_venv_uv_paths()/run_python_script() resolve the same way -- so
   # they're scoped into project_dir too.
   project_dir <- dirname(normalizePath(shell_qmd, mustWork = TRUE))
-  init_marker <- list.files(project_dir, pattern = "^\\.[^.]*_init\\.json$", all.files = TRUE)
-  if (length(init_marker) == 0) {
-    stop(
-      "No reportifyr *_init.json marker found in ", project_dir,
-      "\nRun reportifyr::initialize_report_project(project_dir = \"", project_dir, "\") first."
-    )
-  }
+  .stop_on_finding(.check_init_marker(project_dir))
   # reference_doc_arg is what (if anything) gets passed as `quarto render
   # --reference-doc` below. When the caller passes reference_doc explicitly,
   # it always wins. Otherwise, ask quarto itself (quarto::quarto_inspect(),
@@ -206,16 +195,8 @@ render_report <- function(
       ))
     }
   }
-  if (!is.null(reference_doc_arg) && !file.exists(reference_doc_arg)) {
-    stop(
-      "reference-doc not found: ", reference_doc_arg,
-      "\nBuild it first, e.g.: quartifyr::styling_build_reference_docx(",
-      "\"inst/python/styles/default.yaml\", out = \"", reference_doc_arg, "\")"
-    )
-  }
-  if (!file.exists(standard_footnotes_yaml)) {
-    stop("standard_footnotes_yaml not found: ", standard_footnotes_yaml)
-  }
+  .stop_on_finding(.check_reference_doc(reference_doc_arg))
+  .stop_on_finding(.check_footnotes_yaml(standard_footnotes_yaml))
 
   shell_qmd <- normalizePath(shell_qmd, mustWork = TRUE)
 
