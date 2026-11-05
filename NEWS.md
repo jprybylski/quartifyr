@@ -1,6 +1,6 @@
 # quartifyr
 
-# quartifyr 0.3.1
+# quartifyr (development version)
 
 ## New features
 
@@ -56,8 +56,6 @@
   `quartifyr_offline_failure`), including uv's own stderr, which pyro
   otherwise hides.
 
-## New features
-
 * `initialize_quartifyr_project()` can now scaffold a new project's
   `_quarto.yml`/style YAML/shell `.qmd` from a template source instead of
   leaving the directory empty (issue #23): `from_dir`/`from_repo` (with
@@ -90,6 +88,14 @@
   package) from the built package tarball, fixing an "unmentioned
   DESCRIPTION" `R CMD check` NOTE and shrinking the tarball from ~4.8MB to
   ~2.2MB (issue #62).
+* The release workflow no longer rewrites a published release: a refresh
+  (moving the tag, replacing the tarball) only happens while the release is
+  under 24 hours old, and is skipped with a warning after that, so a
+  version number keeps naming one source tree and one tarball. Each release now also carries a `SHA256SUMS` file. This
+  release is 0.3.2 because 0.3.1's tag and tarball had been replaced with
+  the job-contract and offline work (#75).
+
+# quartifyr 0.3.1
 
 ## New features
 
