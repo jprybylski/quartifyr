@@ -59,6 +59,8 @@
 #'   -- opt in once you've confirmed it's reliable in your own environment.
 #'   A failure here only warns, it never fails the overall render (the doc
 #'   is still fully usable, just needs a manual "select all, F9" in Word).
+#'   The failure is recorded in the result (`status` becomes `"error"`, see
+#'   `strict`).
 #' @param resolve_same_page_crossrefs Whether to run
 #'   `styling_resolve_same_page_crossrefs()` (headless LibreOffice,
 #'   read-only -- it never re-saves the docx itself) on each produced docx
@@ -72,6 +74,14 @@
 #'   using `crossref-hyperlinks: "same-page"` just stays hyperlinked
 #'   everywhere -- the same safe fallback `apply-layout` already leaves in
 #'   place. A failure here only warns, same as `recalculate_fields`.
+#' @param strict If `TRUE`, signal an error of class
+#'   `quartifyr_render_incomplete` (carrying the result as `$result`) when
+#'   the render finished but the result's `status` is not `"ok"`: unfilled
+#'   `{rpfy}:` placeholders, missing metadata sidecars, or a requested
+#'   LibreOffice step that failed. Default `FALSE`, which returns the result
+#'   either way so existing callers keep working; use `TRUE` in CI and
+#'   background jobs where an incomplete document must not look like
+#'   success.
 #' @param quarto_timeout Seconds to allow the `quarto render` subprocess
 #'   before killing it and signalling an error of class
 #'   `quartifyr_quarto_timeout`. Default `600`; `Inf` disables the limit.
@@ -84,8 +94,30 @@
 #'   duration of the call, so the `quarto` R package's own helpers
 #'   (`quarto_inspect()`, `quarto_list_extensions()`) use the same binary.
 #'
-#' @return A list with `shell`, `draft`, and (when `status = "final"`) `final`
-#'   docx paths.
+#' @return An object of class `quartifyr_render_result`, a list with:
+#' \describe{
+#'   \item{`shell`, `draft`, `final`}{Paths to the docx files (`final` is
+#'     `NULL` unless `status = "final"`).}
+#'   \item{`status`}{`"ok"`, `"warning"` or `"error"`. `"error"` means the
+#'     delivered document is incomplete: placeholders were left unfilled,
+#'     or a requested LibreOffice step failed. `"warning"` means it is
+#'     complete but reportifyr flagged something (e.g. a missing metadata
+#'     sidecar).}
+#'   \item{`artifacts`}{Data frame of the files that exist: `role`, `path`,
+#'     `sha256`, `bytes`.}
+#'   \item{`unfilled_placeholders`}{`{rpfy}:` magic strings still present
+#'     in the draft/final docx.}
+#'   \item{`missing_metadata`}{Artifacts the shell references that have no
+#'     `<stem>_<ext>_metadata.json` sidecar (from the project files, plus
+#'     reportifyr's own log for this run).}
+#'   \item{`warnings`, `errors`}{Messages behind a non-`"ok"` status.}
+#'   \item{`log_dir`}{reportifyr's log directory for the project.}
+#' }
+#' Everything before pass 2 (a failed Quarto render, a timeout, a failed
+#' precondition) signals an ordinary error instead. The same fields are
+#' available as JSON from the `inst/scripts/render.R` script (see
+#' `system.file("schemas", "render-result.schema.json", package =
+#' "quartifyr")` for the shape).
 #'
 #' @section Known upstream gotcha:
 #' Pandoc's docx writer wraps every `#`-heading section in body-level
@@ -120,7 +152,8 @@ render_report <- function(
   recalculate_fields = FALSE,
   resolve_same_page_crossrefs = FALSE,
   quarto_timeout = 600,
-  quarto_bin = NULL
+  quarto_bin = NULL,
+  strict = FALSE
 ) {
   status <- match.arg(status)
 
@@ -284,31 +317,70 @@ render_report <- function(
   # Scoped to project_dir so reportifyr's cwd-based project/venv detection
   # (see the comment above) resolves correctly no matter the caller's own
   # working directory, and restores the caller's original cwd afterward.
-  result <- withr::with_dir(project_dir, {
-    doc_dirs <- reportifyr::make_doc_dirs(docx_in = shell_docx)
+  #
+  # In reportifyr 0.4.0 a missing *figure* is only a logged warning: the
+  # `{rpfy}:` placeholder stays in the output and build_report() returns
+  # normally. A missing metadata *sidecar* makes build_report() fail by
+  # default, with a generic message (see .with_missing_metadata_context()).
+  # Snapshot its log files first so this run's lines can be read back.
+  log_dir <- file.path(project_dir, ".rpfy-logs")
+  log_snapshot <- .rpfy_log_snapshot(log_dir)
+  run_pass2 <- function() {
+    withr::with_dir(project_dir, {
+      doc_dirs <- reportifyr::make_doc_dirs(docx_in = shell_docx)
 
-    reportifyr::build_report(
-      docx_in = doc_dirs$doc_in,
-      docx_out = doc_dirs$doc_draft,
-      figures_path = figures_path,
-      tables_path = tables_path,
-      standard_footnotes_yaml = standard_footnotes_yaml,
-      config_yaml = config_yaml
-    )
-
-    out <- list(shell = shell_docx, draft = doc_dirs$doc_draft, final = NULL)
-
-    if (status == "final") {
-      reportifyr::finalize_document(
-        docx_in = doc_dirs$doc_draft,
-        docx_out = doc_dirs$doc_final,
+      reportifyr::build_report(
+        docx_in = doc_dirs$doc_in,
+        docx_out = doc_dirs$doc_draft,
+        figures_path = figures_path,
+        tables_path = tables_path,
+        standard_footnotes_yaml = standard_footnotes_yaml,
         config_yaml = config_yaml
       )
-      out$final <- doc_dirs$doc_final
-    }
 
-    out
-  })
+      out <- list(shell = shell_docx, draft = doc_dirs$doc_draft, final = NULL)
+
+      if (status == "final") {
+        reportifyr::finalize_document(
+          docx_in = doc_dirs$doc_draft,
+          docx_out = doc_dirs$doc_final,
+          config_yaml = config_yaml
+        )
+        out$final <- doc_dirs$doc_final
+      }
+
+      out
+    })
+  }
+  paths <- .with_missing_metadata_context(
+    run_pass2(),
+    project_dir = project_dir, shell_qmd = shell_qmd,
+    figures_path = figures_path, tables_path = tables_path
+  )
+
+  # --- What pass 2 left behind ----------------------------------------------
+  produced <- Filter(Negate(is.null), list(paths$draft, paths$final))
+  run_errors <- character(0)
+  run_warnings <- character(0)
+
+  for (output_path in produced) {
+    if (!file.exists(output_path)) {
+      run_errors <- c(run_errors, paste0("Expected output was not produced: ", output_path))
+    }
+  }
+  unfilled <- unique(unlist(lapply(produced, .scan_unfilled_placeholders)))
+  missing_metadata <- withr::with_dir(
+    project_dir,
+    .missing_sidecars(shell_qmd, figures_path, tables_path)
+  )
+  logged <- .parse_rpfy_log(.rpfy_log_new_lines(log_dir, log_snapshot))
+  missing_metadata <- unique(c(missing_metadata, logged$missing_metadata))
+  if (length(logged$missing_figures) > 0) {
+    run_warnings <- c(
+      run_warnings,
+      paste0("reportifyr could not find figure file(s): ", paste(logged$missing_figures, collapse = ", "))
+    )
+  }
 
   # Note: pyro::run_python_script() (unlike the old direct processx::run()
   # call this replaces) doesn't expose its own subprocess-level timeout, so
@@ -317,28 +389,42 @@ render_report <- function(
   # a small safety margin beyond the CLI's internal 120s default -- passing
   # 150 here directly preserves that same margin, just as the CLI's own
   # timeout rather than a second, outer one).
-  if (resolve_same_page_crossrefs) {
-    outputs <- Filter(Negate(is.null), list(result$draft, result$final))
-    for (output_path in outputs) {
+  #
+  # A failure in either LibreOffice step never aborts the render (the docx
+  # is still usable), but it is recorded so the result isn't "ok" and
+  # `strict = TRUE` can fail on it.
+  run_libreoffice_step <- function(step_fn, step_name) {
+    for (output_path in produced) {
       tryCatch(
-        withr::with_dir(project_dir, styling_resolve_same_page_crossrefs(output_path, timeout = 150)),
+        withr::with_dir(project_dir, step_fn(output_path, timeout = 150)),
         error = function(e) {
-          warning("styling_resolve_same_page_crossrefs() failed on ", output_path, ": ", conditionMessage(e))
+          msg <- paste0(step_name, "() failed on ", output_path, ": ", conditionMessage(e))
+          warning(msg, call. = FALSE)
+          run_errors <<- c(run_errors, msg)
         }
       )
     }
   }
-
+  if (resolve_same_page_crossrefs) {
+    run_libreoffice_step(styling_resolve_same_page_crossrefs, "styling_resolve_same_page_crossrefs")
+  }
   if (recalculate_fields) {
-    outputs <- Filter(Negate(is.null), list(result$draft, result$final))
-    for (output_path in outputs) {
-      tryCatch(
-        withr::with_dir(project_dir, styling_recalculate_fields(output_path, timeout = 150)),
-        error = function(e) {
-          warning("styling_recalculate_fields() failed on ", output_path, ": ", conditionMessage(e))
-        }
-      )
-    }
+    run_libreoffice_step(styling_recalculate_fields, "styling_recalculate_fields")
+  }
+
+  result <- .new_render_result(
+    shell = paths$shell,
+    draft = paths$draft,
+    final = paths$final,
+    warnings = run_warnings,
+    errors = run_errors,
+    unfilled_placeholders = unfilled,
+    missing_metadata = missing_metadata,
+    log_dir = log_dir
+  )
+
+  if (isTRUE(strict) && result$status != "ok") {
+    .abort_incomplete(result)
   }
 
   result

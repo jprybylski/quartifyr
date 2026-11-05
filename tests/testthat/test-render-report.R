@@ -598,3 +598,200 @@ test_that("a hung quarto is killed on timeout with a classed error and leaves no
   }
   expect_identical(survivors(), 0L)
 })
+
+# --- Structured result, strict mode (job contract) --------------------------
+
+# Everything external mocked as in the orchestration tests above; `build`
+# lets a test shape what pass 2 leaves behind (write the draft docx, append
+# to a reportifyr log, ...) and `unfilled` stands in for the docx scan.
+.run_render <- function(fixture, status = "draft", build = function(doc_dirs) NULL,
+                        unfilled = character(0), ...) {
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL), .env = parent.frame())
+  local_mocked_bindings(
+    styling_build_abbreviations_tex = function(...) invisible(NULL),
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) invisible(docx),
+    .scan_unfilled_placeholders = function(docx) unfilled,
+    .env = parent.frame()
+  )
+  record <- new.env()
+  local_mocked_bindings(run = .mock_quarto_run(record), .package = "processx", .env = parent.frame())
+  local_mocked_bindings(
+    make_doc_dirs = .mock_make_doc_dirs,
+    build_report = function(docx_in, docx_out, ...) {
+      dir.create(dirname(docx_out), recursive = TRUE, showWarnings = FALSE)
+      writeLines("draft", docx_out)
+      build(list(doc_in = docx_in, doc_draft = docx_out))
+      invisible(NULL)
+    },
+    finalize_document = function(docx_in, docx_out, ...) {
+      dir.create(dirname(docx_out), recursive = TRUE, showWarnings = FALSE)
+      writeLines("final", docx_out)
+      invisible(NULL)
+    },
+    .package = "reportifyr",
+    .env = parent.frame()
+  )
+  render_report(
+    fixture$shell_qmd,
+    status = status,
+    reference_doc = fixture$reference_doc,
+    standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+    config_yaml = fixture$config_yaml,
+    ...
+  )
+}
+
+test_that("a clean render returns status ok, artifact hashes and stays backward-compatible", {
+  fixture <- .render_report_fixture()
+  result <- .run_render(fixture, status = "final")
+
+  expect_s3_class(result, "quartifyr_render_result")
+  expect_identical(result$status, "ok")
+  expect_identical(result$unfilled_placeholders, character(0))
+  expect_identical(result$missing_metadata, character(0))
+  expect_true(file.exists(result$shell))
+  expect_true(file.exists(result$draft))
+  expect_true(file.exists(result$final))
+
+  expect_identical(result$artifacts$role, c("shell", "draft", "final"))
+  expect_true(all(grepl("^[0-9a-f]{64}$", result$artifacts$sha256)))
+  expect_identical(
+    result$artifacts$sha256[result$artifacts$role == "draft"],
+    .sha256_file(result$draft)
+  )
+  expect_identical(result$log_dir, file.path(dirname(normalizePath(fixture$shell_qmd)), ".rpfy-logs"))
+})
+
+test_that("unfilled placeholders make the status error and are listed", {
+  fixture <- .render_report_fixture()
+  result <- .run_render(fixture, unfilled = "{rpfy}:missing.png")
+
+  expect_identical(result$status, "error")
+  expect_identical(result$unfilled_placeholders, "{rpfy}:missing.png")
+})
+
+test_that("strict = TRUE signals quartifyr_render_incomplete, carrying the result", {
+  fixture <- .render_report_fixture()
+
+  err <- tryCatch(.run_render(fixture, unfilled = "{rpfy}:missing.png", strict = TRUE), error = function(e) e)
+
+  expect_s3_class(err, "quartifyr_render_incomplete")
+  expect_match(conditionMessage(err), "missing.png")
+  expect_identical(err$result$status, "error")
+  expect_identical(err$result$unfilled_placeholders, "{rpfy}:missing.png")
+})
+
+test_that("strict = TRUE on a clean render returns normally", {
+  fixture <- .render_report_fixture()
+  expect_identical(.run_render(fixture, strict = TRUE)$status, "ok")
+})
+
+test_that("a present figure with no metadata sidecar is listed in missing_metadata", {
+  fixture <- .render_report_fixture()
+  writeLines(c("# shell", "", "{rpfy}:fig.png", "", "text"), fixture$shell_qmd)
+  figs <- file.path(fixture$project_dir, "OUTPUTS", "figures")
+  dir.create(figs, recursive = TRUE)
+  file.create(file.path(figs, "fig.png"))
+
+  result <- .run_render(fixture)
+  expect_identical(result$missing_metadata, "fig.png")
+  expect_identical(result$status, "warning")
+
+  expect_error(.run_render(fixture, strict = TRUE), class = "quartifyr_render_incomplete")
+
+  writeLines("{}", file.path(figs, "fig_png_metadata.json"))
+  expect_identical(.run_render(fixture)$status, "ok")
+})
+
+test_that("only this run's reportifyr log lines count toward missing_metadata", {
+  fixture <- .render_report_fixture()
+  log_dir <- file.path(fixture$project_dir, ".rpfy-logs")
+  dir.create(log_dir)
+  log_file <- file.path(log_dir, "2026-01-01-00-00-00-rpfy.log")
+  writeLines("2026-01-01 00:00:00 [py] [WARNING] Metadata file not found for: stale-from-last-run", log_file)
+
+  result <- .run_render(fixture, build = function(doc_dirs) {
+    cat(
+      "2026-01-01 00:00:05 [py] [WARNING] Figure file not found: /p/OUTPUTS/figures/gone.png\n",
+      "2026-01-01 00:00:05 [py] [WARNING] Metadata file not found for: no-sidecar.png\n",
+      file = log_file, append = TRUE, sep = ""
+    )
+  })
+
+  expect_identical(result$missing_metadata, "no-sidecar.png")
+  expect_match(result$warnings, "gone.png")
+  expect_identical(result$status, "warning")
+})
+
+test_that("a failing LibreOffice step still warns, and makes the result not ok", {
+  fixture <- .render_report_fixture()
+  local_mocked_bindings(styling_recalculate_fields = function(...) stop("soffice hung"))
+
+  expect_warning(
+    result <- .run_render(fixture, recalculate_fields = TRUE),
+    "styling_recalculate_fields\\(\\) failed"
+  )
+  expect_identical(result$status, "error")
+  expect_match(result$errors, "soffice hung")
+
+  expect_error(
+    suppressWarnings(.run_render(fixture, recalculate_fields = TRUE, strict = TRUE)),
+    class = "quartifyr_render_incomplete"
+  )
+})
+
+test_that("a draft that pass 2 never wrote is reported as an error", {
+  fixture <- .render_report_fixture()
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
+  local_mocked_bindings(
+    styling_build_abbreviations_tex = function(...) invisible(NULL),
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) invisible(docx)
+  )
+  record <- new.env()
+  local_mocked_bindings(run = .mock_quarto_run(record), .package = "processx")
+  local_mocked_bindings(
+    make_doc_dirs = .mock_make_doc_dirs,
+    build_report = function(...) invisible(NULL),
+    .package = "reportifyr"
+  )
+
+  result <- render_report(
+    fixture$shell_qmd,
+    reference_doc = fixture$reference_doc,
+    standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+    config_yaml = fixture$config_yaml
+  )
+
+  expect_identical(result$status, "error")
+  expect_match(result$errors, "was not produced")
+  expect_identical(result$artifacts$role, "shell")
+})
+
+test_that("a pass-2 failure names the missing metadata sidecars and carries them on the condition", {
+  fixture <- .render_report_fixture()
+  writeLines(c("# shell", "", "{rpfy}:fig.png", "", "text"), fixture$shell_qmd)
+  figs <- file.path(fixture$project_dir, "OUTPUTS", "figures")
+  dir.create(figs, recursive = TRUE)
+  file.create(file.path(figs, "fig.png"))
+
+  err <- tryCatch(
+    .run_render(fixture, build = function(doc_dirs) stop("Figure footnotes script failed.")),
+    error = function(e) e
+  )
+
+  expect_s3_class(err, "quartifyr_pass2_failed")
+  expect_identical(err$missing_metadata, "fig.png")
+  expect_match(conditionMessage(err), "Figure footnotes script failed")
+  expect_match(conditionMessage(err), "Missing metadata sidecar for: fig.png")
+})
+
+test_that("a pass-2 failure unrelated to sidecars passes through unchanged", {
+  fixture <- .render_report_fixture()
+  err <- tryCatch(
+    .run_render(fixture, build = function(doc_dirs) stop("python exploded")),
+    error = function(e) e
+  )
+
+  expect_false(inherits(err, "quartifyr_pass2_failed"))
+  expect_match(conditionMessage(err), "python exploded")
+})

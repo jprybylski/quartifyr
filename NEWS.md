@@ -18,6 +18,23 @@
   those sidecars reference in `standard_footnotes.yaml`, and placeholders
   that end their section. `render_report()` now shares the precondition
   checks with it, with unchanged error messages (#70).
+* `render_report()` now returns a structured `quartifyr_render_result`
+  (still containing `shell`/`draft`/`final`): `status` (`"ok"`,
+  `"warning"` or `"error"`), `artifacts` with SHA-256 hashes,
+  `unfilled_placeholders` (scanned from the produced docx),
+  `missing_metadata`, `warnings`, `errors` and `log_dir`. New
+  `strict = TRUE` signals an error of class `quartifyr_render_incomplete`
+  instead of returning an incomplete result; the default stays `FALSE`. A
+  failed LibreOffice step still only warns, but is now recorded in the
+  result. When `build_report()` fails because a metadata sidecar is
+  missing, the error (class `quartifyr_pass2_failed`) now names it (#69).
+* New `inst/scripts/render.R` entry point for CI and background jobs:
+  `--project <dir> --shell report.qmd --status draft --json [--strict]`
+  prints the result as JSON on stdout (shape in
+  `inst/schemas/render-result.schema.json`), sends everything else to
+  stderr, and exits non-zero on any error or, with `--strict`, any non-ok
+  status. The GitHub Action gains a `strict` input and a `status` output
+  (#69).
 
 # quartifyr 0.3.1
 

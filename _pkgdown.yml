@@ -66,6 +66,8 @@ navbar:
           href: articles/templated-workflows.html
         - text: GitHub Action
           href: articles/github-action.html
+        - text: Noninteractive builds
+          href: articles/automation.html
 
 reference:
   - title: Render a report
@@ -107,3 +109,4 @@ articles:
       - articles/examples
       - articles/templated-workflows
       - articles/github-action
+      - articles/automation

@@ -348,6 +348,26 @@ run with `--check` (as both examples' `smoke_test.py` already do) to
 catch drift from `inst/python/styles/default.yaml`, same pattern as
 `scripts/sync_demo_extension.py` for the Lua extension copies.
 
+**A filled *draft* docx still contains its `{rpfy}:` strings; only the
+final one doesn't.** `reportifyr::build_report()` leaves each magic string
+in place as its own text paragraph (so a re-render can find it) and marks
+the placeholder as filled by stamping the inserted figure/table's alt text
+with `{rpfy}:<name> [hash:...]`; `finalize_document()` is what removes the
+text paragraphs. `render_report()`'s `unfilled_placeholders`
+(`.scan_unfilled_placeholders()` in `R/render-result.R`) therefore counts
+text occurrences against alt-text markers per string, rather than just
+looking for `{rpfy}:` text -- the naive version reports every placeholder
+of a perfectly good draft as unfilled. Separately, with reportifyr's
+default `footnotes_fail_on_missing_metadata = TRUE`, a missing sidecar
+makes `build_report()` *fail* (generic "Figure footnotes script failed."),
+while a missing figure is only a logged warning and a placeholder left
+behind; `.with_missing_metadata_context()` names the sidecars in the first
+case. `action.yml` deliberately still calls `render_report()` rather than
+`inst/scripts/render.R`, and only passes `strict` when asked: its "Install
+the quartifyr R package" step installs the default branch, so a PR's own
+action smoke test runs against `main`'s package, which can't have the
+script or the argument yet.
+
 **YAML lists, not maps, for `synopsis:`/`title-page-extra:`/`address:`.**
 Deliberate: pandoc's Lua metadata tables don't preserve map key order
 (confirmed by testing), so these are lists specifically to keep row/line

@@ -20,6 +20,7 @@ result <- render_report(
   status = status
 )
 
+cat("status: ", result$status, "\n", sep = "")
 cat("shell: ", result$shell, "\n", sep = "")
 cat("draft: ", result$draft, "\n", sep = "")
 if (!is.null(result$final)) {

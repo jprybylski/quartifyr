@@ -1,0 +1,160 @@
+---
+title: "Noninteractive builds"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+CI jobs, scripts and workspace launchers that run a report build in the
+background need three things from quartifyr: a way to find out what is wrong
+before a long build starts, a bound on how long the build can take, and an
+unambiguous outcome when it finishes. A render that left placeholders unfilled
+must not look like a success.
+
+## Check the project first
+
+`check_report_project()` never renders. It reads the project's files and
+returns a data frame of findings, so a launcher can show problems before
+queueing a job:
+
+```{r}
+findings <- quartifyr::check_report_project("report.qmd")
+findings
+#> ── 1 error, 0 warnings
+#> ✖ [missing-sidecar] {rpfy}:conc-time.png (line 191) has no metadata sidecar at ...
+
+if (any(findings$severity == "error")) stop("fix the errors above before rendering")
+```
+
+Each row has a `check` identifier, a `severity` (`"error"` or `"warning"`), the
+`path` concerned and a `message`. It covers:
+
+* the preconditions `render_report()` itself enforces (the shell `.qmd`, the
+  `output-dir: report/shell` setting, the reportifyr `*_init.json` marker, the
+  reference-doc and `standard_footnotes.yaml`);
+* the required Quarto extensions, by scanning `_extensions/` rather than asking
+  the Quarto CLI;
+* every `{rpfy}:` placeholder in the `.qmd`, plus `synopsis:` `image:` entries:
+  the artifact exists under `OUTPUTS/figures` or `OUTPUTS/tables`, its
+  `<stem>_<ext>_metadata.json` sidecar exists and parses, and the abbreviations
+  and `meta_type` it references are defined in `standard_footnotes.yaml`;
+* placeholders that are the last thing in their section, which crashes
+  reportifyr's `build_report()`.
+
+Placeholders inside HTML comments or fenced code blocks are ignored, and files
+pulled in with `{{< include >}}` are not scanned.
+
+`render_report()` shares the precondition checks with this function, so the two
+cannot disagree. It does not stop on missing artifacts: those are reported in
+its result instead (below).
+
+## Bound the render
+
+`render_report()` runs `quarto render` with a timeout and kills the whole process
+tree (Deno, Pandoc, knitr) when it expires or the R session is interrupted:
+
+```{r}
+quartifyr::render_report("report.qmd", quarto_timeout = 300)
+```
+
+The default is 600 seconds and `Inf` disables the limit. A timeout signals an
+error of class `quartifyr_quarto_timeout` whose message includes the tail of
+Quarto's stderr. To use an app-local Quarto instead of the one on `PATH`, pass
+`quarto_bin = "/path/to/quarto"` or set `QUARTO_PATH`.
+
+## Read the outcome
+
+`render_report()` returns the three docx paths it always did (`shell`, `draft`,
+`final`) plus:
+
+| Field | Meaning |
+| --- | --- |
+| `status` | `"ok"`, `"warning"` or `"error"` |
+| `artifacts` | `role`, `path`, `sha256` and `bytes` for each file produced |
+| `unfilled_placeholders` | `{rpfy}:` strings still unresolved in the draft or final docx |
+| `missing_metadata` | artifacts the shell references that have no metadata sidecar |
+| `warnings`, `errors` | the messages behind a non-`"ok"` status |
+| `log_dir` | reportifyr's log directory for the project |
+
+`status` describes whether the delivered document is complete. `"error"` means
+placeholders were left unfilled, or a LibreOffice step you asked for
+(`recalculate_fields`, `resolve_same_page_crossrefs`) failed. `"warning"` means
+the document is complete but reportifyr flagged something.
+
+Pass `strict = TRUE` to turn any non-`"ok"` status into an error of class
+`quartifyr_render_incomplete`. The condition carries the full result as
+`$result`:
+
+```{r}
+result <- tryCatch(
+  quartifyr::render_report("report.qmd", strict = TRUE),
+  quartifyr_render_incomplete = function(e) {
+    print(e$result$unfilled_placeholders)
+    stop(e)
+  }
+)
+```
+
+The default is `strict = FALSE`, so existing callers keep receiving a value.
+
+With reportifyr's default settings, a missing metadata sidecar makes
+`build_report()` itself fail rather than leaving a placeholder behind. In that
+case `render_report()` signals an error of class `quartifyr_pass2_failed` that
+names the missing sidecars.
+
+## The script
+
+`inst/scripts/render.R` wraps the same call for a shell or a launcher. Run it
+with the project as the working directory, so the project's renv library is the
+one that activates:
+
+```bash
+cd path/to/project
+Rscript "$(Rscript -e 'cat(system.file("scripts", "render.R", package = "quartifyr"))')" \
+  --project . --shell report.qmd --status draft --json --strict
+```
+
+The JSON result goes to stdout and nothing else does; progress and errors go to
+stderr. The exit status is 0 only when the render finished (and, with
+`--strict`, its status is `"ok"`). Any error, including a Quarto failure or
+timeout, prints a JSON object with `status: "error"`, an `errors` array and an
+`error_class`, and exits 1. Bad usage exits 2. Run it with `--help` for the
+remaining options (`--quarto-timeout`, `--quarto-bin`, `--reference-doc`,
+`--recalculate-fields`, ...).
+
+A successful result looks like this:
+
+```json
+{
+  "status": "ok",
+  "shell": "/work/project/report/shell/report.docx",
+  "draft": "/work/project/report/draft/report-draft.docx",
+  "final": null,
+  "artifacts": [
+    {"role": "shell", "path": "/work/project/report/shell/report.docx", "sha256": "9c8a...", "bytes": 44379},
+    {"role": "draft", "path": "/work/project/report/draft/report-draft.docx", "sha256": "fa9e...", "bytes": 341570}
+  ],
+  "warnings": [],
+  "errors": [],
+  "unfilled_placeholders": [],
+  "missing_metadata": [],
+  "log_dir": "/work/project/.rpfy-logs"
+}
+```
+
+The shape is documented as a JSON Schema in
+`system.file("schemas", "render-result.schema.json", package = "quartifyr")`.
+
+## In GitHub Actions
+
+The composite action takes a `strict` input (default `'false'`) and exposes the
+result's status as a `status` output:
+
+```yaml
+- uses: jprybylski/quartifyr@v1
+  id: render
+  with:
+    shell-qmd: report.qmd
+    strict: 'true'
+```
