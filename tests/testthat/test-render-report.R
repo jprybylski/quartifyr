@@ -586,17 +586,40 @@ test_that("a hung quarto is killed on timeout with a classed error and leaves no
   expect_match(conditionMessage(err), "timed out after 1 seconds")
   expect_match(conditionMessage(err), "rendering something slow")
 
-  # cleanup_tree is best-effort-asynchronous at the OS level; give the
-  # kernel a moment to reap before declaring a leak.
+  # pgrep is run through processx, not system2(): system2() wraps the call in
+  # `sh -c "pgrep -f <marker>"`, whose own command line contains the marker,
+  # so on Linux pgrep matches that shell and always reports one "survivor".
+  # cleanup_tree is best-effort-asynchronous at the OS level; give the kernel
+  # a moment to reap before declaring a leak.
   survivors <- function() {
-    out <- suppressWarnings(system2("pgrep", c("-f", marker), stdout = TRUE, stderr = FALSE))
-    length(out)
+    out <- processx::run("pgrep", c("-f", marker), error_on_status = FALSE)$stdout
+    length(Filter(nzchar, strsplit(out, "\n", fixed = TRUE)[[1]]))
   }
   for (i in 1:20) {
     if (survivors() == 0) break
     Sys.sleep(0.25)
   }
   expect_identical(survivors(), 0L)
+})
+
+# The leak check above is only meaningful if its probe can see a live child,
+# so prove that directly: a process carrying the marker is found, and is gone
+# once it exits.
+test_that("the leak probe used for the timeout test can see a live child", {
+  skip_on_os("windows")
+  marker <- paste0("quartifyr-probe-", Sys.getpid(), "-", as.integer(runif(1) * 1e6))
+  child <- processx::process$new("sh", c("-c", "sleep 30; true", marker))
+  on.exit(child$kill(), add = TRUE)
+  Sys.sleep(0.3)
+
+  found <- processx::run("pgrep", c("-f", marker), error_on_status = FALSE)$stdout
+  expect_match(found, "^[0-9]+")
+
+  child$kill()
+  child$wait()
+  Sys.sleep(0.3)
+  gone <- processx::run("pgrep", c("-f", marker), error_on_status = FALSE)$stdout
+  expect_identical(trimws(gone), "")
 })
 
 # --- Structured result, strict mode (job contract) --------------------------
