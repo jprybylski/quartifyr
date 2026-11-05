@@ -368,6 +368,23 @@ the quartifyr R package" step installs the default branch, so a PR's own
 action smoke test runs against `main`'s package, which can't have the
 script or the argument yet.
 
+**Offline mode leans on uv's `UV_OFFLINE`, not on bypassing pyro.** pyro's
+`uv_setup.sh` only `curl`-installs uv when uv is missing or its version
+differs from the requested `uv_version` (which defaults to the *installed*
+uv's), and `uv lock`/`uv sync` honour `UV_OFFLINE=1` natively. So
+`.provision_python_with_pyro()` (`R/initialize.R`) sets that variable,
+refuses up front when uv isn't installed, and passes the installed version
+explicitly. pyro also hides uv's stderr (it's only on the processx condition),
+which `.process_error_detail()` digs out. A configured `python_env`
+(`R/offline.R`) bypasses pyro entirely, and its interpreter must be invoked by
+the venv's own `bin/python` path: `normalizePath()` resolves that symlink to
+the base interpreter, which silently loses the venv's site-packages (every
+module then looks "missing"). `reportifyr`'s own pyro/uv setup stays upstream.
+`inst/extensions/quarto-plus/` is an unmodified MIT-licensed upstream copy;
+see `inst/extensions/README.md`. `scripts/offline_pipeline_check.sh` (run by
+the `offline-pipeline` CI job inside `unshare --net`) is the only real "no
+network" check, and can't be reproduced on macOS.
+
 **YAML lists, not maps, for `synopsis:`/`title-page-extra:`/`address:`.**
 Deliberate: pandoc's Lua metadata tables don't preserve map key order
 (confirmed by testing), so these are lists specifically to keep row/line
