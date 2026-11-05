@@ -1,6 +1,6 @@
 # quartifyr
 
-# quartifyr (development version)
+# quartifyr 0.3.1
 
 ## New features
 
@@ -55,8 +55,6 @@
   names the step, the resource and how to provide it locally (error class
   `quartifyr_offline_failure`), including uv's own stderr, which pyro
   otherwise hides.
-
-# quartifyr 0.3.1
 
 ## New features
 
