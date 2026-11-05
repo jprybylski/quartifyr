@@ -80,6 +80,7 @@ reference:
     contents:
       - initialize_quartifyr_project
       - install_quartifyr_extension
+      - install_quarto_extensions
       - check_quarto_extensions
       - quartifyr_quarto_extensions
   - title: Front matter

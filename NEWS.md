@@ -35,6 +35,14 @@
   stderr, and exits non-zero on any error or, with `--strict`, any non-ok
   status. The GitHub Action gains a `strict` input and a `status` output
   (#69).
+* New `install_quarto_extensions()` installs the required third-party Quarto
+  extension (`A2-ai/quarto-plus`) without network access, from a copy now
+  bundled in the package or from a directory or `.zip`/`.tar.gz` archive of
+  your choosing. The bundled copy is unmodified upstream (MIT-licensed, with
+  its `LICENSE` kept alongside; provenance in `inst/extensions/README.md`)
+  and is drift-checked against the examples' copies by
+  `scripts/sync_demo_extension.py`. `check_quarto_extensions()` now points
+  at it (#72).
 
 # quartifyr 0.3.1
 
