@@ -12,5 +12,5 @@
 #     --project . --shell report.qmd --status draft --json --strict
 #
 # Run with --help for all options. The JSON shape is documented in
-# inst/schemas/render-result.schema.json.
+# inst/schemas/render-result-v1.schema.json.
 quit(status = quartifyr:::.render_cli(commandArgs(trailingOnly = TRUE)), save = "no")

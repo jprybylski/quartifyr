@@ -7,6 +7,9 @@
 #   to the target version and bump DESCRIPTION.       (action = "new")
 # - VERSION == latest tag: fold any dev-section changes into the existing
 #   target section; DESCRIPTION should already match.  (action = "refresh")
+#   release.yaml only lets this proceed shortly after the release was
+#   published (REFRESH_WINDOW_HOURS), since it moves the tag and replaces
+#   the tarball; otherwise bump VERSION.
 # - VERSION <  latest tag, or malformed: hard error.
 #
 # Writes NEWS.md / DESCRIPTION in place (unless DRY_RUN=true) and writes the

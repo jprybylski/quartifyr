@@ -81,13 +81,33 @@
 #'   LibreOffice step that failed. Default `FALSE`, which returns the result
 #'   either way so existing callers keep working; use `TRUE` in CI and
 #'   background jobs where an incomplete document must not look like
-#'   success.
+#'   success. With `strict = TRUE` the result carried on the condition has
+#'   `status = "error"`, with the reason added to `errors`, even if the
+#'   render itself only warned. Without it, a returned result (and the
+#'   script's exit status 0) only means the render finished, not that it was
+#'   complete: check `status`.
+#' @param offline Whether to render without any network access. `NULL`
+#'   (default) follows offline mode as set by `options(quartifyr.offline =
+#'   TRUE)` or the `UV_OFFLINE` environment variable (see
+#'   `vignette("offline")`). When on, `render_report()` sets `UV_OFFLINE=1`,
+#'   `UV_NO_INDEX=1`, `UV_PYTHON_DOWNLOADS=never` and `UV_NO_SYNC=1` for the
+#'   whole call, so quartifyr's styling steps and reportifyr's pass 2 use the
+#'   already-provisioned Python environment as it is: nothing is synced,
+#'   recreated or downloaded, and a cold uv cache is fine. The environment must
+#'   have been provisioned beforehand, by `initialize_quartifyr_project()` and
+#'   `reportifyr::initialize_report_project()`. A uv failure then signals an
+#'   error of class `quartifyr_offline_failure` naming the step. `FALSE` sets
+#'   nothing. Renders of one project must not run concurrently: they share its
+#'   `.venv` and `report/` folders.
 #' @param quarto_timeout Seconds to allow the `quarto render` subprocess
 #'   before killing it and signalling an error of class
 #'   `quartifyr_quarto_timeout`. Default `600`; `Inf` disables the limit.
 #'   The whole process tree is cleaned up on timeout or interrupt (Quarto
 #'   spawns Deno, Pandoc and possibly R/knitr children that would otherwise
-#'   outlive it).
+#'   outlive it). Only this step is bounded: `quarto inspect`,
+#'   `quarto list extensions`, the Python styling step and reportifyr's pass 2
+#'   have no timeout of their own, so a caller that needs a hard limit on the
+#'   whole job must enforce it itself.
 #' @param quarto_bin Path to the Quarto executable. `NULL` (default) uses
 #'   the `QUARTO_PATH` environment variable if set, else `quarto` on
 #'   `PATH`. When given, it is also exported as `QUARTO_PATH` for the
@@ -112,12 +132,37 @@
 #'     reportifyr's own log for this run).}
 #'   \item{`warnings`, `errors`}{Messages behind a non-`"ok"` status.}
 #'   \item{`log_dir`}{reportifyr's log directory for the project.}
+#'   \item{`inputs`}{Data frame (`role`, `path`, `sha256`, `bytes`) of the
+#'     files the render read: the shell `.qmd`, each figure, table and metadata
+#'     sidecar it references, `standard_footnotes.yaml`, `config.yaml` and the
+#'     reference-doc.}
+#'   \item{`versions`}{List of the quartifyr, reportifyr, Quarto,
+#'     `quartifyr_styling` (Python) and R versions; `NULL` where one could not
+#'     be determined.}
+#'   \item{`started_at`, `finished_at`}{UTC timestamps (ISO 8601) of the
+#'     render.}
 #' }
 #' Everything before pass 2 (a failed Quarto render, a timeout, a failed
 #' precondition) signals an ordinary error instead. The same fields are
-#' available as JSON from the `inst/scripts/render.R` script (see
-#' `system.file("schemas", "render-result.schema.json", package =
-#' "quartifyr")` for the shape).
+#' available as JSON, with a `schema_version` field, from the
+#' `inst/scripts/render.R` script (see
+#' `system.file("schemas", "render-result-v1.schema.json", package =
+#' "quartifyr")` for the shape). Within a schema version, new optional fields
+#' may appear, so consumers should ignore fields they don't know; removing or
+#' renaming a field bumps the version.
+#'
+#' @section After a failed render:
+#' Once the project checks pass and the render starts, the outputs it is about
+#' to regenerate (`report/shell/<name>.docx`, `report/draft/<name>-*.docx` and
+#' `report/final/<name>-final.docx`) are moved to `report/.previous/` first,
+#' replacing the copy already there. A render that fails, times out or is
+#' killed therefore leaves nothing in `report/shell`, `report/draft` or
+#' `report/final` that came from an earlier render, and the last good outputs
+#' stay recoverable in `report/.previous/` (add it to `.gitignore`). A
+#' failure in the project checks that run first touches nothing. The
+#' `abbreviations.tex` next to the shell `.qmd` is regenerated regardless.
+#' An output counts as produced only if it was written after the render
+#' began.
 #'
 #' @section Known upstream gotcha:
 #' Pandoc's docx writer wraps every `#`-heading section in body-level
@@ -153,9 +198,29 @@ render_report <- function(
   resolve_same_page_crossrefs = FALSE,
   quarto_timeout = 600,
   quarto_bin = NULL,
-  strict = FALSE
+  strict = FALSE,
+  offline = NULL
 ) {
   status <- match.arg(status)
+
+  if (!is.null(offline) && !(is.logical(offline) && length(offline) == 1 && !is.na(offline))) {
+    stop("offline must be NULL, TRUE or FALSE.")
+  }
+  # Offline mode for the whole render, set once here so every uv call below
+  # inherits it, reportifyr's pass 2 included (it runs `uv run` many times and
+  # would otherwise re-sync, and re-resolve against the index, on each one):
+  # no index, no managed-Python download, and no re-sync of an environment
+  # initialisation already provisioned. `quartifyr.offline` is what the
+  # styling bridge and the error handling below look at.
+  if (is.null(offline)) {
+    offline <- .offline_mode()
+  }
+  if (offline) {
+    withr::local_options(quartifyr.offline = TRUE)
+    withr::local_envvar(
+      UV_OFFLINE = "1", UV_NO_INDEX = "1", UV_PYTHON_DOWNLOADS = "never", UV_NO_SYNC = "1"
+    )
+  }
 
   if (!is.numeric(quarto_timeout) || length(quarto_timeout) != 1 || is.na(quarto_timeout) || quarto_timeout <= 0) {
     stop("quarto_timeout must be a single positive number of seconds (or Inf).")
@@ -178,6 +243,16 @@ render_report <- function(
   # (R/check-report-project.R), so the render-free preflight and the render
   # itself can't disagree about what a valid project looks like.
   .stop_on_finding(.check_shell_qmd(shell_qmd))
+
+  # Resolve every path against the caller's working directory *now*. The
+  # defaults below are derived from `shell_qmd`, and everything after this
+  # point runs inside withr::with_dir(project_dir, ...), where a relative path
+  # would silently mean something else.
+  shell_qmd <- normalizePath(shell_qmd, mustWork = TRUE)
+  standard_footnotes_yaml <- .absolute_path(standard_footnotes_yaml)
+  config_yaml <- .absolute_path(config_yaml)
+  figures_path <- .absolute_path(figures_path)
+  tables_path <- .absolute_path(tables_path)
   quarto_yml <- file.path(dirname(shell_qmd), "_quarto.yml")
   .stop_on_finding(.check_output_dir(dirname(shell_qmd)))
 
@@ -207,6 +282,7 @@ render_report <- function(
   # level reference-doc setting with the package one). Only fall back to the
   # bundled package default, with a one-time notice, when neither is set.
   reference_doc_arg <- reference_doc
+  reference_doc_used <- reference_doc
   if (is.null(reference_doc)) {
     configured <- tryCatch(
       quarto::quarto_inspect(shell_qmd)$formats$docx$pandoc$`reference-doc`,
@@ -214,8 +290,10 @@ render_report <- function(
     )
     if (is.character(configured) && length(configured) == 1 && nzchar(configured)) {
       reference_doc_arg <- NULL
+      reference_doc_used <- .absolute_path(configured, project_dir)
     } else {
       reference_doc_arg <- system.file("templates", "org-reference.docx", package = "quartifyr")
+      reference_doc_used <- reference_doc_arg
       cli::cli_inform(c(
         "i" = paste(
           "No {.field reference-doc} set in {.path {quarto_yml}} or {.file {basename(shell_qmd)}}",
@@ -231,14 +309,20 @@ render_report <- function(
   .stop_on_finding(.check_reference_doc(reference_doc_arg))
   .stop_on_finding(.check_footnotes_yaml(standard_footnotes_yaml))
 
-  shell_qmd <- normalizePath(shell_qmd, mustWork = TRUE)
-
   # Fail fast with an actionable message (which Quarto extension is
   # missing, and the exact quarto::quarto_add_extension() call to fix it)
   # instead of the much less specific "could not find executable" error
   # `quarto render` itself raises when a filters:/shortcodes: entry in the
   # .qmd's frontmatter resolves to a missing _extensions/ directory.
   check_quarto_extensions(project_dir)
+
+  # Everything above only validates the project, and a failure there means no
+  # render was attempted, so nothing on disk has been touched. From here on a
+  # render is under way: move the previous render's outputs aside, so that if
+  # this one fails, times out or is killed, the live report/{shell,draft,final}
+  # folders hold nothing that could pass for its result.
+  started_at <- Sys.time()
+  .move_previous_outputs(project_dir, sub("\\.qmd$", "", basename(shell_qmd)))
 
   # Regenerate abbreviations.tex next to the shell .qmd -- that's where
   # quarto-plus's terms_and_abbreviations.lua looks for it by default -- so
@@ -352,10 +436,13 @@ render_report <- function(
       out
     })
   }
-  paths <- .with_missing_metadata_context(
-    run_pass2(),
-    project_dir = project_dir, shell_qmd = shell_qmd,
-    figures_path = figures_path, tables_path = tables_path
+  paths <- .with_offline_context(
+    .with_missing_metadata_context(
+      run_pass2(),
+      project_dir = project_dir, shell_qmd = shell_qmd,
+      figures_path = figures_path, tables_path = tables_path
+    ),
+    step = "fill the shell with reportifyr (pass 2)"
   )
 
   # --- What pass 2 left behind ----------------------------------------------
@@ -363,8 +450,10 @@ render_report <- function(
   run_errors <- character(0)
   run_warnings <- character(0)
 
+  not_produced <- character(0)
   for (output_path in produced) {
-    if (!file.exists(output_path)) {
+    if (!.produced_since(output_path, started_at)) {
+      not_produced <- c(not_produced, output_path)
       run_errors <- c(run_errors, paste0("Expected output was not produced: ", output_path))
     }
   }
@@ -420,7 +509,14 @@ render_report <- function(
     errors = run_errors,
     unfilled_placeholders = unfilled,
     missing_metadata = missing_metadata,
-    log_dir = log_dir
+    log_dir = log_dir,
+    not_produced = not_produced,
+    inputs = .input_table(
+      shell_qmd, figures_path, tables_path, standard_footnotes_yaml, config_yaml, reference_doc_used
+    ),
+    versions = .tool_versions(quarto_command),
+    started_at = .timestamp_utc(started_at),
+    finished_at = .timestamp_utc()
   )
 
   if (isTRUE(strict) && result$status != "ok") {

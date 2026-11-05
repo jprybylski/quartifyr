@@ -1,6 +1,6 @@
 # quartifyr
 
-# quartifyr 0.3.1
+# quartifyr (development version)
 
 ## New features
 
@@ -56,8 +56,6 @@
   `quartifyr_offline_failure`), including uv's own stderr, which pyro
   otherwise hides.
 
-## New features
-
 * `initialize_quartifyr_project()` can now scaffold a new project's
   `_quarto.yml`/style YAML/shell `.qmd` from a template source instead of
   leaving the directory empty (issue #23): `from_dir`/`from_repo` (with
@@ -90,6 +88,53 @@
   package) from the built package tarball, fixing an "unmentioned
   DESCRIPTION" `R CMD check` NOTE and shrinking the tarball from ~4.8MB to
   ~2.2MB (issue #62).
+* `render_report()` is offline-safe by itself (#76). New `offline` argument
+  (and `--offline` on `render.R`), defaulting to offline mode as set by
+  `options(quartifyr.offline = TRUE)` or `UV_OFFLINE`: for the whole render it
+  sets `UV_OFFLINE`, `UV_NO_INDEX`, `UV_PYTHON_DOWNLOADS=never` and
+  `UV_NO_SYNC`, so quartifyr's styling step and every `uv run` in reportifyr's
+  pass 2 use the already-provisioned environment instead of re-syncing (and
+  recreating) `.venv`, even with a cold uv cache. A uv failure at render time
+  is now a `quartifyr_offline_failure` naming the step. The offline article
+  lists the variables and the exact conditions under which a render makes no
+  network calls, and says concurrent renders of one project are not
+  supported.
+* The render result is versioned and carries provenance (#78). Every JSON
+  result, including the error object of a failed render, has
+  `schema_version: 1`, and the schema is now
+  `inst/schemas/render-result-v1.schema.json` (renamed from
+  `render-result.schema.json`; new optional fields keep the version, removing
+  or renaming one bumps it). Results gain `inputs` (path, SHA-256 and size of
+  the shell `.qmd`, each figure, table and metadata sidecar used,
+  `standard_footnotes.yaml`, `config.yaml` and the reference-doc), `versions`
+  (quartifyr, reportifyr, Quarto, `quartifyr_styling`, R) and
+  `started_at`/`finished_at`.
+* New `inst/scripts/check.R --project <dir> --shell report.qmd [--json]` runs
+  `check_report_project()` for scripts and launchers: JSON with
+  `schema_version` and `findings`, exit status 0 without error findings, 1
+  with, 2 on bad usage (#78).
+* A strict render that is incomplete now always reports `status: "error"`,
+  also when the render itself only warned. `--help` and the docs say that
+  exit status 0 without `--strict` only means the render finished (#78).
+* `render_report()` resolves a relative `shell_qmd` and the default
+  `standard_footnotes_yaml`, `config_yaml`, `figures_path` and `tables_path`
+  against the calling directory before changing into the project, so a
+  relative `--shell` works from outside the project (#78).
+* The docs now state which steps `quarto_timeout` does not bound, and why the
+  timeout cleanup test does not run on Windows (#78).
+* A failed, timed-out or interrupted `render_report()` no longer leaves the
+  previous render's `report/draft` and `report/final` documents in place
+  looking complete. Once the render starts, the outputs it will regenerate
+  are first moved to `report/.previous/`, and an output only counts as
+  produced if it was written after the render began (#77).
+* The release workflow no longer rewrites a published release: a refresh
+  (moving the tag, replacing the tarball) only happens while the release is
+  under 24 hours old, and is skipped with a warning after that, so a
+  version number keeps naming one source tree and one tarball. Each release now also carries a `SHA256SUMS` file. This
+  release is 0.3.2 because 0.3.1's tag and tarball had been replaced with
+  the job-contract and offline work (#75).
+
+# quartifyr 0.3.1
 
 ## New features
 

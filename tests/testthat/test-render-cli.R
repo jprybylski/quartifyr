@@ -68,6 +68,10 @@ test_that("any render error exits 1 with a JSON error object naming its class", 
   expect_identical(parsed$error_class, "quartifyr_quarto_timeout")
   expect_match(parsed$errors, "timed out")
   expect_match(res$err, "timed out", all = FALSE)
+  # A failed render reports no output at all, so nothing can be mistaken for one.
+  expect_null(parsed$artifacts)
+  expect_null(parsed$draft)
+  expect_null(parsed$final)
 })
 
 test_that("a strict incomplete render exits 1 and still reports the whole result", {
@@ -142,4 +146,51 @@ test_that("a stray positional argument is bad usage", {
 
   expect_identical(res$code, 2L)
   expect_match(res$err, "Unexpected argument: extra", all = FALSE)
+})
+
+test_that("a relative --project and --shell reach render_report() under the project", {
+  seen <- NULL
+  local_mocked_bindings(render_report = function(...) {
+    seen <<- list(...)
+    .fake_result()
+  })
+  .run_cli(c("--project", "proj", "--shell", "report.qmd"))
+  expect_identical(seen$shell_qmd, "proj/report.qmd")
+})
+
+test_that("a failed render's JSON error carries schema_version and timestamps", {
+  local_mocked_bindings(render_report = function(...) stop("nope"))
+  res <- .run_cli(c("--project", "/p", "--shell", "report.qmd", "--json"))
+  parsed <- jsonlite::fromJSON(paste(res$out, collapse = "\n"))
+
+  expect_identical(parsed$schema_version, 1L)
+  expect_match(parsed$started_at, "Z$")
+  expect_match(parsed$finished_at, "Z$")
+})
+
+test_that("--help says a non-strict exit 0 doesn't mean the render was complete", {
+  res <- .run_cli("--help")
+  expect_match(paste(res$out, collapse = " "), "exit 0 only means the render finished")
+})
+
+test_that("--offline reaches render_report() and is off otherwise", {
+  seen <- NULL
+  local_mocked_bindings(render_report = function(...) {
+    seen <<- list(...)
+    .fake_result()
+  })
+
+  .run_cli(c("--project", "/p", "--shell", "report.qmd", "--offline"))
+  expect_true(seen$offline)
+  .run_cli(c("--project", "/p", "--shell", "report.qmd"))
+  expect_null(seen$offline)
+})
+
+test_that(".cli_shell_path() keeps an existing absolute shell and resolves anything else under the project", {
+  shell <- withr::local_tempfile(fileext = ".qmd")
+  writeLines("# s", shell)
+
+  expect_identical(.cli_shell_path("/proj", shell), shell)
+  expect_identical(.cli_shell_path("/proj", "report.qmd"), "/proj/report.qmd")
+  expect_identical(.cli_shell_path("/proj", "/does/not/exist.qmd"), "/proj//does/not/exist.qmd")
 })

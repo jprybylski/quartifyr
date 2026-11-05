@@ -14,7 +14,8 @@ quartifyr cannot fix because it happens in a dependency.
 
 ## What needs the network
 
-Only setup does. Rendering a report makes no network calls of its own.
+Setup does. Rendering a report makes no network calls of its own, and when
+offline mode is on (below) it also can't reach an index through uv.
 
 | Step | Why it reaches the network | Offline replacement |
 | --- | --- | --- |
@@ -42,6 +43,46 @@ Whenever a step that needs the network fails, the error says which step, which
 resource it was after and how to provide it locally. The error class is
 `quartifyr_offline_failure`, and it includes uv's own stderr (pyro otherwise
 hides it).
+
+## Rendering offline
+
+With offline mode on (`options(quartifyr.offline = TRUE)`, `UV_OFFLINE=1`, or
+`offline = TRUE` / `--offline` on the call), `render_report()` and
+`inst/scripts/render.R` set these for the whole render, so quartifyr's own
+`uv run` and every `uv run` reportifyr makes in pass 2 inherit them:
+
+| Variable | Effect |
+| --- | --- |
+| `UV_OFFLINE=1` | uv resolves from its cache only |
+| `UV_NO_INDEX=1` | uv never consults a package index |
+| `UV_PYTHON_DOWNLOADS=never` | uv never downloads a Python interpreter |
+| `UV_NO_SYNC=1` | `uv run` uses the project's environment as it is |
+
+The last one matters most. Without it, each `uv run` re-syncs the project's
+environment, and a re-sync can remove and recreate `.venv` (reportifyr calls
+uv many times per render), which needs the wheels again. A render in offline
+mode never syncs, recreates or downloads anything, and works with a cold uv
+cache. If you call `reportifyr` yourself outside `render_report()`, set the same
+variables.
+
+A render makes no network calls under exactly these conditions:
+
+* offline mode is on, as above;
+* the project was provisioned beforehand, with
+  `initialize_quartifyr_project()` and `reportifyr::initialize_report_project()`
+  both run once (offline mode needs the environment to exist already, since
+  nothing at render time will create it);
+* Quarto itself has what it needs: the extensions installed
+  (`install_quarto_extensions()`), and no `from_repo` or `quarto add` involved.
+
+If a step still needs uv to reach the network, the error has class
+`quartifyr_offline_failure` and names the step (the styling step, or reportifyr's
+pass 2) rather than the generic "quartifyr-styling failed". An error that doesn't
+look like uv or the network (a bad figure, a missing sidecar) keeps its own
+message.
+
+Don't run two renders of one project at the same time, offline or not: they
+share the project's `.venv` and its `report/` folders.
 
 ## Recipe
 
@@ -103,9 +144,10 @@ the R package is put on `PYTHONPATH`.
 `reportifyr`, which fills the shell in pass 2, has its own Python environment
 and provisions it through pyro and uv when you call
 `reportifyr::initialize_report_project()`. That code is upstream (A2-ai), and
-`python_env` does not replace it. It works offline under the same conditions as
-above: uv installed at any version, `UV_OFFLINE=1`, and a populated cache or
-wheel directory. If a step in it needs the network, the error comes from
+`python_env` does not replace it. Provisioning it works offline under the same
+conditions as above: uv installed at any version, `UV_OFFLINE=1`, and a populated
+cache or wheel directory. At render time it uses the environment as it is, under
+the variables listed in "Rendering offline". If a step in it needs the network, the error comes from
 there, not from quartifyr.
 
 ## The `quarto-plus` licence
@@ -124,5 +166,7 @@ The `offline-pipeline` CI job provisions the demo project online, then runs
 `scripts/offline_pipeline_check.sh` inside a network namespace with no network
 interface and an empty `HOME`. It initializes and renders the demo (once with
 uv, once with `python_env`) and fails if anything needs the network or writes
-to `~/.local/bin`. The same script can be run by hand on Linux; the header of
+to `~/.local/bin`. The uv render runs with an empty uv cache and without the
+variables above set by hand, and fails if the log shows the environment being
+removed or reinstalled, so it checks that `render_report()` sets them itself. The same script can be run by hand on Linux; the header of
 the script shows how.

@@ -73,7 +73,13 @@
     # missing its dependencies because this call's `--group quartifyr` had
     # just resynced them away. `--all-groups` is the only invocation that
     # doesn't clobber whichever other tool's group already exists here.
-    cli_args <- c("run", "--all-groups", "-m", "quartifyr_styling", "--json", args)
+    # Offline, the environment was synced when the project was initialised;
+    # `--no-sync` makes `uv run` use it as it is rather than re-resolving
+    # (which can recreate the venv, and needs the index if the cache is cold).
+    cli_args <- c(
+      "run", "--all-groups", if (.offline_mode()) "--no-sync",
+      "-m", "quartifyr_styling", "--json", args
+    )
   }
 
   stderr_lines <- character(0)
@@ -150,6 +156,24 @@
     # here before (see R/render-report.R's same workaround for the
     # `quarto render` subprocess call, and CLAUDE.md).
     cat(stderr_text, file = stderr())
+    if (is.null(python_env) && .offline_mode()) {
+      # No payload from the CLI means uv failed before Python ran.
+      detail <- if (nzchar(trimws(stderr_text))) {
+        paste(utils::tail(strsplit(stderr_text, "\n", fixed = TRUE)[[1]], 12), collapse = "\n")
+      } else {
+        .process_error_detail(outcome)
+      }
+      step <- paste0("run the quartifyr styling step (", args[[1]], ")")
+      .abort_offline(
+        step = step,
+        resource = "the project's Python environment, already synced with the quartifyr dependency group",
+        how = c(
+          "Run {.fn initialize_quartifyr_project} before rendering, with a populated uv cache or wheels, or use {.code options(quartifyr.python_env = ...)} with an existing environment.",
+          "uv said: {detail}"
+        ),
+        parent = outcome
+      )
+    }
     stop(
       "quartifyr-styling ", args[[1]], " failed and did not produce a ",
       "parseable error payload (see stderr above).\n  command: ", command_desc,

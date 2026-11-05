@@ -38,6 +38,8 @@ examples/*/report/shell/OUTPUTS/
 examples/*/abbreviations.tex
 examples/*/report/draft/*
 examples/*/report/final/*
+# the previous render's outputs, moved aside by render_report() before each render
+examples/*/report/.previous/
 !examples/*/report/draft/readme.txt
 !examples/*/report/final/readme.txt
 

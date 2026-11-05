@@ -11,8 +11,9 @@
 #     --init-groups env PATH="$PATH" HOME="$(mktemp -d)" bash scripts/offline_pipeline_check.sh
 #
 # Fails if the network is reachable (so it can't pass vacuously), if any
-# step needs it, or if anything lands in $HOME/.local/bin (where pyro's
-# uv_setup.sh would curl-install uv).
+# step needs it, if the render re-syncs the Python environment (it renders
+# with a cold uv cache and none of the uv variables set here), or if anything
+# lands in $HOME/.local/bin (where pyro's uv_setup.sh would curl-install uv).
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -42,12 +43,31 @@ test -f _extensions/A2-ai/quarto-plus/LICENSE
 echo "== check_report_project()"
 Rscript -e 'f <- quartifyr::check_report_project("report.qmd"); print(f); stopifnot(!any(f$severity == "error"))'
 
-echo "== render (noninteractive script, strict)"
+echo "== render (noninteractive script, strict), cold uv cache, offline settings left to render_report()"
+# A render must not need uv's cache or index: point uv at an empty cache and
+# drop the variables exported above, so only what render_report(offline = TRUE)
+# sets itself is in effect. Without UV_NO_SYNC every reportifyr call would
+# re-sync (and recreate) the venv here, which needs the wheels it can no
+# longer find.
 script="$(Rscript -e 'cat(system.file("scripts", "render.R", package = "quartifyr"))')"
 result="$(mktemp)"
-Rscript "$script" --project . --shell report.qmd --status final --json --strict > "$result"
+render_log="$(mktemp)"
+cold_cache="$(mktemp -d)"
+if ! env -u UV_OFFLINE -u UV_NO_INDEX -u UV_PYTHON_DOWNLOADS UV_CACHE_DIR="$cold_cache" \
+  Rscript "$script" --project . --shell report.qmd --status final --json --strict --offline \
+  > "$result" 2> "$render_log"; then
+  cat "$render_log" >&2
+  cat "$result"
+  echo "error: the offline render failed" >&2
+  exit 1
+fi
+cat "$render_log" >&2
 cat "$result"
 Rscript -e 'r <- jsonlite::fromJSON(commandArgs(TRUE)[[1]]); stopifnot(identical(r$status, "ok"), file.exists(r$final))' "$result"
+if grep -E "Removed virtual environment|^Installed [0-9]+ package" "$render_log" "$result"; then
+  echo "error: the render re-synced or recreated the Python environment" >&2
+  exit 1
+fi
 
 echo "== same again through a pre-provisioned python_env (no pyro, no uv)"
 env_dir="$PWD/.venv"

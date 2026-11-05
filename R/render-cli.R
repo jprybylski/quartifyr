@@ -12,13 +12,20 @@
 #   exit    0 only when the render finished and (with --strict) its status
 #           is "ok". Any error, including a quarto failure or timeout, is
 #           reported as a JSON object with status "error" and exits 1.
-#           Bad usage exits 2.
+#           Bad usage exits 2. Without --strict, exit 0 only means the render
+#           finished: read `status`.
 
 .render_cli_value_options <- c(
   "project", "shell", "status", "reference-doc", "style", "override",
   "quarto-timeout", "quarto-bin"
 )
-.render_cli_flag_options <- c("json", "strict", "recalculate-fields", "resolve-same-page-crossrefs", "help")
+.render_cli_flag_options <- c("json", "strict", "offline", "recalculate-fields", "resolve-same-page-crossrefs", "help")
+
+# `--project <dir> --shell <file>`: the shell is relative to the project
+# unless it is an existing absolute path.
+.cli_shell_path <- function(project, shell) {
+  if (file.exists(shell) && grepl("^(/|[A-Za-z]:[/\\\\])", shell)) shell else file.path(project, shell)
+}
 
 .render_cli_usage <- function() {
   paste(
@@ -29,7 +36,10 @@
     "  --shell <file>                  Shell .qmd, relative to --project unless absolute.",
     "  --status draft|final            Default: draft.",
     "  --json                          Print the result as JSON on stdout.",
-    "  --strict                        Exit non-zero unless the result status is \"ok\".",
+    "  --strict                        Exit non-zero unless the result status is \"ok\". Without it,",
+    "                                  exit 0 only means the render finished, not that it was complete.",
+    "  --offline                       No network: set UV_OFFLINE/UV_NO_INDEX/UV_NO_SYNC for the render.",
+    "                                  Default: on when quartifyr.offline or UV_OFFLINE is set.",
     "  --quarto-timeout <seconds>      Default 600; Inf disables.",
     "  --quarto-bin <path>             Quarto executable (default: QUARTO_PATH, then PATH).",
     "  --reference-doc <file>          docx reference-doc.",
@@ -40,7 +50,8 @@
   )
 }
 
-.parse_render_cli_args <- function(args) {
+.parse_cli_args <- function(args, value_options = .render_cli_value_options,
+                            flag_options = .render_cli_flag_options) {
   parsed <- list()
   i <- 1L
   while (i <= length(args)) {
@@ -54,9 +65,9 @@
       value <- sub("^[^=]*=", "", name)
       name <- sub("=.*$", "", name)
     }
-    if (name %in% .render_cli_flag_options) {
+    if (name %in% flag_options) {
       parsed[[name]] <- TRUE
-    } else if (name %in% .render_cli_value_options) {
+    } else if (name %in% value_options) {
       if (is.null(value)) {
         if (i == length(args)) {
           stop("Option --", name, " needs a value.", call. = FALSE)
@@ -73,12 +84,18 @@
   parsed
 }
 
-.render_cli_error_json <- function(e) {
+.render_cli_error_json <- function(e, started_at = NULL, finished_at = NULL) {
   # An incomplete strict render carries the full result; report all of it.
   if (inherits(e, "quartifyr_render_incomplete") && !is.null(e$result)) {
     payload <- .render_result_as_list(e$result)
   } else {
-    payload <- list(status = "error", errors = list(conditionMessage(e)))
+    payload <- list(
+      schema_version = .render_schema_version,
+      status = "error",
+      errors = list(conditionMessage(e)),
+      started_at = started_at,
+      finished_at = finished_at
+    )
   }
   if (!is.null(e$missing_metadata)) {
     payload$missing_metadata <- as.list(e$missing_metadata)
@@ -89,7 +106,7 @@
 
 # Returns the exit status (invisibly); the script passes it to quit().
 .render_cli <- function(args, out = stdout(), err = stderr()) {
-  parsed <- tryCatch(.parse_render_cli_args(args), error = function(e) e)
+  parsed <- tryCatch(.parse_cli_args(args), error = function(e) e)
   if (inherits(parsed, "error") || isTRUE(parsed$help)) {
     if (inherits(parsed, "error")) {
       writeLines(conditionMessage(parsed), err)
@@ -106,7 +123,7 @@
 
   project <- parsed$project
   shell <- parsed$shell
-  shell_qmd <- if (file.exists(shell) && grepl("^(/|[A-Za-z]:[/\\\\])", shell)) shell else file.path(project, shell)
+  shell_qmd <- .cli_shell_path(project, shell)
   call_args <- list(
     shell_qmd = shell_qmd,
     status = if (is.null(parsed$status)) "draft" else parsed$status,
@@ -114,6 +131,7 @@
     recalculate_fields = isTRUE(parsed$`recalculate-fields`),
     resolve_same_page_crossrefs = isTRUE(parsed$`resolve-same-page-crossrefs`)
   )
+  if (isTRUE(parsed$offline)) call_args$offline <- TRUE
   if (!is.null(parsed$`reference-doc`)) call_args$reference_doc <- parsed$`reference-doc`
   if (!is.null(parsed$style)) call_args$style <- parsed$style
   if (!is.null(parsed$override)) call_args$override <- parsed$override
@@ -130,6 +148,7 @@
   # Whatever the render prints to stdout (pyro/reportifyr progress, stray
   # print() calls) goes to stderr, so stdout carries the JSON and nothing else.
   outcome <- NULL
+  started_at <- .timestamp_utc()
   noise <- utils::capture.output(
     outcome <- tryCatch(do.call(render_report, call_args), error = function(e) e),
     type = "output"
@@ -141,7 +160,7 @@
   if (inherits(outcome, "error")) {
     writeLines(paste0("quartifyr render failed: ", conditionMessage(outcome)), err)
     if (isTRUE(parsed$json)) {
-      writeLines(as.character(.render_cli_error_json(outcome)), out)
+      writeLines(as.character(.render_cli_error_json(outcome, started_at, .timestamp_utc())), out)
     }
     return(invisible(1L))
   }

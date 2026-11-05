@@ -34,6 +34,9 @@
 # (mocked below, per-test) has something real to reason about.
 .mock_quarto_run <- function(record_into) {
   function(command, args, wd = ".", error_on_status = TRUE, ...) {
+    if (!identical(args[[1]], "render")) {
+      return(list(status = 0, stdout = "1.9.9\n", stderr = ""))
+    }
     assign("quarto_run", list(command = command, args = args, wd = wd), envir = record_into)
     output_name <- args[which(args == "--output") + 1]
     dir.create(file.path(wd, "report", "shell"), recursive = TRUE, showWarnings = FALSE)
@@ -489,6 +492,9 @@ test_that("passes quarto_timeout and cleanup_tree through to processx::run()", {
   )
   local_mocked_bindings(
     run = function(command, args, wd = ".", error_on_status = TRUE, timeout = NULL, cleanup_tree = NULL, ...) {
+      if (!identical(args[[1]], "render")) {
+        return(list(status = 0, stdout = "1.9.9\n", stderr = ""))
+      }
       assign("timeout", timeout, envir = seen)
       assign("cleanup_tree", cleanup_tree, envir = seen)
       output_name <- args[which(args == "--output") + 1]
@@ -549,6 +555,11 @@ test_that("quarto_bin overrides the command and QUARTO_PATH is honoured as a fal
 # processx::run() is exercised (nothing mocked for the render step) so the
 # timeout and cleanup_tree behaviour are verified for real, not assumed.
 test_that("a hung quarto is killed on timeout with a classed error and leaves no children behind", {
+  # Not run on Windows: the stub quarto and the leak probe are POSIX (`sh`,
+  # `sleep`, `pgrep`), and processx's cleanup_tree uses a different mechanism
+  # there (job objects) that this test could not exercise anyway. A Windows
+  # variant would need its own stub and probe, and can only be validated on a
+  # Windows runner.
   skip_on_os("windows")
   skip_if_not_installed("ps")
   fixture <- .render_report_fixture()
@@ -628,16 +639,16 @@ test_that("the leak probe used for the timeout test can see a live child", {
 # lets a test shape what pass 2 leaves behind (write the draft docx, append
 # to a reportifyr log, ...) and `unfilled` stands in for the docx scan.
 .run_render <- function(fixture, status = "draft", build = function(doc_dirs) NULL,
-                        unfilled = character(0), ...) {
-  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL), .env = parent.frame())
+                        unfilled = character(0), .mock_env = parent.frame(), ...) {
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL), .env = .mock_env)
   local_mocked_bindings(
     styling_build_abbreviations_tex = function(...) invisible(NULL),
     styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) invisible(docx),
     .scan_unfilled_placeholders = function(docx) unfilled,
-    .env = parent.frame()
+    .env = .mock_env
   )
   record <- new.env()
-  local_mocked_bindings(run = .mock_quarto_run(record), .package = "processx", .env = parent.frame())
+  local_mocked_bindings(run = .mock_quarto_run(record), .package = "processx", .env = .mock_env)
   local_mocked_bindings(
     make_doc_dirs = .mock_make_doc_dirs,
     build_report = function(docx_in, docx_out, ...) {
@@ -652,7 +663,7 @@ test_that("the leak probe used for the timeout test can see a live child", {
       invisible(NULL)
     },
     .package = "reportifyr",
-    .env = parent.frame()
+    .env = .mock_env
   )
   render_report(
     fixture$shell_qmd,
@@ -824,4 +835,385 @@ test_that("rejects an invalid quarto_bin before doing any work", {
   expect_error(render_report(fixture$shell_qmd, quarto_bin = ""), "quarto_bin")
   expect_error(render_report(fixture$shell_qmd, quarto_bin = c("a", "b")), "quarto_bin")
   expect_error(render_report(fixture$shell_qmd, quarto_bin = 1), "quarto_bin")
+})
+
+# --- A failed render leaves no stale outputs ---------------------------------
+
+# A first, successful render of `fixture` (shell, draft and final on disk).
+.first_render <- function(fixture, env = parent.frame()) {
+  result <- .run_render(fixture, status = "final", .mock_env = env)
+  expect_true(all(file.exists(c(result$shell, result$draft, result$final))))
+  result
+}
+
+# After a failed second render: nothing from the first one is left in the
+# live folders, and its files are kept under report/.previous/.
+.expect_outputs_moved_aside <- function(fixture, first, shell_rendered = FALSE) {
+  expect_identical(file.exists(first$shell), shell_rendered)
+  expect_false(file.exists(first$draft))
+  expect_false(file.exists(first$final))
+  previous <- file.path(fixture$project_dir, "report", ".previous")
+  expect_identical(readLines(file.path(previous, "draft", basename(first$draft))), "draft")
+  expect_identical(readLines(file.path(previous, "final", basename(first$final))), "final")
+  expect_true(file.exists(file.path(previous, "shell", basename(first$shell))))
+}
+
+.render_again <- function(fixture, ...) {
+  render_report(
+    fixture$shell_qmd,
+    status = "final",
+    reference_doc = fixture$reference_doc,
+    standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+    config_yaml = fixture$config_yaml,
+    ...
+  )
+}
+
+test_that("a Quarto timeout on a second render leaves no draft or final from the first", {
+  fixture <- .render_report_fixture()
+  first <- .first_render(fixture)
+  local_mocked_bindings(
+    run = function(...) list(status = NA_integer_, timeout = TRUE, stdout = "", stderr = "slow"),
+    .package = "processx"
+  )
+
+  expect_error(suppressWarnings(.render_again(fixture, quarto_timeout = 5)), class = "quartifyr_quarto_timeout")
+  .expect_outputs_moved_aside(fixture, first)
+})
+
+test_that("a failing Quarto render on a second render leaves no draft or final from the first", {
+  fixture <- .render_report_fixture()
+  first <- .first_render(fixture)
+  local_mocked_bindings(
+    run = function(...) list(status = 1L, timeout = FALSE, stdout = "", stderr = "boom"),
+    .package = "processx"
+  )
+
+  expect_error(suppressWarnings(.render_again(fixture)), "quarto render failed")
+  .expect_outputs_moved_aside(fixture, first)
+})
+
+test_that("a pass-2 failure on a second render leaves no draft or final from the first", {
+  fixture <- .render_report_fixture()
+  first <- .first_render(fixture)
+  local_mocked_bindings(build_report = function(...) stop("python exploded"), .package = "reportifyr")
+
+  expect_error(.render_again(fixture), "python exploded")
+  # Pass 1 had already written this render's own shell by then.
+  .expect_outputs_moved_aside(fixture, first, shell_rendered = TRUE)
+})
+
+test_that("a second successful render replaces the outputs and refreshes .previous/", {
+  fixture <- .render_report_fixture()
+  first <- .first_render(fixture)
+  second <- .run_render(fixture, status = "final", build = function(doc_dirs) NULL)
+
+  expect_identical(second$status, "ok")
+  expect_true(all(file.exists(c(second$shell, second$draft, second$final))))
+  expect_true(file.exists(file.path(fixture$project_dir, "report", ".previous", "final", basename(first$final))))
+})
+
+test_that("project check failures touch no existing output", {
+  fixture <- .render_report_fixture()
+  first <- .first_render(fixture)
+
+  expect_error(
+    render_report(fixture$shell_qmd, reference_doc = file.path(fixture$project_dir, "missing.docx")),
+    "reference-doc not found"
+  )
+  expect_true(all(file.exists(c(first$shell, first$draft, first$final))))
+  expect_false(dir.exists(file.path(fixture$project_dir, "report", ".previous")))
+})
+
+test_that("an output older than the render's start is reported as not produced, and not listed", {
+  fixture <- .render_report_fixture()
+  result <- .run_render(fixture, build = function(doc_dirs) {
+    Sys.setFileTime(doc_dirs$doc_draft, Sys.time() - 3600)
+  })
+
+  expect_identical(result$status, "error")
+  expect_match(result$errors, "Expected output was not produced")
+  expect_identical(result$artifacts$role, "shell")
+  expect_identical(basename(result$draft), "report-draft.docx")
+})
+
+test_that("a previous output that can't be moved aside stops the render", {
+  skip_on_os("windows")
+  fixture <- .render_report_fixture()
+  first <- .first_render(fixture)
+  blocker <- file.path(fixture$project_dir, "report", ".previous", "draft", basename(first$draft))
+  dir.create(blocker, recursive = TRUE)
+  file.create(file.path(blocker, "keep"))
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
+
+  expect_error(
+    suppressWarnings(.render_again(fixture)),
+    "Could not move the previous output"
+  )
+  expect_true(file.exists(first$draft))
+})
+
+test_that(".move_previous_outputs() moves only what exists and reports where it went", {
+  project <- withr::local_tempdir()
+  expect_identical(.move_previous_outputs(project, "report"), character(0))
+  expect_false(dir.exists(file.path(project, "report", ".previous")))
+
+  paths <- .render_output_paths(project, "report")
+  for (p in c(paths$shell, paths$draft[c(1, 4)])) {
+    dir.create(dirname(p), recursive = TRUE, showWarnings = FALSE)
+    writeLines(basename(p), p)
+  }
+  moved <- .move_previous_outputs(project, "report")
+
+  expect_setequal(basename(moved), c("report.docx", "report-clean.docx", "report-draft.docx"))
+  expect_true(all(file.exists(moved)))
+  expect_false(any(file.exists(c(paths$shell, paths$draft))))
+  expect_true(all(grepl("[/\\\\]report[/\\\\]\\.previous[/\\\\](shell|draft)[/\\\\]", moved)))
+})
+
+test_that(".move_previous_outputs() replaces an older .previous copy", {
+  project <- withr::local_tempdir()
+  paths <- .render_output_paths(project, "report")
+  dir.create(dirname(paths$final), recursive = TRUE)
+  writeLines("old", paths$final)
+  .move_previous_outputs(project, "report")
+  writeLines("new", paths$final)
+  .move_previous_outputs(project, "report")
+
+  kept <- file.path(project, "report", ".previous", "final", "report-final.docx")
+  expect_identical(readLines(kept), "new")
+})
+
+test_that(".render_output_paths() agrees with reportifyr::make_doc_dirs()", {
+  skip_if_not_installed("reportifyr")
+  project <- withr::local_tempdir()
+  paths <- .render_output_paths(project, "report")
+  dir.create(dirname(paths$shell), recursive = TRUE)
+  file.create(paths$shell)
+  theirs <- withr::with_dir(project, reportifyr::make_doc_dirs(paths$shell))
+
+  expect_setequal(
+    normalizePath(c(paths$shell, paths$draft, paths$final), mustWork = FALSE),
+    normalizePath(unlist(theirs, use.names = FALSE), mustWork = FALSE)
+  )
+})
+
+test_that(".produced_since() needs the file to exist and be recent", {
+  path <- withr::local_tempfile()
+  now <- Sys.time()
+  expect_false(.produced_since(path, now))
+  file.create(path)
+  expect_true(.produced_since(path, now))
+  Sys.setFileTime(path, now - 3600)
+  expect_false(.produced_since(path, now))
+})
+
+# --- Provenance and path resolution ------------------------------------------
+
+test_that("the result records inputs, tool versions and timestamps", {
+  fixture <- .render_report_fixture()
+  writeLines(c("# shell", "", "{rpfy}:fig.png", "", "text"), fixture$shell_qmd)
+  figs <- file.path(fixture$project_dir, "OUTPUTS", "figures")
+  dir.create(figs, recursive = TRUE)
+  writeLines("png", file.path(figs, "fig.png"))
+  writeLines("{}", file.path(figs, "fig_png_metadata.json"))
+
+  result <- .run_render(fixture)
+
+  expect_setequal(
+    result$inputs$role,
+    c("shell_qmd", "standard_footnotes", "config", "reference_doc", "figure", "sidecar")
+  )
+  expect_identical(
+    result$inputs$sha256[result$inputs$role == "figure"],
+    .sha256_file(file.path(figs, "fig.png"))
+  )
+  expect_identical(result$versions$quarto, "1.9.9")
+  expect_identical(result$versions$quartifyr, as.character(utils::packageVersion("quartifyr")))
+  expect_match(result$started_at, "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$")
+  expect_gte(result$finished_at, result$started_at)
+})
+
+test_that("a reference-doc configured in Quarto is recorded among the inputs", {
+  fixture <- .render_report_fixture()
+  file.copy(fixture$reference_doc, file.path(fixture$project_dir, "configured.docx"))
+  local_mocked_bindings(
+    quarto_inspect = function(...) list(formats = list(docx = list(pandoc = list(`reference-doc` = "configured.docx")))),
+    .package = "quarto"
+  )
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
+  local_mocked_bindings(
+    styling_build_abbreviations_tex = function(...) invisible(NULL),
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) invisible(docx)
+  )
+  local_mocked_bindings(run = .mock_quarto_run(new.env()), .package = "processx")
+  local_mocked_bindings(
+    make_doc_dirs = .mock_make_doc_dirs,
+    build_report = function(docx_in, docx_out, ...) {
+      dir.create(dirname(docx_out), recursive = TRUE, showWarnings = FALSE)
+      writeLines("draft", docx_out)
+    },
+    .package = "reportifyr"
+  )
+
+  result <- render_report(
+    fixture$shell_qmd,
+    standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+    config_yaml = fixture$config_yaml
+  )
+
+  ref <- result$inputs$path[result$inputs$role == "reference_doc"]
+  expect_identical(basename(ref), "configured.docx")
+})
+
+# A relative path from `from` to `path`, without needing an extra package.
+fs_relative <- function(path, from) {
+  path <- strsplit(normalizePath(path, winslash = "/"), "/", fixed = TRUE)[[1]]
+  from <- strsplit(normalizePath(from, winslash = "/"), "/", fixed = TRUE)[[1]]
+  common <- 0L
+  while (common < min(length(path), length(from)) && path[common + 1L] == from[common + 1L]) {
+    common <- common + 1L
+  }
+  paste(c(rep("..", length(from) - common), path[seq_len(length(path) - common) + common]), collapse = "/")
+}
+
+test_that("a relative shell path with a working directory outside the project resolves inside the project", {
+  fixture <- .render_report_fixture()
+  outside <- withr::local_tempdir()
+  relative_shell <- fs_relative(fixture$shell_qmd, outside)
+  expect_false(file.exists(file.path(outside, "report.qmd")))
+
+  seen <- new.env()
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
+  local_mocked_bindings(
+    styling_build_abbreviations_tex = function(yaml, out) {
+      assign("footnotes_for_abbrevs", yaml, envir = seen)
+      invisible(NULL)
+    },
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) invisible(docx)
+  )
+  local_mocked_bindings(run = .mock_quarto_run(new.env()), .package = "processx")
+  local_mocked_bindings(
+    make_doc_dirs = .mock_make_doc_dirs,
+    build_report = function(docx_in, docx_out, figures_path, tables_path, standard_footnotes_yaml, config_yaml) {
+      assign("paths", list(figures_path, tables_path, standard_footnotes_yaml, config_yaml), envir = seen)
+      dir.create(dirname(docx_out), recursive = TRUE, showWarnings = FALSE)
+      writeLines("draft", docx_out)
+    },
+    .package = "reportifyr"
+  )
+
+  withr::with_dir(outside, render_report(relative_shell, reference_doc = fixture$reference_doc))
+
+  project <- normalizePath(fixture$project_dir)
+  expect_true(all(startsWith(normalizePath(unlist(seen$paths), mustWork = FALSE), project)))
+  expect_identical(
+    normalizePath(seen$footnotes_for_abbrevs),
+    normalizePath(fixture$standard_footnotes_yaml)
+  )
+})
+
+# --- Offline-safe render -------------------------------------------------------
+
+# Runs a mocked render and reports what the environment looked like at each
+# external boundary (the places a real uv call would inherit it from).
+.render_and_snapshot_env <- function(fixture, ...) {
+  snapshot <- function() {
+    c(
+      Sys.getenv(c("UV_OFFLINE", "UV_NO_INDEX", "UV_PYTHON_DOWNLOADS", "UV_NO_SYNC"), unset = "<unset>"),
+      option = as.character(getOption("quartifyr.offline", "<unset>"))
+    )
+  }
+  seen <- new.env()
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
+  local_mocked_bindings(
+    styling_build_abbreviations_tex = function(...) invisible(NULL),
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) {
+      assign("layout", snapshot(), envir = seen)
+      invisible(docx)
+    }
+  )
+  local_mocked_bindings(run = .mock_quarto_run(new.env()), .package = "processx")
+  local_mocked_bindings(
+    make_doc_dirs = .mock_make_doc_dirs,
+    build_report = function(docx_in, docx_out, ...) {
+      assign("pass2", snapshot(), envir = seen)
+      dir.create(dirname(docx_out), recursive = TRUE, showWarnings = FALSE)
+      writeLines("draft", docx_out)
+    },
+    .package = "reportifyr"
+  )
+  render_report(
+    fixture$shell_qmd,
+    reference_doc = fixture$reference_doc,
+    standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+    config_yaml = fixture$config_yaml,
+    ...
+  )
+  as.list(seen)
+}
+
+.offline_env <- c(
+  UV_OFFLINE = "1", UV_NO_INDEX = "1", UV_PYTHON_DOWNLOADS = "never", UV_NO_SYNC = "1", option = "TRUE"
+)
+
+test_that("offline = TRUE sets the uv variables for the whole render, reportifyr included, then restores them", {
+  fixture <- .render_report_fixture()
+  withr::local_envvar(UV_OFFLINE = NA, UV_NO_INDEX = NA, UV_PYTHON_DOWNLOADS = NA, UV_NO_SYNC = NA)
+  withr::local_options(quartifyr.offline = NULL)
+
+  seen <- .render_and_snapshot_env(fixture, offline = TRUE)
+
+  expect_identical(seen$layout, .offline_env)
+  expect_identical(seen$pass2, .offline_env)
+  expect_identical(Sys.getenv("UV_NO_SYNC", "<unset>"), "<unset>")
+  expect_null(getOption("quartifyr.offline"))
+})
+
+test_that("offline = NULL follows quartifyr.offline and UV_OFFLINE; offline = FALSE sets nothing", {
+  fixture <- .render_report_fixture()
+  withr::local_envvar(UV_OFFLINE = NA, UV_NO_INDEX = NA, UV_PYTHON_DOWNLOADS = NA, UV_NO_SYNC = NA)
+  withr::local_options(quartifyr.offline = NULL)
+
+  expect_identical(.render_and_snapshot_env(fixture)$pass2[["UV_NO_SYNC"]], "<unset>")
+
+  withr::with_options(list(quartifyr.offline = TRUE), {
+    expect_identical(.render_and_snapshot_env(fixture)$pass2, .offline_env)
+  })
+  withr::with_envvar(c(UV_OFFLINE = "1"), {
+    expect_identical(.render_and_snapshot_env(fixture)$pass2[["UV_NO_SYNC"]], "1")
+    expect_identical(.render_and_snapshot_env(fixture, offline = FALSE)$pass2[["UV_NO_SYNC"]], "<unset>")
+  })
+})
+
+test_that("rejects an invalid offline argument before doing any work", {
+  fixture <- .render_report_fixture()
+  expect_error(render_report(fixture$shell_qmd, offline = "yes"), "offline must be")
+  expect_error(render_report(fixture$shell_qmd, offline = NA), "offline must be")
+  expect_error(render_report(fixture$shell_qmd, offline = c(TRUE, FALSE)), "offline must be")
+})
+
+test_that("offline, a pass-2 uv failure is a quartifyr_offline_failure naming pass 2", {
+  fixture <- .render_report_fixture()
+  err <- suppressMessages(tryCatch(
+    .run_render(
+      fixture, offline = TRUE,
+      build = function(doc_dirs) stop("error: Failed to fetch: https://pypi.org/simple/lxml/")
+    ),
+    error = function(e) e
+  ))
+
+  expect_s3_class(err, "quartifyr_offline_failure")
+  expect_match(conditionMessage(err), "fill the shell with reportifyr \\(pass 2\\)")
+})
+
+test_that("offline, an ordinary pass-2 failure is not relabelled", {
+  fixture <- .render_report_fixture()
+  err <- tryCatch(
+    .run_render(fixture, offline = TRUE, build = function(doc_dirs) stop("python exploded")),
+    error = function(e) e
+  )
+
+  expect_false(inherits(err, "quartifyr_offline_failure"))
+  expect_match(conditionMessage(err), "python exploded")
 })

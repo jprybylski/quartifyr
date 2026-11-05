@@ -35,6 +35,12 @@ jobs:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == true }}
+      # How long after publication an existing release may still be refreshed
+      # (tag moved, tarball replaced). A version number must name exactly one
+      # source tree and one tarball, because downstream installers pin a
+      # version plus a SHA-256; the window only leaves room for a small fix
+      # right after a release. Past it, bump VERSION instead.
+      REFRESH_WINDOW_HOURS: "24"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -92,8 +98,34 @@ jobs:
         id: sync
         run: Rscript .github/scripts/sync-release-metadata.R
 
+      # An ordinary merge to main that doesn't bump VERSION lands here with
+      # VERSION still equal to the latest tag. Inside the window that is a
+      # small follow-up fix and is refreshed; after it, the release is left
+      # alone (nothing is committed, tagged or uploaded) and a warning says so.
+      - name: Leave an old release alone
+        id: window
+        run: |
+          tag="${{ steps.sync.outputs.tag }}"
+          if [ "${{ steps.sync.outputs.action }}" = "new" ]; then
+            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              echo "::error::Tag $tag already exists, refusing to create a second release for it."
+              exit 1
+            fi
+            echo "blocked=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          published="$(gh release view "$tag" --json publishedAt -q .publishedAt)"
+          age_hours=$(( ( $(date -u +%s) - $(date -u -d "$published" +%s) ) / 3600 ))
+          echo "Release $tag was published $published (${age_hours}h ago); refresh window is ${REFRESH_WINDOW_HOURS}h."
+          if [ "$age_hours" -ge "$REFRESH_WINDOW_HOURS" ]; then
+            echo "::warning::VERSION still names the released $tag, outside the ${REFRESH_WINDOW_HOURS}h refresh window, so no release was changed. Refreshing would move the tag and replace the tarball, making one version name two packages. Bump VERSION to publish this change."
+            echo "blocked=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "blocked=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Commit release metadata changes
-        if: steps.sync.outputs.changed == 'true' && env.DRY_RUN != 'true'
+        if: steps.sync.outputs.changed == 'true' && env.DRY_RUN != 'true' && steps.window.outputs.blocked != 'true'
         run: |
           git commit -am "chore: sync release metadata for ${{ steps.sync.outputs.version }}"
           git push origin HEAD:main
@@ -102,6 +134,11 @@ jobs:
         id: check
         if: env.DRY_RUN != 'true'
         run: |
+          if [ "${{ steps.window.outputs.blocked }}" = "true" ]; then
+            echo "Release left alone (see the previous step)."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           already_tagged="$(git rev-parse -q --verify "refs/tags/${{ steps.sync.outputs.tag }}" || true)"
           if [ "${{ steps.sync.outputs.changed }}" = "false" ] && [ "$already_tagged" = "$(git rev-parse HEAD)" ]; then
             echo "This commit's metadata already matches VERSION and the tag already points here - nothing to do."
@@ -114,11 +151,17 @@ jobs:
         if: env.DRY_RUN != 'true' && steps.check.outputs.skip != 'true'
         run: R CMD build . --compact-vignettes=gs+qpdf
 
+      # Lets a consumer that pins version + hash verify the asset, and see at
+      # a glance if it ever changes.
+      - name: Write SHA256SUMS
+        if: env.DRY_RUN != 'true' && steps.check.outputs.skip != 'true'
+        run: sha256sum "${{ steps.sync.outputs.tarball }}" | tee SHA256SUMS
+
       - name: Create release
         if: env.DRY_RUN != 'true' && steps.check.outputs.skip != 'true' && steps.sync.outputs.action == 'new'
         run: |
           gh release create "${{ steps.sync.outputs.tag }}" \
-            "${{ steps.sync.outputs.tarball }}" \
+            "${{ steps.sync.outputs.tarball }}" SHA256SUMS \
             --target "$(git rev-parse HEAD)" \
             --title "${{ steps.sync.outputs.tag }}" \
             --notes-file changelog.md
@@ -129,4 +172,4 @@ jobs:
           git tag -f "${{ steps.sync.outputs.tag }}" "$(git rev-parse HEAD)"
           git push origin "${{ steps.sync.outputs.tag }}" --force
           gh release edit "${{ steps.sync.outputs.tag }}" --notes-file changelog.md
-          gh release upload "${{ steps.sync.outputs.tag }}" "${{ steps.sync.outputs.tarball }}" --clobber
+          gh release upload "${{ steps.sync.outputs.tag }}" "${{ steps.sync.outputs.tarball }}" SHA256SUMS --clobber
