@@ -1,6 +1,6 @@
 # quartifyr
 
-# quartifyr (development version)
+# quartifyr 0.3.2
 
 ## New features
 
