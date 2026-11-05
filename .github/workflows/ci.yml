@@ -233,13 +233,19 @@ jobs:
     # See styling-tests' identical condition above.
     if: github.event_name != 'pull_request' || (!startsWith(github.head_ref, 'dependabot/') && github.head_ref != 'combined-prs-branch')
     runs-on: ubuntu-latest
-    env:
-      # Explicit locations, so the offline phase, which runs with a
-      # different HOME, finds what the online phase provisioned.
-      UV_CACHE_DIR: ${{ runner.temp }}/uv-cache
-      UV_PYTHON_INSTALL_DIR: ${{ runner.temp }}/uv-python
-      RENV_PATHS_CACHE: ${{ runner.temp }}/renv-cache
     steps:
+      # Explicit locations, so the offline phase, which runs with a
+      # different HOME, finds what the online phase provisioned. Set from a
+      # step rather than a job-level `env:` because the `runner` context
+      # isn't available there (the whole workflow is rejected if it's used).
+      - name: Pin tool cache locations
+        run: |
+          {
+            echo "UV_CACHE_DIR=$RUNNER_TEMP/uv-cache"
+            echo "UV_PYTHON_INSTALL_DIR=$RUNNER_TEMP/uv-python"
+            echo "RENV_PATHS_CACHE=$RUNNER_TEMP/renv-cache"
+          } >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v7
