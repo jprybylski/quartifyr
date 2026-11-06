@@ -37,7 +37,7 @@ uses.
 EXPERIMENTAL, sharing ``recalculate_fields.py``'s headless-LibreOffice
 launcher (``_soffice.py``): the same profile warm-up that fixed the macOS
 hang, the same heartbeat check that reports a macro that never starts as
-unavailable after 30 seconds, and the same tree kill on timeout. This module
+unavailable after half the timeout (at least 30 seconds), and the same tree kill on timeout. This module
 drives the identical ``soffice --headless ... macro:///...`` mechanism with a
 different macro. Verified on macOS (a real document, repeated and concurrent
 runs); Windows and Linux were not re-tested.
@@ -46,6 +46,7 @@ runs); Windows and Linux were not re-tested.
 from __future__ import annotations
 
 import tempfile
+import time
 from pathlib import Path
 from xml.sax.saxutils import escape as _xml_escape
 
@@ -62,6 +63,7 @@ from ._soffice import (
     rmtree_retrying,
     run_macro,
     started_marker_basic,
+    warm_up_budget,
     warm_up_profile,
 )
 
@@ -230,7 +232,13 @@ def resolve_same_page_crossrefs(
         started_path = tmp_dir / "macro-started"
         # See recalculate_fields.py: the profile is initialised before the
         # macro goes in, because a pre-seeded fresh profile hangs on macOS.
-        warm_up_profile(soffice, profile_dir, stderr_path=tmp_dir / "soffice-warmup.log")
+        warmed_at = time.monotonic()
+        warm_up_profile(
+            soffice, profile_dir, stderr_path=tmp_dir / "soffice-warmup.log",
+            timeout_seconds=warm_up_budget(timeout_seconds),
+        )
+        # The warm-up counts against the caller's timeout, not on top of it.
+        remaining = max(1.0, timeout_seconds - (time.monotonic() - warmed_at))
         _seed_profile(profile_dir, pairs_path=pairs_path, results_path=results_path, started_path=started_path)
 
         try:
@@ -240,7 +248,7 @@ def resolve_same_page_crossrefs(
                 "macro:///Standard.Module1.ReadPages",
                 profile_dir=profile_dir,
                 stderr_path=tmp_dir / "soffice-stderr.log",
-                timeout_seconds=timeout_seconds,
+                timeout_seconds=remaining,
                 started_path=started_path,
             )
         except SofficeUnavailableError as exc:

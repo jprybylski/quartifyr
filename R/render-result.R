@@ -163,9 +163,26 @@
     final = file.path(
       project_dir, "report", "final",
       paste0(stem, c("-final.docx", "-final_docx_metadata.json"))
+    ),
+    # build_report() moves everything but the draft itself out of
+    # report/draft into this folder when it finishes, so a successful render's
+    # -clean/-tabs/-tabsfigs files (a near-complete document) live here, not at
+    # the top of report/draft. They are moved aside too.
+    intermediate = file.path(
+      project_dir, "report", "draft", "intermediate_files",
+      paste0(stem, c("-clean", "-tabs", "-tabsfigs", "-draft"), ".docx")
     )
   )
 }
+
+# Where `.previous` keeps an output of role `role`, relative to `report/.previous`.
+.previous_subdir <- function(role) {
+  if (identical(role, "intermediate")) file.path("draft", "intermediate_files") else role
+}
+
+# file.rename() behind a name tests can replace to make one move fail (base
+# functions can't be mocked).
+.rename_file <- function(from, to) file.rename(from, to)
 
 # A render that fails, times out or is killed must not leave an earlier
 # render's docx where a caller (or a person opening the folder) would take it
@@ -178,10 +195,6 @@
 # `.previous`. The moves are all-or-nothing: if one fails, the ones already
 # made are undone (a replaced `.previous` copy is restored too) before the
 # error is raised. Returns the new paths of what was moved.
-# file.rename() behind a name tests can replace to make one move fail (base
-# functions can't be mocked).
-.rename_file <- function(from, to) file.rename(from, to)
-
 .move_previous_outputs <- function(project_dir, stem) {
   outputs <- .render_output_paths(project_dir, stem)
   plan <- list()
@@ -189,7 +202,7 @@
     for (path in outputs[[role]][file.exists(outputs[[role]])]) {
       plan[[length(plan) + 1L]] <- list(
         from = path,
-        to = file.path(project_dir, "report", ".previous", role, basename(path))
+        to = file.path(project_dir, "report", ".previous", .previous_subdir(role), basename(path))
       )
     }
   }
@@ -310,12 +323,14 @@
   manifests <- list.files(
     extensions_dir, pattern = "^_extension\\.ya?ml$", recursive = TRUE, full.names = TRUE
   )
-  dirs <- sort(unique(dirname(manifests)))
+  # method = "radix" sorts in the C locale: the hash below must not depend on
+  # the machine's collation (en_US and C order the same names differently).
+  dirs <- sort(unique(dirname(manifests)), method = "radix")
   if (length(dirs) == 0) {
     return(empty)
   }
   rows <- lapply(dirs, function(dir) {
-    files <- sort(list.files(dir, recursive = TRUE, full.names = FALSE, all.files = TRUE))
+    files <- sort(list.files(dir, recursive = TRUE, full.names = FALSE, all.files = TRUE), method = "radix")
     full <- file.path(dir, files)
     lines <- paste(files, vapply(full, .sha256_file, character(1), USE.NAMES = FALSE), sep = "  ")
     data.frame(

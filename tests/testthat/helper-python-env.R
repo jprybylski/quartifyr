@@ -2,6 +2,7 @@
 .make_venv <- function(dir, name = ".venv") {
   venv <- file.path(dir, name)
   dir.create(file.path(venv, "bin"), recursive = TRUE)
+  file.create(file.path(venv, "bin", "python"))
   writeLines("home = /usr/bin", file.path(venv, "pyvenv.cfg"))
   venv
 }

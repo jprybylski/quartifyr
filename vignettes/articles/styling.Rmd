@@ -301,7 +301,7 @@ profile that already contains the seeded macro never runs it. The profile
 is now initialised first and the macro added afterwards, which took 100 of
 100 sequential and four-way concurrent runs on macOS 26.6 to success in
 under three seconds each. A macro that still never starts is abandoned
-after 30 seconds and reported as unavailable instead of waiting out the
+after half the timeout (at least 30 seconds, or `QUARTIFYR_SOFFICE_START_TIMEOUT`) and reported as unavailable instead of waiting out the
 timeout. Windows and Linux were not re-tested. Off by default (`render_report(..., recalculate_fields = FALSE)`).
 When it does fail, it only produces a warning, not a render failure;
 the document is still fully usable, just needs a manual "select all,

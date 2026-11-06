@@ -17,14 +17,15 @@
   invisible(NULL)
 }
 
-# The full path `command` resolves to, or "" when it names nothing runnable:
-# a bare command is looked up on PATH, anything with a directory part must be
-# an existing, executable file.
+# The absolute path `command` resolves to, or "" when it names nothing
+# runnable: a bare command is looked up on PATH, anything with a directory part
+# must be an existing, executable file (relative to the caller's directory, so
+# the answer doesn't change when the render moves into the project).
 .resolve_soffice <- function(command) {
   if (!grepl("[/\\\\]", command)) {
     return(unname(Sys.which(command)[[1]]))
   }
-  path <- path.expand(command)
+  path <- .absolute_path(command)
   if (file.exists(path) && !dir.exists(path) && file.access(path, mode = 1) == 0) path else ""
 }
 

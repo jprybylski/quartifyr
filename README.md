@@ -442,7 +442,7 @@ incomplete rather than papered over:
   had a found cause, now worked around: a fresh profile that already
   holds the seeded macro never runs it, so the profile is now initialised
   first and the macro added afterwards. A macro that still never starts
-  is reported as `unavailable` after 30 seconds, not the full timeout.
+  is reported as `unavailable` after half the timeout (at least 30 seconds), not the full timeout.
   Verified on macOS only; Windows and Linux behaviour is unconfirmed.
   Off by default
   (`render_report(..., recalculate_fields = FALSE)`); without it,

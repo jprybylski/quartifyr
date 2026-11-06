@@ -123,6 +123,8 @@ test_that(".python_env_wiring() uses the .venv's parent directly and exports the
   expect_identical(normalizePath(wiring$options$venv_dir), normalizePath(project))
   expect_identical(wiring$env[["UV_PROJECT_ENVIRONMENT"]], venv)
   expect_identical(wiring$env[["UV_NO_SYNC"]], "1")
+  # The environment's own interpreter, so a .python-version can't switch it.
+  expect_identical(wiring$env[["UV_PYTHON"]], file.path(venv, "bin", "python"))
   # pyro's VIRTUAL_ENV for this is <venv_dir>/.venv, i.e. the environment itself.
   expect_identical(normalizePath(file.path(wiring$options$venv_dir, ".venv")), normalizePath(venv))
 })
@@ -171,7 +173,7 @@ test_that(".use_python_env_for_pass2() applies for the caller's frame, then rest
   })()
 
   expect_identical(normalizePath(inside$venv_dir), normalizePath(project))
-  expect_identical(unname(inside$env), c(venv, "1"))
+  expect_identical(unname(inside$env[1:2]), c(venv, "1"))
   expect_null(getOption("venv_dir"))
   expect_identical(Sys.getenv("UV_NO_SYNC", "<unset>"), "<unset>")
 })
@@ -207,4 +209,55 @@ test_that(".python_env_wiring() explains when a .venv name can't be made with a 
     (function() .python_env_wiring(venv))(),
     class = "quartifyr_python_env_invalid"
   )
+})
+
+test_that("a python_env's interpreter is pinned for uv, so a .python-version can't pick another", {
+  .mock_python_env()
+  project <- withr::local_tempdir()
+  venv <- .make_venv(project)
+  withr::local_options(venv_dir = NULL, quartifyr.python_env = venv)
+  withr::local_envvar(UV_PYTHON = NA)
+  seen <- (function() {
+    .use_python_env_for_pass2()
+    Sys.getenv("UV_PYTHON", "<unset>")
+  })()
+  expect_identical(seen, file.path(venv, "bin", "python"))
+  expect_identical(Sys.getenv("UV_PYTHON", "<unset>"), "<unset>")
+})
+
+test_that(".junction_command() builds an mklink /J call with backslash paths", {
+  cmd <- .junction_command("/envs/report-env", "/tmp/x/.venv")
+  expect_identical(cmd$args[1:3], c("/c", "mklink", "/J"))
+  expect_length(cmd$args, 5)
+  expect_match(cmd$args[[4]], "\\.venv$")
+  expect_match(cmd$args[[5]], "report-env$")
+  # (normalizePath(winslash = "\\") only changes the slashes on Windows itself.)
+})
+
+test_that(".unlink_venv_link() removes the link and never what it points at", {
+  skip_on_os("windows")
+  base <- withr::local_tempdir()
+  venv <- .make_venv(base, "report-env")
+  link <- file.path(withr::local_tempdir(), ".venv")
+  expect_true(.link_venv(venv, link))
+  expect_true(dir.exists(link))
+
+  .unlink_venv_link(link)
+
+  expect_false(file.exists(link))
+  expect_true(file.exists(file.path(venv, "pyvenv.cfg"))) # the environment is untouched
+})
+
+test_that("the temporary link made for a differently named venv is removed without touching the venv", {
+  skip_on_os("windows")
+  base <- withr::local_tempdir()
+  venv <- .make_venv(base, "report-env")
+  dir_made <- NULL
+  (function() {
+    wiring <- .python_env_wiring(venv)
+    dir_made <<- wiring$options$venv_dir
+    expect_true(dir.exists(file.path(dir_made, ".venv")))
+  })()
+  expect_false(dir.exists(dir_made))
+  expect_true(file.exists(file.path(venv, "pyvenv.cfg")))
 })

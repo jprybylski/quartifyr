@@ -167,7 +167,8 @@
 #'
 #' Once the project checks pass and a render starts, the outputs it is about
 #' to regenerate (`report/shell/<name>.docx`, `report/draft/<name>-*.docx`,
-#' `report/final/<name>-final.docx` and its `_docx_metadata.json`) are moved
+#' `report/final/<name>-final.docx` and its `_docx_metadata.json`, and what
+#' reportifyr leaves in `report/draft/intermediate_files/`) are moved
 #' to `report/.previous/` first, replacing the copy already there, all or
 #' nothing. After a render that fails, times out, is rejected by `strict` or
 #' is interrupted:
@@ -351,6 +352,11 @@ render_report <- function(
   uses_libreoffice <- isTRUE(recalculate_fields) || isTRUE(resolve_same_page_crossrefs)
   if (uses_libreoffice) {
     .stop_on_finding(.check_soffice(soffice_command))
+    # Hand the steps the absolute path that was checked: they run from the
+    # project directory (a relative path would mean something else there) and
+    # a PATH lookup could find a different LibreOffice than the one recorded
+    # in the result.
+    soffice_command <- .resolve_soffice(soffice_command)
   }
 
   # Fail fast with an actionable message (which Quarto extension is

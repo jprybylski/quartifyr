@@ -9,11 +9,13 @@
   (`options(quartifyr.python_env)` or `QUARTIFYR_PYTHON_ENV`),
   `render_report()` also points reportifyr's pass 2 at it: pyro gets
   `options(venv_dir)` for the render, and uv gets `UV_PROJECT_ENVIRONMENT` and
-  `UV_NO_SYNC`, so it runs reportifyr's module in that environment and creates
-  no `.venv` and rewrites no `uv.lock`, even in a project that ships both.
-  Previously `python_env` covered only quartifyr's own Python calls and pass 2
-  still needed the project's `.venv`. The environment also needs `pillow`
-  (checked up front). New `initialize_report_project_offline()` creates the
+  `UV_NO_SYNC` and `UV_PYTHON` (its own interpreter: without a
+  `pyproject.toml` uv is outside a project, and a `.python-version` file would
+  otherwise make it run a different interpreter), so it runs reportifyr's module
+  in that environment and creates no `.venv` and rewrites no `uv.lock`, even in
+  a project that ships both. An environment not named `.venv` is exposed through
+  a temporary junction on Windows (no privilege needed) or symlink elsewhere.
+  New `initialize_report_project_offline()` creates the
   report folders, `config.yaml`, `standard_footnotes.yaml` and the
   `.report_init.json` marker that `reportifyr::initialize_report_project()`
   makes, without calling pyro or uv (that function installs uv and runs
@@ -32,8 +34,45 @@
   `versions$libreoffice` records the resolved path and `soffice --version`
   of the one that ran (#83).
 
+## Breaking changes
+
+* A configured `python_env` (`options(quartifyr.python_env)` or
+  `QUARTIFYR_PYTHON_ENV`) now also drives reportifyr's pass 2 in
+  `render_report()` (#85). Before, it applied only to quartifyr's own Python
+  calls, and pass 2 ran in the project's `.venv` through pyro. Anyone who set a
+  `python_env` for the styling steps and relied on a separate `.venv` for pass 2
+  now has pass 2 run in the `python_env` instead, and that environment must have
+  `pillow` as well as `python-docx` and `pyyaml`; `render_report()` fails before
+  rendering, naming what is missing, if it doesn't.
+* The `inputs[].role` values in the result JSON gained `quarto_yml`, `style`,
+  `override` and `extension` (#82). The schema stays at version 1 because
+  consumers are expected to accept roles they don't know, so `role` is now an
+  open string in `render-result-v1.schema.json` (with the known values listed
+  as examples). A validator built from the 0.3.2 copy of the schema, which kept
+  `role` closed, rejects 0.3.3 output; update it, or loosen `role` there.
+
 ## Bug fixes
 
+* Corrections to the above before release:
+  * Offline relabelling no longer fires on ordinary pass-2 errors (#82). The
+    matcher accepted the bare words "network" and "offline" and reads
+    reportifyr's log lines, which carry file paths, so a project under
+    `.../offline-study/` had every error reported as "cannot ... without
+    network access". It now matches uv's and the network stack's own phrases.
+  * `report/draft/intermediate_files/` (where reportifyr moves `-clean`,
+    `-tabs` and `-tabsfigs`) is moved aside with the other outputs, so a
+    rejected or killed render no longer leaves the last good run's
+    near-complete `-tabsfigs.docx` live (#81).
+  * The interpreter-mismatch warning no longer fires on a correct environment:
+    uv writes `version_info = 3.12` to `pyvenv.cfg`, which was read as 3.12.0
+    and so "mismatched" a 3.12.13 pin. Partial versions are compared only on
+    the components they have, and the check also runs when `python_env` is the
+    folder holding `.venv` (#82).
+  * Extension hashes are computed in C-locale order, so the same extension has
+    the same SHA-256 under any collation (#82).
+  * `render_report()` hands the LibreOffice steps the absolute path it checked,
+    so a relative `soffice_bin` can't mean something else inside the project
+    (#83).
 * Contract gaps in the offline and result work (#82):
   * In offline mode a pass-2 uv failure is now recognised with the real
     reportifyr and pyro, which don't pass uv's message on (pyro says only
@@ -77,16 +116,19 @@
   and the macro added afterwards; a run then takes about two seconds (100 of
   100 sequential and concurrent runs on macOS 26.6 / LibreOffice 26.2.5.2).
   The macro also writes a heartbeat file as its first action, and a
-  LibreOffice that doesn't start it within 30 seconds is abandoned and
-  reported as unavailable instead of waiting out the full timeout. Not
+  LibreOffice that doesn't start it within half the timeout (at least 30
+  seconds; `QUARTIFYR_SOFFICE_START_TIMEOUT` overrides) is abandoned and
+  reported as unavailable instead of waiting out the full timeout. The profile
+  warm-up is counted against the timeout, not added to it. Not
   re-tested on Windows or Linux (#84).
 * The two headless-LibreOffice steps (`--recalculate-fields`,
   `--resolve-same-page-crossrefs`) now work on Windows and with profile
   paths that contain a space. The `-env:UserInstallation` profile URL was
   built as `file://<path>`, which is malformed on Windows and breaks on a
   space; it is now a proper `file:///` URI. A timeout now kills the whole
-  LibreOffice process tree on Windows too (`taskkill /T /F` plus a sweep by
-  profile path; the POSIX-only process-group kill raised there), and a
+  LibreOffice process tree on Windows too (`taskkill /T /F` plus a sweep for
+  processes whose command line names the profile's `file:///` URL, which is how
+  LibreOffice shows it, never the plain path; the POSIX-only process-group kill raised there), and a
   `soffice` that still holds its temporary profile no longer turns a
   timeout into a `PermissionError`. Both steps share one launcher
   (`quartifyr_styling/_soffice.py`) (#86).

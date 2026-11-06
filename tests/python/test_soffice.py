@@ -19,7 +19,10 @@ from quartifyr_styling._soffice import (
     profile_url,
     resolve_soffice,
     run_macro,
+    _sweep_script,
+    start_timeout,
     started_marker_basic,
+    warm_up_budget,
     warm_up_profile,
 )
 from quartifyr_styling.recalculate_fields import FieldRecalculationError, recalculate_fields
@@ -295,3 +298,53 @@ def test_started_marker_basic_is_xml_escaped_and_optional():
     code = started_marker_basic('/tmp/a & "b"/macro-started')
     assert "&amp;" in code and "&quot;b&quot;" in code
     assert "For Output" in code
+
+
+def test_windows_sweep_matches_the_file_url_that_is_on_libreoffices_command_line_and_spares_itself():
+    profile = PureWindowsPath(r"C:\Users\me\My Docs\quartifyr-lo-profile-x")
+    url = profile.as_uri()
+    assert url == "file:///C:/Users/me/My%20Docs/quartifyr-lo-profile-x"
+    script = _sweep_script(url)
+    # The marker is the URL (forward slashes, %20), never the backslash path.
+    assert url in script and "\\Users\\me" not in script
+    # Case-insensitive, and the sweeper's own PID is excluded (its command line holds the marker).
+    assert "OrdinalIgnoreCase" in script
+    assert "$_.ProcessId -ne $PID" in script
+    assert _sweep_script("file:///C:/it's/x").count("it''s") == 1  # quotes are escaped
+
+
+def test_kill_uses_the_url_marker_for_the_sweep(monkeypatch):
+    calls: list[list[str]] = []
+
+    class _Proc:
+        pid = 1
+
+        def wait(self, timeout=None):
+            return 0
+
+    monkeypatch.setattr(_soffice, "IS_WINDOWS", True)
+    monkeypatch.setattr(_soffice.subprocess, "run", lambda cmd, **kw: calls.append(list(cmd)))
+    _soffice.kill_process_tree(_Proc(), marker="file:///C:/p/profile")
+    assert "file:///C:/p/profile" in calls[1][-1]
+
+
+def test_start_timeout_scales_with_the_timeout_and_can_be_configured(monkeypatch):
+    monkeypatch.delenv("QUARTIFYR_SOFFICE_START_TIMEOUT", raising=False)
+    assert start_timeout(120) == 60
+    assert start_timeout(150) == 75
+    assert start_timeout(40) == 30  # never below 30 s ...
+    assert start_timeout(20) == 20  # ... unless the whole timeout is shorter
+    monkeypatch.setenv("QUARTIFYR_SOFFICE_START_TIMEOUT", "200")
+    assert start_timeout(120) == 120  # never beyond the timeout itself
+    monkeypatch.setenv("QUARTIFYR_SOFFICE_START_TIMEOUT", "45")
+    assert start_timeout(120) == 45
+    for bad in ("soon", "0", "-3"):
+        monkeypatch.setenv("QUARTIFYR_SOFFICE_START_TIMEOUT", bad)
+        with pytest.raises(_soffice.SofficeError):
+            start_timeout(120)
+
+
+def test_warm_up_is_budgeted_out_of_the_timeout():
+    assert warm_up_budget(120) == 60
+    assert warm_up_budget(30) == 15
+    assert warm_up_budget(0.5) == 1

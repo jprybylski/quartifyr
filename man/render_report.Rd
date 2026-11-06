@@ -201,7 +201,8 @@ Quarto and reportifyr were doing when a render went wrong.
 
 Once the project checks pass and a render starts, the outputs it is about
 to regenerate (\verb{report/shell/<name>.docx}, \verb{report/draft/<name>-*.docx},
-\verb{report/final/<name>-final.docx} and its \verb{_docx_metadata.json}) are moved
+\verb{report/final/<name>-final.docx} and its \verb{_docx_metadata.json}, and what
+reportifyr leaves in \verb{report/draft/intermediate_files/}) are moved
 to \verb{report/.previous/} first, replacing the copy already there, all or
 nothing. After a render that fails, times out, is rejected by \code{strict} or
 is interrupted:

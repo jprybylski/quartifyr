@@ -33,7 +33,8 @@ the macro. :func:`._soffice.warm_up_profile` therefore starts LibreOffice
 once on the empty profile and the macro files are written afterwards, after
 which the same command finishes in about two seconds. A macro that still
 never starts is detected through a heartbeat file the macro writes first and
-reported as unavailable after 30 seconds instead of waiting out the full
+reported as unavailable after half the timeout (at least 30 seconds, or
+``QUARTIFYR_SOFFICE_START_TIMEOUT``) instead of waiting out the full
 timeout; a silent no-op is caught by verifying the ToC placeholder actually
 disappeared rather than trusting the exit code. A timeout kills the whole
 process tree (a plain ``proc.kill()`` can leave ``soffice.bin`` behind).
@@ -43,6 +44,7 @@ Verified on macOS only; treat the feature as experimental elsewhere.
 from __future__ import annotations
 
 import tempfile
+import time
 from pathlib import Path
 
 from ._soffice import (
@@ -54,6 +56,7 @@ from ._soffice import (
     rmtree_retrying,
     run_macro,
     started_marker_basic,
+    warm_up_budget,
     warm_up_profile,
 )
 
@@ -146,7 +149,13 @@ def recalculate_fields(
         started_path = Path(tmp) / "macro-started"
         # Let LibreOffice initialise the profile before the macro is put in
         # it: see warm_up_profile() (a pre-seeded fresh profile hangs on macOS).
-        warm_up_profile(soffice, profile_dir, stderr_path=Path(tmp) / "soffice-warmup.log")
+        warmed_at = time.monotonic()
+        warm_up_profile(
+            soffice, profile_dir, stderr_path=Path(tmp) / "soffice-warmup.log",
+            timeout_seconds=warm_up_budget(timeout_seconds),
+        )
+        # The warm-up counts against the caller's timeout, not on top of it.
+        remaining = max(1.0, timeout_seconds - (time.monotonic() - warmed_at))
         _seed_profile(profile_dir, started_path)
         try:
             returncode, stderr_text = run_macro(
@@ -155,7 +164,7 @@ def recalculate_fields(
                 "macro:///Standard.Module1.UpdateAndSave",
                 profile_dir=profile_dir,
                 stderr_path=Path(tmp) / "soffice-stderr.log",
-                timeout_seconds=timeout_seconds,
+                timeout_seconds=remaining,
                 started_path=started_path,
             )
         except SofficeUnavailableError as exc:

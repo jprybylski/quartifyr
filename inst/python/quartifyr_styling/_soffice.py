@@ -78,23 +78,35 @@ def profile_url(profile_dir: str | os.PathLike[str]) -> str:
     return Path(profile_dir).resolve().as_uri()
 
 
-def _powershell_kill_by_marker(marker: str) -> None:
-    """Kill every process whose command line mentions ``marker``.
+def _sweep_script(marker: str) -> str:
+    """PowerShell that kills every LibreOffice process started for ``marker``.
 
-    ``soffice.exe`` can hand off to a ``soffice.bin`` and exit, after which
-    ``taskkill /T`` (which follows parent->child links) can no longer reach
-    it. Our throwaway profile directory is on the worker's command line, so it
-    identifies exactly the processes this call started.
+    ``marker`` is the ``file:///C:/...`` URL of the throwaway profile, because
+    that is how it appears on LibreOffice's command line
+    (``-env:UserInstallation=file:///C:/Users/.../profile``): forward slashes,
+    ``%20`` for spaces, never the plain ``C:\\...`` path. The comparison is
+    case-insensitive (Windows paths are) and skips this PowerShell itself, whose
+    own command line necessarily contains the marker.
     """
     escaped = marker.replace("'", "''")
-    script = (
+    return (
+        f"$marker = '{escaped}'; "
         "Get-CimInstance Win32_Process | "
-        f"Where-Object {{ $_.CommandLine -and $_.CommandLine.Contains('{escaped}') }} | "
+        "Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and "
+        "$_.CommandLine.IndexOf($marker, [StringComparison]::OrdinalIgnoreCase) -ge 0 } | "
         "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
     )
+
+
+def _powershell_kill_by_marker(marker: str) -> None:
+    """Kill the processes whose command line contains ``marker`` (see :func:`_sweep_script`).
+
+    ``soffice.exe`` can hand off to a ``soffice.bin`` and exit, after which
+    ``taskkill /T`` (which follows parent->child links) can no longer reach it.
+    """
     try:
         subprocess.run(
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", _sweep_script(marker)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             timeout=30,
@@ -111,7 +123,7 @@ def kill_process_tree(proc: subprocess.Popen, *, marker: str | None = None) -> N
     its process group reaches the detached ``soffice.bin`` worker that a plain
     ``proc.kill()`` misses. Windows has no process groups in that sense:
     ``taskkill /T /F`` takes the launcher's tree, then (when ``marker`` is
-    given, normally the profile directory) a sweep by command line catches a
+    given, the profile's ``file:///`` URL) a sweep by command line catches a
     worker the launcher already detached.
     """
     if IS_WINDOWS:
@@ -190,12 +202,41 @@ def _read_text(path: Path) -> str:
         return ""
 
 
+START_TIMEOUT_ENV = "QUARTIFYR_SOFFICE_START_TIMEOUT"
+WARMUP_SECONDS = 60.0
+
+
+def start_timeout(timeout_seconds: float) -> float:
+    """How long the macro may take to *begin* before LibreOffice is called unavailable.
+
+    The macro runs only after LibreOffice has loaded the document, so a large
+    document on a slow disk legitimately takes a while. Default: half the
+    overall timeout, never less than 30 s, never more than the timeout.
+    ``$QUARTIFYR_SOFFICE_START_TIMEOUT`` (seconds) overrides it.
+    """
+    configured = os.environ.get(START_TIMEOUT_ENV, "").strip()
+    if configured:
+        try:
+            value = float(configured)
+        except ValueError:
+            raise SofficeError(f"{START_TIMEOUT_ENV} must be a number of seconds, got {configured!r}") from None
+        if value <= 0:
+            raise SofficeError(f"{START_TIMEOUT_ENV} must be positive, got {configured!r}")
+        return min(value, float(timeout_seconds))
+    return min(float(timeout_seconds), max(30.0, float(timeout_seconds) / 2))
+
+
+def warm_up_budget(timeout_seconds: float) -> float:
+    """The part of the overall timeout the profile warm-up may use (it is counted against it)."""
+    return max(1.0, min(WARMUP_SECONDS, float(timeout_seconds) / 2))
+
+
 def warm_up_profile(
     soffice: str,
     profile_dir: Path,
     *,
     stderr_path: Path,
-    timeout_seconds: float = 60,
+    timeout_seconds: float = WARMUP_SECONDS,
 ) -> bool:
     """Let LibreOffice initialise ``profile_dir`` before the macro files go in.
 
@@ -220,7 +261,7 @@ def warm_up_profile(
         try:
             proc.wait(timeout=timeout_seconds)
         except subprocess.TimeoutExpired:
-            kill_process_tree(proc, marker=str(profile_dir.resolve()))
+            kill_process_tree(proc, marker=profile_url(profile_dir))
             return False
     return proc.returncode == 0
 
@@ -234,7 +275,7 @@ def run_macro(
     stderr_path: Path,
     timeout_seconds: float,
     started_path: Path | None = None,
-    start_timeout_seconds: float = 30,
+    start_timeout_seconds: float | None = None,
 ) -> tuple[int, str]:
     """Run ``soffice`` headless on ``docx_path`` with ``macro`` and a seeded profile.
 
@@ -246,11 +287,13 @@ def run_macro(
     closed (so Windows can delete it) before this returns.
 
     ``started_path``: a file the macro writes as its first action. If it has
-    not appeared after ``start_timeout_seconds`` the macro is never going to
-    run (a LibreOffice that cannot start it just waits), so the process is
-    killed and :class:`SofficeUnavailableError` raised in seconds instead of
-    after the full ``timeout_seconds``.
+    not appeared after ``start_timeout_seconds`` (default :func:`start_timeout`)
+    the macro is never going to run (a LibreOffice that cannot start it just
+    waits), so the process is killed and :class:`SofficeUnavailableError`
+    raised well before the full ``timeout_seconds``.
     """
+    if start_timeout_seconds is None:
+        start_timeout_seconds = start_timeout(timeout_seconds)
     started_at = time.monotonic()
     with open(stderr_path, "wb") as stderr_file:
         proc = _launch(
@@ -258,7 +301,7 @@ def run_macro(
             [f"-env:UserInstallation={profile_url(profile_dir)}", str(docx_path), macro],
             stderr_file,
         )
-        marker = str(Path(profile_dir).resolve())
+        marker = profile_url(profile_dir)
         try:
             while True:
                 try:

@@ -1358,7 +1358,7 @@ test_that("a malformed soffice_bin is rejected", {
 test_that("the render result records which LibreOffice ran", {
   local_mocked_bindings(
     styling_recalculate_fields = function(docx, timeout = 120, soffice_bin = NULL) invisible(docx),
-    .resolve_soffice = function(command) paste0("/resolved/", command),
+    .resolve_soffice = function(command) if (startsWith(command, "/")) command else paste0("/resolved/", command),
     .soffice_info = function(command) list(path = .resolve_soffice(command), version = "LibreOffice 26.2.5.2 abc")
   )
   result <- .run_render(.render_report_fixture(), recalculate_fields = TRUE, soffice_bin = "soffice")
@@ -1840,7 +1840,7 @@ test_that("render_report() runs pass 2 against the python_env and creates nothin
   )
 
   expect_true(file.exists(file.path(seen$venv_dir, ".venv", "pyvenv.cfg")))
-  expect_identical(unname(seen$uv), c(venv, "1"))
+  expect_identical(unname(seen$uv[1:2]), c(venv, "1"))
   expect_false(any(file.exists(file.path(fixture$project_dir, c(".venv", "uv.lock", "pyproject.toml")))))
   expect_null(getOption("venv_dir"))
 })
@@ -1992,4 +1992,103 @@ test_that(".soffice_info() reports no version when `soffice --version` fails", {
   info <- .soffice_info(script)
   expect_identical(info$path, script)
   expect_null(info$version)
+})
+
+# --- Intermediate files, extension hashes, soffice path -----------------------
+
+test_that("a successful render's intermediate_files are moved aside by the next render, and not left live after a rejection", {
+  fixture <- .render_report_fixture()
+  keep_intermediate <- function(doc_dirs) {
+    inter <- file.path(dirname(doc_dirs$doc_draft), "intermediate_files")
+    dir.create(inter, showWarnings = FALSE)
+    writeLines("near-complete", file.path(inter, "report-tabsfigs.docx"))
+  }
+  first <- .run_render(fixture, build = keep_intermediate)
+  live <- file.path(fixture$project_dir, "report", "draft", "intermediate_files", "report-tabsfigs.docx")
+  expect_identical(readLines(live), "near-complete")
+
+  # A strict rejection of the next render: nothing from the first one is live.
+  expect_error(.run_render(fixture, strict = TRUE, unfilled = "gone.png"), class = "quartifyr_render_incomplete")
+
+  expect_false(file.exists(live))
+  previous <- file.path(fixture$project_dir, "report", ".previous", "draft", "intermediate_files", "report-tabsfigs.docx")
+  expect_identical(readLines(previous), "near-complete")
+  expect_identical(
+    list.files(file.path(fixture$project_dir, "report", "draft", "intermediate_files")),
+    character(0)
+  )
+})
+
+test_that(".render_output_paths() lists the intermediate files and .previous keeps them apart from the draft folder", {
+  paths <- .render_output_paths("/p", "report")
+  expect_setequal(
+    basename(paths$intermediate),
+    c("report-clean.docx", "report-tabs.docx", "report-tabsfigs.docx", "report-draft.docx")
+  )
+  expect_true(all(grepl("intermediate_files", paths$intermediate, fixed = TRUE)))
+  expect_identical(.previous_subdir("intermediate"), file.path("draft", "intermediate_files"))
+  expect_identical(.previous_subdir("shell"), "shell")
+})
+
+test_that("an extension's hash doesn't depend on the locale's sort order", {
+  dir <- withr::local_tempdir()
+  for (name in c("a", "B")) {
+    dir.create(file.path(dir, name))
+    writeLines("x", file.path(dir, name, "_extension.yml"))
+  }
+  writeLines("1", file.path(dir, "a", "z.lua"))
+  writeLines("2", file.path(dir, "a", "B.lua"))
+  table <- .extension_table(dir)
+  # C-locale order: upper case before lower case, whatever LC_COLLATE says.
+  expect_identical(basename(table$path), c("B", "a"))
+
+  files <- c("B.lua", "_extension.yml", "z.lua")
+  expected_lines <- paste(files, vapply(file.path(dir, "a", files), .sha256_file, character(1), USE.NAMES = FALSE), sep = "  ")
+  expect_identical(
+    table$sha256[table$path == file.path(dir, "a")],
+    paste(as.character(unclass(openssl::sha256(paste(expected_lines, collapse = "\n")))), collapse = "")
+  )
+})
+
+test_that("the LibreOffice steps get an absolute path, even for a relative soffice_bin and a different cwd", {
+  skip_on_os("windows")
+  fixture <- .render_report_fixture()
+  outside <- withr::local_tempdir()
+  tools_dir <- file.path(outside, "tools")
+  dir.create(tools_dir)
+  writeLines(c("#!/bin/sh", "echo LibreOffice test"), file.path(tools_dir, "soffice"))
+  Sys.chmod(file.path(tools_dir, "soffice"), "755")
+  seen <- NULL
+  local_mocked_bindings(
+    styling_recalculate_fields = function(docx, timeout = 120, soffice_bin = NULL) {
+      seen <<- soffice_bin
+      invisible(docx)
+    }
+  )
+
+  result <- withr::with_dir(outside, .run_render(fixture, recalculate_fields = TRUE, soffice_bin = "tools/soffice"))
+
+  expect_identical(normalizePath(seen), normalizePath(file.path(tools_dir, "soffice")))
+  expect_true(grepl("^(/|[A-Za-z]:)", seen))
+  expect_identical(normalizePath(result$versions$libreoffice$path), normalizePath(seen))
+})
+
+test_that("a bare soffice name is resolved through PATH once, and that path is what runs and is recorded", {
+  skip_on_os("windows")
+  fixture <- .render_report_fixture()
+  bin <- withr::local_tempdir()
+  writeLines(c("#!/bin/sh", "echo LibreOffice on path"), file.path(bin, "soffice"))
+  Sys.chmod(file.path(bin, "soffice"), "755")
+  withr::local_path(bin, action = "prefix")
+  withr::local_envvar(QUARTIFYR_SOFFICE_BIN = NA)
+  seen <- NULL
+  local_mocked_bindings(
+    styling_resolve_same_page_crossrefs = function(docx, timeout = 120, soffice_bin = NULL) {
+      seen <<- soffice_bin
+      invisible(docx)
+    }
+  )
+  result <- .run_render(fixture, resolve_same_page_crossrefs = TRUE)
+  expect_identical(normalizePath(seen), normalizePath(file.path(bin, "soffice")))
+  expect_identical(normalizePath(result$versions$libreoffice$path), normalizePath(seen))
 })

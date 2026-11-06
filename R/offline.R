@@ -185,11 +185,17 @@
 # reads like a network or environment problem, never for an ordinary failure
 # such as a bad figure.
 .looks_like_uv_failure <- function(text) {
+  # Phrases uv and the network stack actually use, not bare words: the text
+  # searched can include reportifyr's log lines, which carry file paths, and a
+  # project under a folder called `offline-study/` or `network-model/` must not
+  # turn every ordinary error into "cannot ... without network access".
   grepl(
     paste(
-      "no solution found", "failed to fetch", "failed to download", "network",
-      "offline", "connect(ion)? (refused|error|timed out|reset)", "dns error",
-      "error sending request", "not found in the package registry",
+      "no solution found", "failed to fetch", "failed to download",
+      "network (is )?unreachable", "network connectivity is disabled",
+      "was not found in the cache", "temporary failure in name resolution",
+      "connect(ion)? (refused|error|timed out|reset)", "tcp connect error",
+      "dns error", "error sending request", "not found in the package registry",
       "no matching distribution", "uv_setup\\.sh",
       sep = "|"
     ),
@@ -353,15 +359,34 @@
   if (anyNA(results)) NA else all(results)
 }
 
-# The interpreter version recorded in `<env>/pyvenv.cfg`, or NULL.
+# The same, for an interpreter version known only to `length(version)`
+# components (uv writes `version_info = 3.12` to pyvenv.cfg). A missing
+# component isn't zero: it could be anything. Evaluates the specifier at both
+# ends of what the version could be and answers only when they agree.
+.satisfies_partial_version <- function(version, spec) {
+  if (length(version) >= 3L) {
+    return(.satisfies_requires_python(version, spec))
+  }
+  low <- .satisfies_requires_python(c(version, rep(0L, 3L - length(version))), spec)
+  high <- .satisfies_requires_python(c(version, rep(9999L, 3L - length(version))), spec)
+  if (!is.na(low) && !is.na(high) && identical(low, high)) low else NA
+}
+
+# The interpreter version recorded in `<env>/pyvenv.cfg`, or NULL. Python's
+# own venv writes `version = 3.12.3`; uv writes `version_info`, sometimes with
+# fewer components. Takes the most specific one present.
 .venv_python_version <- function(env) {
   cfg <- file.path(env, "pyvenv.cfg")
   if (!file.exists(cfg)) {
     return(NULL)
   }
   lines <- readLines(cfg, warn = FALSE)
-  hit <- grep("^(version|version_info)\\s*=", lines, value = TRUE)
-  if (length(hit) == 0) NULL else .parse_py_version(sub("^[^=]*=", "", hit[[1]]))
+  hits <- grep("^(version|version_info)\\s*=", lines, value = TRUE)
+  versions <- Filter(Negate(is.null), lapply(sub("^[^=]*=", "", hits), .parse_py_version))
+  if (length(versions) == 0) {
+    return(NULL)
+  }
+  versions[[which.max(vapply(versions, length, integer(1)))]]
 }
 
 # What the project asks of its interpreter: `.python-version` (uv's own pin)
@@ -389,18 +414,23 @@
 }
 
 # NULL when the environment's interpreter suits the project's pin (or either
-# can't be determined); otherwise a sentence saying how it doesn't.
+# can't be determined); otherwise a sentence saying how it doesn't. `env` may
+# be the venv or a project directory holding a `.venv`.
 .python_env_mismatch <- function(project_dir, env) {
+  env <- .python_env_venv(env)
   have <- .venv_python_version(env)
   pin <- .project_python_pin(project_dir)
   if (is.null(have) || is.null(pin)) {
     return(NULL)
   }
   ok <- if (!is.null(pin$wanted)) {
-    # A pin names as many components as it names: "3.12" accepts any 3.12.x.
-    identical(.pad_version(have)[seq_along(pin$wanted)], pin$wanted)
+    # A pin names as many components as it names ("3.12" accepts any 3.12.x),
+    # and an interpreter version that only names some of them ("3.12") can only
+    # be compared on those.
+    n <- min(length(pin$wanted), length(have))
+    identical(have[seq_len(n)], pin$wanted[seq_len(n)])
   } else {
-    .satisfies_requires_python(have, pin$spec)
+    .satisfies_partial_version(have, pin$spec)
   }
   if (isTRUE(ok) || is.na(ok)) {
     return(NULL)

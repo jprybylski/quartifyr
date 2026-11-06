@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://jprybylski.github.io/quartifyr/render-result-v1.schema.json",
   "title": "quartifyr render result",
-  "description": "What `Rscript inst/scripts/render.R --json` prints on stdout, and the fields of render_report()'s return value. `status` describes whether the delivered document is complete: \"error\" means unfilled placeholders or a failed requested post-processing step (or, for a render that stopped early, the error in `errors`); \"warning\" means complete but flagged (e.g. a missing metadata sidecar); \"ok\" means nothing to report. A render that finished (`ok` or `warning`) always carries `artifacts`, `inputs` and `versions`. Version 1 of the shape: new optional fields may be added without changing the version (consumers should ignore fields they do not know); removing or renaming a field, or changing its meaning, publishes render-result-v2.schema.json and bumps `schema_version`.",
+  "description": "What `Rscript inst/scripts/render.R --json` prints on stdout, and the fields of render_report()'s return value. `status` describes whether the delivered document is complete: \"error\" means unfilled placeholders or a failed requested post-processing step (or, for a render that stopped early, the error in `errors`); \"warning\" means complete but flagged (e.g. a missing metadata sidecar); \"ok\" means nothing to report. A render that finished (`ok` or `warning`) always carries `artifacts`, `inputs` and `versions`. Version 1 of the shape: new optional fields, and new values of `inputs[].role`, may be added without changing the version (consumers should ignore fields they do not know and accept role values they do not know; a validator built from an older copy of this file will reject newer output only if it kept `role` closed);  removing or renaming a field, or changing its meaning, publishes render-result-v2.schema.json and bumps `schema_version`.",
   "type": "object",
   "required": [
     "schema_version",
@@ -145,15 +145,17 @@
         ],
         "properties": {
           "role": {
-            "enum": [
+            "description": "What the file was for. Known values: shell_qmd, quarto_yml, figure, table, sidecar, standard_footnotes, config, reference_doc, style, override, extension. New roles may be added within version 1 (0.3.3 added quarto_yml, style, override and extension), so a consumer must accept values it does not know and treat them as informational.",
+            "type": "string",
+            "examples": [
               "shell_qmd",
+              "quarto_yml",
               "figure",
               "table",
               "sidecar",
               "standard_footnotes",
               "config",
               "reference_doc",
-              "quarto_yml",
               "style",
               "override",
               "extension"

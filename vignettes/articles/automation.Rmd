@@ -83,7 +83,8 @@ complete.
 Once the project checks pass and the render starts, `render_report()` first
 moves the outputs it is about to regenerate (`report/shell/<name>.docx`,
 `report/draft/<name>-*.docx`, `report/final/<name>-final.docx` and its
-`_docx_metadata.json`) to `report/.previous/`, replacing the copy already
+`_docx_metadata.json`, and the `-clean`/`-tabs`/`-tabsfigs` files reportifyr keeps in
+`report/draft/intermediate_files/`) to `report/.previous/`, replacing the copy already
 there, all or nothing. After a failure, a `strict` rejection or an
 interruption:
 

@@ -332,7 +332,7 @@ first-start problem: a fresh profile that already holds the seeded Basic
 library never runs the macro, so `_soffice.warm_up_profile()` initialises
 the profile (`--terminate_after_init`) *before* the macro files are
 written, and `run_macro()` abandons a macro whose heartbeat file hasn't
-appeared in 30 s as "unavailable". Both steps share `_soffice.py`. Off
+appeared within half the timeout (at least 30 s; `QUARTIFYR_SOFFICE_START_TIMEOUT` overrides) as "unavailable". Both steps share `_soffice.py`. Off
 by default (`render_report(..., recalculate_fields = FALSE)`). Don't
 treat a clean exit as proof it worked; see the repo-root README's
 "Status and known limitations" section before changing this code path.

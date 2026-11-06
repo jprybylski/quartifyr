@@ -157,9 +157,11 @@ the R package is put on `PYTHONPATH`.
 
 With a `python_env` set, `render_report()` also runs reportifyr's pass 2 in it,
 so the project needs no `.venv` of its own. The environment then needs
-`pillow` as well (reportifyr uses it for figures), and
-`initialize_quartifyr_project()` and `initialize_report_project_offline()` check
-for it. reportifyr's own setup, `reportifyr::initialize_report_project()`, can't be
+`pillow` as well (reportifyr uses it for figures).
+`initialize_report_project_offline()` and `render_report()` check for it before
+doing anything; `initialize_quartifyr_project()` only checks what quartifyr's own
+styling needs (`python-docx`, `pyyaml`), so a missing `pillow` first shows up
+there. reportifyr's own setup, `reportifyr::initialize_report_project()`, can't be
 used for this: it installs uv if it is missing and runs `uv lock` and `uv sync`
 against PyPI. Use the offline initializer instead, which creates the same report
 folders, `config.yaml`, `standard_footnotes.yaml` and `.report_init.json` marker
@@ -177,9 +179,13 @@ QUARTIFYR_PYTHON_ENV=/opt/envs/report Rscript "$(Rscript -e 'cat(system.file("sc
 ```
 
 Mechanically, a render with a `python_env` points pyro at the environment
-(`options(venv_dir)` for the render, with a temporary `.venv` symlink if the
-environment isn't called `.venv`) and sets `UV_PROJECT_ENVIRONMENT` to it and
-`UV_NO_SYNC=1`. uv then runs reportifyr's module in exactly that environment,
+(`options(venv_dir)` for the render, with a temporary `.venv` link if the
+environment isn't called `.venv`: a junction on Windows, which needs no
+privilege, a symlink elsewhere) and sets `UV_PROJECT_ENVIRONMENT` to it,
+`UV_NO_SYNC=1` and `UV_PYTHON` to its interpreter. The last one matters in a
+project without a `pyproject.toml`: uv is then outside a project, ignores
+`UV_PROJECT_ENVIRONMENT`, and a `.python-version` file would make it run a
+different interpreter altogether. uv then runs reportifyr's module in exactly that environment,
 and creates no `.venv` and writes no `uv.lock`, even in a project that ships a
 `pyproject.toml` and `uv.lock` (the demo does). uv itself still has to be
 installed, because reportifyr runs it for every Python call; it is never asked
