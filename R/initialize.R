@@ -79,9 +79,11 @@
 #'   environment is created. Defaults to `getOption("quartifyr.python_env")`.
 #'   For the `styling_*()` calls in `render_report()` to use it too, set that
 #'   option (or the `QUARTIFYR_PYTHON_ENV` environment variable) in the
-#'   project's `.Rprofile`. Note that `reportifyr`'s own pass 2 has its own
-#'   Python environment, provisioned by
-#'   `reportifyr::initialize_report_project()`, which this does not replace.
+#'   project's `.Rprofile`. With it set, `render_report()` also runs
+#'   `reportifyr`'s pass 2 in that environment (which then needs `pillow`
+#'   too), so the project needs no `.venv`; set up the report folders and
+#'   marker without pyro or the network with
+#'   [initialize_report_project_offline()].
 #' @param install_extensions Also install the Quarto extensions the project
 #'   needs: `quarto-plus` via [install_quarto_extensions()] (from
 #'   `extensions_from`, default the copy bundled in this package) and

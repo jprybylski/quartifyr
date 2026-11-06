@@ -52,9 +52,11 @@ uv are skipped entirely: nothing is written to \code{pyproject.toml} and no
 environment is created. Defaults to \code{getOption("quartifyr.python_env")}.
 For the \verb{styling_*()} calls in \code{render_report()} to use it too, set that
 option (or the \code{QUARTIFYR_PYTHON_ENV} environment variable) in the
-project's \code{.Rprofile}. Note that \code{reportifyr}'s own pass 2 has its own
-Python environment, provisioned by
-\code{reportifyr::initialize_report_project()}, which this does not replace.}
+project's \code{.Rprofile}. With it set, \code{render_report()} also runs
+\code{reportifyr}'s pass 2 in that environment (which then needs \code{pillow}
+too), so the project needs no \code{.venv}; set up the report folders and
+marker without pyro or the network with
+\code{\link[=initialize_report_project_offline]{initialize_report_project_offline()}}.}
 
 \item{install_extensions}{Also install the Quarto extensions the project
 needs: \code{quarto-plus} via \code{\link[=install_quarto_extensions]{install_quarto_extensions()}} (from

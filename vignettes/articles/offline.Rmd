@@ -153,16 +153,51 @@ The `QUARTIFYR_PYTHON_ENV` environment variable works as well. The
 `quartifyr_styling` module itself doesn't need installing: the copy bundled in
 the R package is put on `PYTHONPATH`.
 
+### One environment for both passes
+
+With a `python_env` set, `render_report()` also runs reportifyr's pass 2 in it,
+so the project needs no `.venv` of its own. The environment then needs
+`pillow` as well (reportifyr uses it for figures), and
+`initialize_quartifyr_project()` and `initialize_report_project_offline()` check
+for it. reportifyr's own setup, `reportifyr::initialize_report_project()`, can't be
+used for this: it installs uv if it is missing and runs `uv lock` and `uv sync`
+against PyPI. Use the offline initializer instead, which creates the same report
+folders, `config.yaml`, `standard_footnotes.yaml` and `.report_init.json` marker
+without pyro or the network, and leaves anything that exists alone:
+
+```{r}
+quartifyr::initialize_report_project_offline("report-project", python_env = "/opt/envs/report")
+quartifyr::initialize_quartifyr_project("report-project", python_env = "/opt/envs/report")
+```
+
+```bash
+cd report-project
+QUARTIFYR_PYTHON_ENV=/opt/envs/report Rscript "$(Rscript -e 'cat(system.file("scripts", "render.R", package = "quartifyr"))')" \
+  --project . --shell report.qmd --strict --json --offline
+```
+
+Mechanically, a render with a `python_env` points pyro at the environment
+(`options(venv_dir)` for the render, with a temporary `.venv` symlink if the
+environment isn't called `.venv`) and sets `UV_PROJECT_ENVIRONMENT` to it and
+`UV_NO_SYNC=1`. uv then runs reportifyr's module in exactly that environment,
+and creates no `.venv` and writes no `uv.lock`, even in a project that ships a
+`pyproject.toml` and `uv.lock` (the demo does). uv itself still has to be
+installed, because reportifyr runs it for every Python call; it is never asked
+to sync, resolve or download anything, so a render in offline mode makes no
+network connection. Getting rid of uv altogether would need a change in
+reportifyr or pyro.
+
 ## Not covered
 
-`reportifyr`, which fills the shell in pass 2, has its own Python environment
-and provisions it through pyro and uv when you call
-`reportifyr::initialize_report_project()`. That code is upstream (A2-ai), and
-`python_env` does not replace it. Provisioning it works offline under the same
-conditions as above: uv installed at any version, `UV_OFFLINE=1`, and a populated
-cache or wheel directory. At render time it uses the environment as it is, under
-the variables listed in "Rendering offline". If a step in it needs the network, the error comes from
-there, not from quartifyr.
+Without a `python_env`, `reportifyr`, which fills the shell in pass 2, has its own
+Python environment and provisions it through pyro and uv when you call
+`reportifyr::initialize_report_project()`. That code is upstream (A2-ai).
+Provisioning it works offline under the same conditions as above: uv installed
+at any version, `UV_OFFLINE=1`, and a populated cache or wheel directory, and a
+project that already has a `uv.lock` naming other wheels fails offline. At render
+time it uses the environment as it is, under the variables listed in "Rendering
+offline". If a step in it needs the network, the error comes from there, not from
+quartifyr. Setting a `python_env` (above) is the way around all of that.
 
 ## The `quarto-plus` licence
 

@@ -81,6 +81,7 @@ reference:
     desc: One-time-per-project setup, alongside `reportifyr::initialize_report_project()`.
     contents:
       - initialize_quartifyr_project
+      - initialize_report_project_offline
       - install_quartifyr_extension
       - install_quarto_extensions
       - check_quarto_extensions

@@ -88,6 +88,35 @@ QUARTIFYR_PYTHON_ENV="$env_dir" Rscript "$script" --project . --shell report.qmd
 Rscript -e 'r <- jsonlite::fromJSON(commandArgs(TRUE)[[1]]); stopifnot(identical(r$status, "ok"))' "$result"
 validate_json "$result=ok"
 
+echo "== a fresh project copy, set up and rendered with only python_env (no pyro, no project .venv)"
+# One existing environment serves both passes: the offline initializer creates
+# the report folders, config and marker without pyro, and the render points
+# reportifyr's pass 2 (through pyro and uv) at that environment. Nothing may be
+# created in the project (no .venv, no changed uv.lock) and nothing may reach
+# the network (this runs without one). uv itself must still be installed:
+# reportifyr runs it, offline and without syncing.
+fresh="$(mktemp -d)"
+tar -C . --exclude=./.venv --exclude=./renv --exclude=./.Rprofile --exclude=./.rpfy-logs \
+  --exclude=./.report_init.json --exclude=./report/draft --exclude=./report/final \
+  --exclude=./report/shell --exclude=./report/.previous --exclude=./report/.failed -cf - . \
+  | tar -C "$fresh" -xf -
+lock_before="$(cksum < "$fresh/uv.lock")"
+# Run from the example (its renv library has quartifyr), against the copy.
+Rscript -e 'quartifyr::initialize_report_project_offline(commandArgs(TRUE)[[1]], python_env = commandArgs(TRUE)[[2]])' "$fresh" "$env_dir"
+test -f "$fresh/.report_init.json"
+QUARTIFYR_PYTHON_ENV="$env_dir" Rscript "$script" --project "$fresh" --shell report.qmd --status final \
+  --json --strict --offline > "$result"
+Rscript -e 'r <- jsonlite::fromJSON(commandArgs(TRUE)[[1]]); stopifnot(identical(r$status, "ok"), file.exists(r$final))' "$result"
+validate_json "$result=ok"
+if [ -e "$fresh/.venv" ]; then
+  echo "error: a render with python_env created $fresh/.venv" >&2
+  exit 1
+fi
+if [ "$lock_before" != "$(cksum < "$fresh/uv.lock")" ]; then
+  echo "error: a render with python_env rewrote uv.lock" >&2
+  exit 1
+fi
+
 echo "== a forced failure still prints a result that matches the schema"
 failed="$(mktemp)"
 code=0

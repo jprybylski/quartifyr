@@ -685,7 +685,10 @@ test_that("the leak probe used for the timeout test can see a live child", {
 # lets a test shape what pass 2 leaves behind (write the draft docx, append
 # to a reportifyr log, ...) and `unfilled` stands in for the docx scan.
 .run_render <- function(fixture, status = "draft", build = function(doc_dirs) NULL,
-                        unfilled = character(0), .mock_env = parent.frame(), ...) {
+                        unfilled = character(0), .mock_env = parent.frame(), .python_env = NULL, ...) {
+  if (!is.null(.python_env)) {
+    withr::local_options(quartifyr.python_env = .python_env, .local_envir = .mock_env)
+  }
   local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL), .env = .mock_env)
   local_mocked_bindings(
     styling_build_abbreviations_tex = function(...) invisible(NULL),
@@ -1814,4 +1817,50 @@ test_that("offline, an interpreter that doesn't match the project's pin is repor
 
   # And strict turns it into a failure.
   expect_error(.run_render(fixture, offline = TRUE, strict = TRUE), class = "quartifyr_render_incomplete")
+})
+
+# --- One Python environment for both passes (#85) ----------------------------
+
+test_that("render_report() runs pass 2 against the python_env and creates nothing in the project", {
+  .mock_python_env()
+  fixture <- .render_report_fixture()
+  venv <- .make_venv(withr::local_tempdir())
+  withr::local_options(venv_dir = NULL)
+  withr::local_envvar(UV_PROJECT_ENVIRONMENT = NA, UV_NO_SYNC = NA, QUARTIFYR_PYTHON_ENV = NA)
+  seen <- new.env()
+
+  .run_render(
+    fixture,
+    build = function(doc_dirs) {
+      assign("venv_dir", getOption("venv_dir"), envir = seen)
+      assign("uv", Sys.getenv(c("UV_PROJECT_ENVIRONMENT", "UV_NO_SYNC"), unset = "<unset>"), envir = seen)
+    },
+    .python_env = venv
+  )
+
+  expect_true(file.exists(file.path(seen$venv_dir, ".venv", "pyvenv.cfg")))
+  expect_identical(unname(seen$uv), c(venv, "1"))
+  expect_false(any(file.exists(file.path(fixture$project_dir, c(".venv", "uv.lock", "pyproject.toml")))))
+  expect_null(getOption("venv_dir"))
+})
+
+test_that("a python_env missing a module reportifyr needs fails before anything is rendered", {
+  fixture <- .render_report_fixture()
+  local_mocked_bindings(.verify_python_env = function(env, modules = NULL) {
+    cli::cli_abort("missing pillow", class = "quartifyr_python_env_invalid", call = NULL)
+  })
+  record <- new.env()
+  .base_render_report_mocks(record)
+  withr::local_options(quartifyr.python_env = withr::local_tempdir())
+
+  expect_error(
+    render_report(
+      fixture$shell_qmd,
+      reference_doc = fixture$reference_doc,
+      standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+      config_yaml = fixture$config_yaml
+    ),
+    class = "quartifyr_python_env_invalid"
+  )
+  expect_null(record$quarto_run)
 })

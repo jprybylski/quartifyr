@@ -4,6 +4,24 @@
 
 ## New features
 
+* One existing Python environment can now serve both passes with no pyro, no
+  project `.venv` and no network (#85). With a `python_env`
+  (`options(quartifyr.python_env)` or `QUARTIFYR_PYTHON_ENV`),
+  `render_report()` also points reportifyr's pass 2 at it: pyro gets
+  `options(venv_dir)` for the render, and uv gets `UV_PROJECT_ENVIRONMENT` and
+  `UV_NO_SYNC`, so it runs reportifyr's module in that environment and creates
+  no `.venv` and rewrites no `uv.lock`, even in a project that ships both.
+  Previously `python_env` covered only quartifyr's own Python calls and pass 2
+  still needed the project's `.venv`. The environment also needs `pillow`
+  (checked up front). New `initialize_report_project_offline()` creates the
+  report folders, `config.yaml`, `standard_footnotes.yaml` and the
+  `.report_init.json` marker that `reportifyr::initialize_report_project()`
+  makes, without calling pyro or uv (that function installs uv and runs
+  `uv lock`/`uv sync` against PyPI); it leaves what exists alone. uv itself
+  must still be installed, since reportifyr runs it for every call, but it is
+  never asked to sync, resolve or download. The `offline-pipeline` CI job now
+  also sets up and renders a fresh copy of the demo with only `python_env`,
+  under `unshare --net`, and fails if a `.venv` appears or `uv.lock` changes.
 * `render_report(soffice_bin = )` / `render.R --soffice-bin <path>` name the
   LibreOffice executable for `--recalculate-fields` and
   `--resolve-same-page-crossrefs`, falling back to `QUARTIFYR_SOFFICE_BIN`

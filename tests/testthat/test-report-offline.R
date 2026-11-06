@@ -1,0 +1,184 @@
+# The pyro-free project setup and the one-environment-for-both-passes wiring
+# (#85). Nothing here needs the network, uv or a Python interpreter.
+
+.forbid_pyro <- function(env = parent.frame()) {
+  boom <- function(...) stop("pyro was called; this must not reach for uv or the network")
+  local_mocked_bindings(
+    initialize_python = boom, write_group_to_pyproject = boom, get_uv_path = boom,
+    .package = "pyro", .env = env
+  )
+}
+
+test_that("initialize_report_project_offline() creates the folders, config and marker without pyro", {
+  skip_if_not_installed("reportifyr")
+  .forbid_pyro()
+  project <- withr::local_tempdir()
+
+  suppressMessages(initialize_report_project_offline(project))
+
+  for (dir in c("draft", "final", "scripts", "shell")) {
+    expect_true(file.exists(file.path(project, "report", dir, "readme.txt")), info = dir)
+  }
+  for (dir in c("figures", "tables", "listings")) {
+    expect_true(dir.exists(file.path(project, "OUTPUTS", dir)), info = dir)
+  }
+  expect_true(file.exists(file.path(project, "report", "config.yaml")))
+  expect_true(file.exists(file.path(project, "report", "standard_footnotes.yaml")))
+
+  # Nothing pyro or uv would have made.
+  expect_false(any(file.exists(file.path(project, c(".venv", "pyproject.toml", "uv.lock")))))
+
+  marker <- jsonlite::fromJSON(file.path(project, ".report_init.json"))
+  expect_setequal(names(marker), c("creation_timestamp", "last_modified", "user", "config", "venv_dir"))
+  expect_identical(marker$venv_dir, ".")
+  expect_identical(marker$config, yaml::read_yaml(file.path(project, "report", "config.yaml")))
+
+  # What the project checks and reportifyr itself look for.
+  expect_null(.check_init_marker(project))
+})
+
+test_that("the marker has the same fields as the one reportifyr writes", {
+  demo_marker <- file.path(test_path("..", "..", "examples", "demo-report"), ".report_init.json")
+  skip_if_not(file.exists(demo_marker), "no reportifyr-written marker to compare with")
+  project <- withr::local_tempdir()
+  skip_if_not_installed("reportifyr")
+  suppressMessages(initialize_report_project_offline(project))
+  expect_identical(
+    names(jsonlite::fromJSON(file.path(project, ".report_init.json"))),
+    names(jsonlite::fromJSON(demo_marker))
+  )
+})
+
+test_that("initialize_report_project_offline() leaves what exists alone, so a second run changes nothing", {
+  skip_if_not_installed("reportifyr")
+  .forbid_pyro()
+  project <- withr::local_tempdir()
+  suppressMessages(initialize_report_project_offline(project))
+  writeLines("key: mine", file.path(project, "report", "config.yaml"))
+  writeLines("my readme", file.path(project, "report", "draft", "readme.txt"))
+  marker_before <- readLines(file.path(project, ".report_init.json"))
+
+  suppressMessages(initialize_report_project_offline(project))
+
+  expect_identical(readLines(file.path(project, "report", "config.yaml")), "key: mine")
+  expect_identical(readLines(file.path(project, "report", "draft", "readme.txt")), "my readme")
+  expect_identical(readLines(file.path(project, ".report_init.json")), marker_before)
+})
+
+test_that("custom folder names are honoured, in the config and in the marker's name", {
+  skip_if_not_installed("reportifyr")
+  project <- withr::local_tempdir()
+  suppressMessages(initialize_report_project_offline(project, report_dir_name = "docs", outputs_dir_name = "OUT"))
+
+  expect_true(dir.exists(file.path(project, "OUT", "figures")))
+  config <- yaml::read_yaml(file.path(project, "docs", "config.yaml"))
+  expect_identical(config$report_dir_name, "docs")
+  expect_identical(config$outputs_dir_name, "OUT")
+  expect_true(file.exists(file.path(project, ".docs_init.json")))
+  expect_null(.check_init_marker(project))
+})
+
+test_that("initialize_report_project_offline() verifies a python_env for reportifyr's modules", {
+  skip_if_not_installed("reportifyr")
+  project <- withr::local_tempdir()
+  seen <- NULL
+  local_mocked_bindings(.verify_python_env = function(env, modules = NULL) {
+    seen <<- list(env = env, modules = names(modules))
+    "python"
+  })
+  suppressMessages(initialize_report_project_offline(project, python_env = "/opt/env"))
+  expect_identical(seen$env, "/opt/env")
+  expect_setequal(seen$modules, c("docx", "yaml", "PIL"))
+
+  local_mocked_bindings(.verify_python_env = function(...) {
+    cli::cli_abort("missing pillow", class = "quartifyr_python_env_invalid", call = NULL)
+  })
+  other <- withr::local_tempdir()
+  expect_error(
+    initialize_report_project_offline(other, python_env = "/opt/env"),
+    class = "quartifyr_python_env_invalid"
+  )
+  expect_false(file.exists(file.path(other, ".report_init.json"))) # nothing created for a bad env
+})
+
+# --- Pointing pass 2 at the python_env ------------------------------------------
+
+test_that(".python_env_venv() accepts a venv or a project directory holding a .venv", {
+  base <- withr::local_tempdir()
+  venv <- .make_venv(base, "envs-elsewhere")
+  expect_identical(.python_env_venv(venv), venv)
+
+  project <- withr::local_tempdir()
+  nested <- .make_venv(project)
+  expect_identical(.python_env_venv(project), nested)
+})
+
+test_that(".python_env_wiring() uses the .venv's parent directly and exports the uv settings", {
+  project <- withr::local_tempdir()
+  venv <- .make_venv(project)
+
+  wiring <- .python_env_wiring(venv)
+
+  expect_identical(wiring$options$venv_dir, project)
+  expect_identical(wiring$env[["UV_PROJECT_ENVIRONMENT"]], venv)
+  expect_identical(wiring$env[["UV_NO_SYNC"]], "1")
+  # pyro's VIRTUAL_ENV for this is <venv_dir>/.venv, i.e. the environment itself.
+  expect_identical(file.path(wiring$options$venv_dir, ".venv"), venv)
+})
+
+test_that(".python_env_wiring() exposes a venv with another name through a .venv symlink", {
+  skip_on_os("windows")
+  base <- withr::local_tempdir()
+  venv <- .make_venv(base, "report-env")
+
+  # The temporary directory is tied to the frame that asked for it.
+  wiring <- (function() .python_env_wiring(venv))()
+  expect_false(dir.exists(wiring$options$venv_dir))
+
+  inside <- NULL
+  (function() {
+    wiring <- .python_env_wiring(venv)
+    linked <- file.path(wiring$options$venv_dir, ".venv")
+    inside <<- list(
+      dir = wiring$options$venv_dir,
+      exists = dir.exists(linked),
+      same = identical(normalizePath(linked), normalizePath(venv)),
+      cfg = file.exists(file.path(linked, "pyvenv.cfg")),
+      uv = wiring$env[["UV_PROJECT_ENVIRONMENT"]]
+    )
+  })()
+  expect_true(inside$exists)
+  expect_true(inside$same)
+  expect_true(inside$cfg)
+  expect_identical(inside$uv, venv)
+  expect_false(dir.exists(inside$dir))
+})
+
+test_that(".use_python_env_for_pass2() applies for the caller's frame, then restores", {
+  .mock_python_env()
+  project <- withr::local_tempdir()
+  venv <- .make_venv(project)
+  withr::local_options(venv_dir = NULL, quartifyr.python_env = venv)
+  withr::local_envvar(UV_PROJECT_ENVIRONMENT = NA, UV_NO_SYNC = NA)
+
+  inside <- (function() {
+    .use_python_env_for_pass2()
+    list(
+      venv_dir = getOption("venv_dir"),
+      env = Sys.getenv(c("UV_PROJECT_ENVIRONMENT", "UV_NO_SYNC"), unset = "<unset>")
+    )
+  })()
+
+  expect_identical(inside$venv_dir, project)
+  expect_identical(unname(inside$env), c(venv, "1"))
+  expect_null(getOption("venv_dir"))
+  expect_identical(Sys.getenv("UV_NO_SYNC", "<unset>"), "<unset>")
+})
+
+test_that(".use_python_env_for_pass2() does nothing without a python_env", {
+  withr::local_options(venv_dir = NULL, quartifyr.python_env = NULL)
+  withr::local_envvar(QUARTIFYR_PYTHON_ENV = NA, UV_PROJECT_ENVIRONMENT = NA)
+  expect_null(.use_python_env_for_pass2())
+  expect_null(getOption("venv_dir"))
+  expect_identical(Sys.getenv("UV_PROJECT_ENVIRONMENT", "<unset>"), "<unset>")
+})

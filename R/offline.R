@@ -92,6 +92,12 @@
 # distribution that provides each module.
 .required_python_modules <- c(docx = "python-docx", yaml = "pyyaml", quartifyr_styling = "quartifyr_styling")
 
+# What reportifyr's pass 2 imports on top of the bundled `reportipyr` package
+# (which it puts on PYTHONPATH itself): the same two, plus Pillow for figures.
+# quartifyr_styling isn't needed by reportifyr, but the bundled source is on
+# the path whenever quartifyr runs it.
+.reportifyr_python_modules <- c(docx = "python-docx", yaml = "pyyaml", PIL = "pillow")
+
 # PYTHONPATH for running the bundled quartifyr_styling source (inst/python)
 # with an interpreter that doesn't have it installed.
 .python_src <- function() {
@@ -114,11 +120,11 @@
 # Checks that `env` provides every module quartifyr needs, naming what is
 # missing. quartifyr_styling counts as present because the bundled source is
 # put on PYTHONPATH. Returns the interpreter path.
-.verify_python_env <- function(env) {
+.verify_python_env <- function(env, modules = .required_python_modules) {
   python <- .python_exe(env)
   probe <- paste(
     "import importlib.util",
-    sprintf("mods = %s", paste0("[", paste0("'", names(.required_python_modules), "'", collapse = ", "), "]")),
+    sprintf("mods = %s", paste0("[", paste0("'", names(modules), "'", collapse = ", "), "]")),
     "print(','.join(m for m in mods if importlib.util.find_spec(m) is None))",
     sep = "\n"
   )
@@ -135,7 +141,7 @@
   }
   missing <- Filter(nzchar, strsplit(trimws(res$stdout), ",", fixed = TRUE)[[1]])
   if (length(missing) > 0) {
-    packages <- unname(.required_python_modules[missing])
+    packages <- unname(modules[missing])
     cli::cli_abort(
       c(
         "x" = "The Python environment {.path {env}} is missing required module{?s}: {.val {missing}}.",

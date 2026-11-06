@@ -250,6 +250,10 @@ render_report <- function(
     )
   }
 
+  # A pre-provisioned python_env serves both passes: point pyro (reportifyr's
+  # pass 2) and uv at it for the whole render. See R/python-env-pass2.R.
+  .use_python_env_for_pass2()
+
   if (!is.numeric(quarto_timeout) || length(quarto_timeout) != 1 || is.na(quarto_timeout) || quarto_timeout <= 0) {
     stop("quarto_timeout must be a single positive number of seconds (or Inf).")
   }
