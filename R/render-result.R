@@ -238,7 +238,7 @@
 
 # Tool versions that shaped the output. A version that can't be determined is
 # NULL (null in the JSON) rather than missing, so consumers see it was asked.
-.tool_versions <- function(quarto_command) {
+.tool_versions <- function(quarto_command, soffice_command = NULL) {
   pkg_version <- function(pkg) {
     tryCatch(as.character(utils::packageVersion(pkg)), error = function(e) NULL)
   }
@@ -255,7 +255,9 @@
     reportifyr = pkg_version("reportifyr"),
     quarto = quarto,
     quartifyr_styling = .styling_version(),
-    r = as.character(getRversion())
+    r = as.character(getRversion()),
+    # Only asked when a LibreOffice step was requested (NULL otherwise).
+    libreoffice = if (is.null(soffice_command)) NULL else .soffice_info(soffice_command)
   )
 }
 

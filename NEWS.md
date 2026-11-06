@@ -2,6 +2,18 @@
 
 # quartifyr (development version)
 
+## New features
+
+* `render_report(soffice_bin = )` / `render.R --soffice-bin <path>` name the
+  LibreOffice executable for `--recalculate-fields` and
+  `--resolve-same-page-crossrefs`, falling back to `QUARTIFYR_SOFFICE_BIN`
+  and then `soffice` on `PATH` (the same order as `quarto_bin`). The styling
+  CLI's two LibreOffice subcommands and `styling_recalculate_fields()` /
+  `styling_resolve_same_page_crossrefs()` take it too. A missing or
+  non-executable path fails before the render starts, and the result's
+  `versions$libreoffice` records the resolved path and `soffice --version`
+  of the one that ran (#83).
+
 ## Bug fixes
 
 * The two headless-LibreOffice steps (`--recalculate-fields`,

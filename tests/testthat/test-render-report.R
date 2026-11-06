@@ -358,14 +358,21 @@ test_that("also runs finalize_document() and returns a final path for status = '
   )
 }
 
+# LibreOffice itself isn't needed by these tests (the steps are mocked), but
+# render_report() checks the executable exists before rendering.
+.mock_soffice_present <- function(.env = parent.frame()) {
+  local_mocked_bindings(.resolve_soffice = function(command) command, .env = .env)
+}
+
 test_that("recalculate_fields = TRUE runs styling_recalculate_fields() on each produced docx", {
   fixture <- .render_report_fixture()
   record <- new.env()
   .base_render_report_mocks(record)
+  .mock_soffice_present()
 
   recalculated <- character(0)
   local_mocked_bindings(
-    styling_recalculate_fields = function(docx, timeout = 120) {
+    styling_recalculate_fields = function(docx, timeout = 120, soffice_bin = NULL) {
       recalculated <<- c(recalculated, docx)
       invisible(docx)
     }
@@ -405,9 +412,10 @@ test_that("a failing styling_recalculate_fields() only warns, and the render sti
   fixture <- .render_report_fixture()
   record <- new.env()
   .base_render_report_mocks(record)
+  .mock_soffice_present()
 
   local_mocked_bindings(
-    styling_recalculate_fields = function(docx, timeout = 120) stop("boom")
+    styling_recalculate_fields = function(docx, timeout = 120, soffice_bin = NULL) stop("boom")
   )
 
   result <- NULL
@@ -429,10 +437,11 @@ test_that("resolve_same_page_crossrefs = TRUE runs styling_resolve_same_page_cro
   fixture <- .render_report_fixture()
   record <- new.env()
   .base_render_report_mocks(record)
+  .mock_soffice_present()
 
   resolved <- character(0)
   local_mocked_bindings(
-    styling_resolve_same_page_crossrefs = function(docx, timeout = 120) {
+    styling_resolve_same_page_crossrefs = function(docx, timeout = 120, soffice_bin = NULL) {
       resolved <<- c(resolved, docx)
       invisible(docx)
     }
@@ -454,9 +463,10 @@ test_that("a failing styling_resolve_same_page_crossrefs() only warns, and the r
   fixture <- .render_report_fixture()
   record <- new.env()
   .base_render_report_mocks(record)
+  .mock_soffice_present()
 
   local_mocked_bindings(
-    styling_resolve_same_page_crossrefs = function(docx, timeout = 120) stop("boom")
+    styling_resolve_same_page_crossrefs = function(docx, timeout = 120, soffice_bin = NULL) stop("boom")
   )
 
   result <- NULL
@@ -1216,4 +1226,128 @@ test_that("offline, an ordinary pass-2 failure is not relabelled", {
 
   expect_false(inherits(err, "quartifyr_offline_failure"))
   expect_match(conditionMessage(err), "python exploded")
+})
+
+# --- soffice_bin / QUARTIFYR_SOFFICE_BIN -------------------------------------
+
+test_that("soffice_bin wins over QUARTIFYR_SOFFICE_BIN, which wins over PATH", {
+  seen <- character(0)
+  local_mocked_bindings(
+    styling_recalculate_fields = function(docx, timeout = 120, soffice_bin = NULL) {
+      seen <<- c(seen, soffice_bin)
+      invisible(docx)
+    },
+    .resolve_soffice = function(command) command
+  )
+
+  withr::with_envvar(c(QUARTIFYR_SOFFICE_BIN = "/env/soffice"), {
+    .run_render(.render_report_fixture(), recalculate_fields = TRUE, soffice_bin = "/arg/soffice")
+    .run_render(.render_report_fixture(), recalculate_fields = TRUE)
+  })
+  withr::with_envvar(c(QUARTIFYR_SOFFICE_BIN = NA), {
+    .run_render(.render_report_fixture(), recalculate_fields = TRUE)
+  })
+
+  expect_identical(seen, c("/arg/soffice", "/env/soffice", "soffice"))
+})
+
+test_that("both LibreOffice steps get the same executable", {
+  seen <- list()
+  local_mocked_bindings(
+    styling_recalculate_fields = function(docx, timeout = 120, soffice_bin = NULL) {
+      seen$recalculate <<- soffice_bin
+      invisible(docx)
+    },
+    styling_resolve_same_page_crossrefs = function(docx, timeout = 120, soffice_bin = NULL) {
+      seen$crossrefs <<- soffice_bin
+      invisible(docx)
+    },
+    .resolve_soffice = function(command) command
+  )
+  .run_render(
+    .render_report_fixture(),
+    recalculate_fields = TRUE, resolve_same_page_crossrefs = TRUE, soffice_bin = "/opt/lo/soffice"
+  )
+  expect_identical(seen, list(crossrefs = "/opt/lo/soffice", recalculate = "/opt/lo/soffice"))
+})
+
+test_that("an unusable LibreOffice fails before the render starts and touches nothing", {
+  fixture <- .render_report_fixture()
+  live <- file.path(fixture$project_dir, "report", "draft", "report-draft.docx")
+  dir.create(dirname(live), recursive = TRUE)
+  writeLines("previous render", live)
+  record <- new.env()
+  .base_render_report_mocks(record)
+
+  expect_error(
+    render_report(
+      fixture$shell_qmd,
+      reference_doc = fixture$reference_doc,
+      standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+      config_yaml = fixture$config_yaml,
+      recalculate_fields = TRUE,
+      soffice_bin = file.path(fixture$project_dir, "no", "such", "soffice")
+    ),
+    "LibreOffice executable not found"
+  )
+  expect_null(record$quarto_run)
+  expect_true(file.exists(live))
+  expect_false(dir.exists(file.path(fixture$project_dir, "report", ".previous")))
+})
+
+test_that("an unusable LibreOffice is ignored when no LibreOffice step is requested", {
+  fixture <- .render_report_fixture()
+  result <- .run_render(fixture, soffice_bin = "/no/such/soffice")
+  expect_null(result$versions$libreoffice)
+})
+
+test_that("a malformed soffice_bin is rejected", {
+  fixture <- .render_report_fixture()
+  expect_error(render_report(fixture$shell_qmd, soffice_bin = ""), "soffice_bin")
+  expect_error(render_report(fixture$shell_qmd, soffice_bin = c("a", "b")), "soffice_bin")
+  expect_error(render_report(fixture$shell_qmd, soffice_bin = 1), "soffice_bin")
+})
+
+test_that("the render result records which LibreOffice ran", {
+  local_mocked_bindings(
+    styling_recalculate_fields = function(docx, timeout = 120, soffice_bin = NULL) invisible(docx),
+    .resolve_soffice = function(command) paste0("/resolved/", command),
+    .soffice_info = function(command) list(path = .resolve_soffice(command), version = "LibreOffice 26.2.5.2 abc")
+  )
+  result <- .run_render(.render_report_fixture(), recalculate_fields = TRUE, soffice_bin = "soffice")
+  expect_identical(result$versions$libreoffice$path, "/resolved/soffice")
+  expect_identical(result$versions$libreoffice$version, "LibreOffice 26.2.5.2 abc")
+
+  json <- jsonlite::fromJSON(as.character(.render_result_json(result)))
+  expect_identical(json$versions$libreoffice$path, "/resolved/soffice")
+})
+
+test_that(".check_soffice() and .resolve_soffice() handle paths, bare names and non-executables", {
+  dir <- withr::local_tempdir()
+  script <- file.path(dir, "soffice")
+  writeLines("#!/bin/sh", script)
+
+  expect_s3_class(.check_soffice(file.path(dir, "missing")), "data.frame")
+  expect_s3_class(.check_soffice("definitely-not-a-real-soffice"), "data.frame")
+  expect_equal(.resolve_soffice("definitely-not-a-real-soffice"), "")
+
+  skip_on_os("windows")
+  Sys.chmod(script, "644")
+  expect_s3_class(.check_soffice(script), "data.frame")
+  Sys.chmod(script, "755")
+  expect_null(.check_soffice(script))
+  expect_identical(.resolve_soffice(script), script)
+  expect_identical(.resolve_soffice(dir), "") # a directory isn't an executable
+})
+
+test_that(".soffice_info() reports the first line of `soffice --version`", {
+  skip_on_os("windows")
+  dir <- withr::local_tempdir()
+  script <- file.path(dir, "soffice")
+  writeLines(c("#!/bin/sh", "echo 'LibreOffice 26.2.5.2 deadbeef'", "echo second line"), script)
+  Sys.chmod(script, "755")
+  info <- .soffice_info(script)
+  expect_identical(info$path, script)
+  expect_identical(info$version, "LibreOffice 26.2.5.2 deadbeef")
+  expect_null(.soffice_info(file.path(dir, "missing")))
 })

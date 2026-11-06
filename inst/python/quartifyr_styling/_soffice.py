@@ -33,13 +33,20 @@ class SofficeTimeoutError(SofficeError):
     """LibreOffice did not finish within the timeout and was force-killed."""
 
 
-def resolve_soffice(soffice_bin: str | os.PathLike[str] = "soffice") -> str:
+SOFFICE_BIN_ENV = "QUARTIFYR_SOFFICE_BIN"
+
+
+def resolve_soffice(soffice_bin: str | os.PathLike[str] | None = None) -> str:
     """Return the full path of the LibreOffice executable to run.
 
     ``soffice_bin`` is either a bare command name looked up on ``PATH`` or a
-    path to the executable. Raises :class:`SofficeNotFoundError` with one
-    clear message for a missing or non-executable target.
+    path to the executable; ``None`` means ``$QUARTIFYR_SOFFICE_BIN`` if set,
+    else ``soffice`` on ``PATH`` (the same order the R side uses). Raises
+    :class:`SofficeNotFoundError` with one clear message for a missing or
+    non-executable target.
     """
+    if soffice_bin is None:
+        soffice_bin = os.environ.get(SOFFICE_BIN_ENV) or "soffice"
     requested = os.fspath(soffice_bin)
     found = shutil.which(requested)
     if found is None:

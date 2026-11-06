@@ -181,6 +181,27 @@
             "string",
             "null"
           ]
+        },
+        "libreoffice": {
+          "description": "The LibreOffice that ran the --recalculate-fields / --resolve-same-page-crossrefs steps: its resolved path and `soffice --version` line. null when neither step was requested or LibreOffice could not be found.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "version": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "path"
+          ]
         }
       }
     },

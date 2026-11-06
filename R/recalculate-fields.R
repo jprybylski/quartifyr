@@ -8,6 +8,9 @@
 #'
 #' @param docx Path to the docx to recalculate (modified in place).
 #' @param timeout Timeout in seconds (default `120`).
+#' @param soffice_bin Path to the LibreOffice executable. `NULL` (default)
+#'   uses the `QUARTIFYR_SOFFICE_BIN` environment variable if set, else
+#'   `soffice` on `PATH`.
 #' @return The docx path (invisibly).
 #' @examples
 #' \dontrun{
@@ -16,10 +19,11 @@
 #' styling_recalculate_fields("report/final/report-final.docx")
 #' }
 #' @export
-styling_recalculate_fields <- function(docx, timeout = 120) {
+styling_recalculate_fields <- function(docx, timeout = 120, soffice_bin = NULL) {
   result <- .run_quartifyr_styling_cli(c(
     "recalculate-fields",
     "--docx", docx,
+    if (!is.null(soffice_bin)) c("--soffice-bin", soffice_bin),
     "--timeout", as.character(as.integer(timeout))
   ))
   invisible(result$path)

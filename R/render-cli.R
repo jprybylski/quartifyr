@@ -17,7 +17,7 @@
 
 .render_cli_value_options <- c(
   "project", "shell", "status", "reference-doc", "style", "override",
-  "quarto-timeout", "quarto-bin"
+  "quarto-timeout", "quarto-bin", "soffice-bin"
 )
 .render_cli_flag_options <- c("json", "strict", "offline", "recalculate-fields", "resolve-same-page-crossrefs", "help")
 
@@ -42,6 +42,8 @@
     "                                  Default: on when quartifyr.offline or UV_OFFLINE is set.",
     "  --quarto-timeout <seconds>      Default 600; Inf disables.",
     "  --quarto-bin <path>             Quarto executable (default: QUARTO_PATH, then PATH).",
+    "  --soffice-bin <path>            LibreOffice executable for the two LibreOffice steps",
+    "                                  (default: QUARTIFYR_SOFFICE_BIN, then PATH).",
     "  --reference-doc <file>          docx reference-doc.",
     "  --style <file>, --override <file>   Style YAML paths (see render_report()).",
     "  --recalculate-fields            Run the headless-LibreOffice field recalculation.",
@@ -136,6 +138,7 @@
   if (!is.null(parsed$style)) call_args$style <- parsed$style
   if (!is.null(parsed$override)) call_args$override <- parsed$override
   if (!is.null(parsed$`quarto-bin`)) call_args$quarto_bin <- parsed$`quarto-bin`
+  if (!is.null(parsed$`soffice-bin`)) call_args$soffice_bin <- parsed$`soffice-bin`
   if (!is.null(parsed$`quarto-timeout`)) {
     timeout <- suppressWarnings(as.numeric(parsed$`quarto-timeout`))
     if (is.na(timeout)) {

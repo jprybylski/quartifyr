@@ -4,12 +4,16 @@
 \alias{styling_recalculate_fields}
 \title{Recalculate a docx's Word fields (ToC page numbers/entries) in place}
 \usage{
-styling_recalculate_fields(docx, timeout = 120)
+styling_recalculate_fields(docx, timeout = 120, soffice_bin = NULL)
 }
 \arguments{
 \item{docx}{Path to the docx to recalculate (modified in place).}
 
 \item{timeout}{Timeout in seconds (default \code{120}).}
+
+\item{soffice_bin}{Path to the LibreOffice executable. \code{NULL} (default)
+uses the \code{QUARTIFYR_SOFFICE_BIN} environment variable if set, else
+\code{soffice} on \code{PATH}.}
 }
 \value{
 The docx path (invisibly).

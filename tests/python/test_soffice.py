@@ -167,3 +167,56 @@ def test_rmtree_retrying_gives_up_quietly(tmp_path, monkeypatch):
     ))
     # Must not raise even though every removal attempt fails.
     _soffice.rmtree_retrying(target, attempts=2, delay=0)
+
+
+@posix_only
+def test_resolve_soffice_prefers_argument_then_env_then_path(tmp_path, monkeypatch):
+    from_env = _fake_soffice(tmp_path / "env-soffice", "exit 0\n")
+    from_arg = _fake_soffice(tmp_path / "arg-soffice", "exit 0\n")
+    monkeypatch.setenv("QUARTIFYR_SOFFICE_BIN", str(from_env))
+    assert Path(resolve_soffice(from_arg)) == from_arg
+    assert Path(resolve_soffice()) == from_env
+
+    # With the variable unset, `soffice` is looked up on PATH.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    on_path = _fake_soffice(bin_dir / "soffice", "exit 0\n")
+    monkeypatch.delenv("QUARTIFYR_SOFFICE_BIN")
+    monkeypatch.setenv("PATH", str(bin_dir))
+    assert Path(resolve_soffice()) == on_path
+
+
+def test_a_bad_env_var_is_reported_rather_than_falling_back_to_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("QUARTIFYR_SOFFICE_BIN", str(tmp_path / "gone"))
+    with pytest.raises(SofficeNotFoundError, match="gone"):
+        resolve_soffice()
+
+
+@posix_only
+@pytest.mark.parametrize("subcommand", ["recalculate-fields", "resolve-same-page-crossrefs"])
+def test_cli_soffice_bin_reaches_the_launcher(tmp_path, subcommand):
+    from quartifyr_styling.cli import main
+
+    seen = tmp_path / "seen.txt"
+    fake = _fake_soffice(tmp_path / "soffice", f'echo "$0" > "{seen}"\nexit 3\n')
+    docx_path = tmp_path / "doc.docx"
+    if subcommand == "resolve-same-page-crossrefs":
+        # Without a same-page marker that step returns early and never starts LibreOffice.
+        from test_same_page_crossrefs import _build_docx_with_marked_crossref
+
+        _build_docx_with_marked_crossref(docx_path)
+    else:
+        docx_path.write_bytes(b"not a real docx, just needs to exist")
+    code = main(["--json", subcommand, "--docx", str(docx_path), "--soffice-bin", str(fake), "--timeout", "30"])
+    assert code != 0  # the fake exits 3, which both steps report as a failure
+    assert seen.read_text().strip() == str(fake)
+
+
+def test_cli_reports_a_missing_soffice_bin_clearly(tmp_path, capsys):
+    from quartifyr_styling.cli import main
+
+    docx_path = tmp_path / "doc.docx"
+    docx_path.write_bytes(b"x")
+    code = main(["--json", "recalculate-fields", "--docx", str(docx_path), "--soffice-bin", str(tmp_path / "nope")])
+    assert code != 0
+    assert "does not exist or is not executable" in capsys.readouterr().err

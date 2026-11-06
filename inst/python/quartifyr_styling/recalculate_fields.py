@@ -115,7 +115,7 @@ def _seed_profile(profile_dir: Path) -> None:
 def recalculate_fields(
     docx_path: str | Path,
     *,
-    soffice_bin: str = "soffice",
+    soffice_bin: str | None = None,
     timeout_seconds: int = 120,
 ) -> Path:
     """Recalculate ``docx_path``'s Word ToC (page numbers, entries) in place via LibreOffice.

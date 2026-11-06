@@ -113,6 +113,12 @@
 #'   `PATH`. When given, it is also exported as `QUARTO_PATH` for the
 #'   duration of the call, so the `quarto` R package's own helpers
 #'   (`quarto_inspect()`, `quarto_list_extensions()`) use the same binary.
+#' @param soffice_bin Path to the LibreOffice executable used by
+#'   `recalculate_fields` and `resolve_same_page_crossrefs`. `NULL` (default)
+#'   uses the `QUARTIFYR_SOFFICE_BIN` environment variable if set, else
+#'   `soffice` on `PATH`. When either step is requested the executable is
+#'   checked before anything is rendered, and the path and `soffice
+#'   --version` that ran are recorded in the result's `versions$libreoffice`.
 #'
 #' @return An object of class `quartifyr_render_result`, a list with:
 #' \describe{
@@ -198,6 +204,7 @@ render_report <- function(
   resolve_same_page_crossrefs = FALSE,
   quarto_timeout = 600,
   quarto_bin = NULL,
+  soffice_bin = NULL,
   strict = FALSE,
   offline = NULL
 ) {
@@ -231,6 +238,8 @@ render_report <- function(
     }
     withr::local_envvar(QUARTO_PATH = quarto_bin)
   }
+  .check_soffice_bin_arg(soffice_bin)
+  soffice_command <- .soffice_command(soffice_bin)
   quarto_command <- if (!is.null(quarto_bin)) {
     quarto_bin
   } else if (nzchar(Sys.getenv("QUARTO_PATH"))) {
@@ -308,6 +317,10 @@ render_report <- function(
   }
   .stop_on_finding(.check_reference_doc(reference_doc_arg))
   .stop_on_finding(.check_footnotes_yaml(standard_footnotes_yaml))
+  uses_libreoffice <- isTRUE(recalculate_fields) || isTRUE(resolve_same_page_crossrefs)
+  if (uses_libreoffice) {
+    .stop_on_finding(.check_soffice(soffice_command))
+  }
 
   # Fail fast with an actionable message (which Quarto extension is
   # missing, and the exact quarto::quarto_add_extension() call to fix it)
@@ -485,7 +498,10 @@ render_report <- function(
   run_libreoffice_step <- function(step_fn, step_name) {
     for (output_path in produced) {
       tryCatch(
-        withr::with_dir(project_dir, step_fn(output_path, timeout = 150)),
+        withr::with_dir(
+          project_dir,
+          step_fn(output_path, timeout = 150, soffice_bin = soffice_command)
+        ),
         error = function(e) {
           msg <- paste0(step_name, "() failed on ", output_path, ": ", conditionMessage(e))
           warning(msg, call. = FALSE)
@@ -514,7 +530,7 @@ render_report <- function(
     inputs = .input_table(
       shell_qmd, figures_path, tables_path, standard_footnotes_yaml, config_yaml, reference_doc_used
     ),
-    versions = .tool_versions(quarto_command),
+    versions = .tool_versions(quarto_command, if (uses_libreoffice) soffice_command),
     started_at = .timestamp_utc(started_at),
     finished_at = .timestamp_utc()
   )

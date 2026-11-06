@@ -188,7 +188,7 @@ def _seed_profile(profile_dir: Path, *, pairs_path: Path, results_path: Path) ->
 def resolve_same_page_crossrefs(
     docx_path: str | Path,
     *,
-    soffice_bin: str = "soffice",
+    soffice_bin: str | None = None,
     timeout_seconds: int = 120,
 ) -> Path:
     """Resolves every ``crossref-hyperlinks: "same-page"`` marker in

@@ -19,6 +19,7 @@ render_report(
   resolve_same_page_crossrefs = FALSE,
   quarto_timeout = 600,
   quarto_bin = NULL,
+  soffice_bin = NULL,
   strict = FALSE,
   offline = NULL
 )
@@ -107,6 +108,12 @@ the \code{QUARTO_PATH} environment variable if set, else \code{quarto} on
 \code{PATH}. When given, it is also exported as \code{QUARTO_PATH} for the
 duration of the call, so the \code{quarto} R package's own helpers
 (\code{quarto_inspect()}, \code{quarto_list_extensions()}) use the same binary.}
+
+\item{soffice_bin}{Path to the LibreOffice executable used by
+\code{recalculate_fields} and \code{resolve_same_page_crossrefs}. \code{NULL} (default)
+uses the \code{QUARTIFYR_SOFFICE_BIN} environment variable if set, else
+\code{soffice} on \code{PATH}. When either step is requested the executable is
+checked before anything is rendered, and the path and \code{soffice --version} that ran are recorded in the result's \code{versions$libreoffice}.}
 
 \item{strict}{If \code{TRUE}, signal an error of class
 \code{quartifyr_render_incomplete} (carrying the result as \verb{$result}) when

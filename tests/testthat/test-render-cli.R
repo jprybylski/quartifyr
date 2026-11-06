@@ -40,7 +40,8 @@ test_that("options reach render_report() with the right types", {
 
   .run_cli(c(
     "--project", "/p", "--shell", "report.qmd", "--status=final", "--strict",
-    "--quarto-timeout", "30", "--quarto-bin", "/opt/quarto", "--recalculate-fields"
+    "--quarto-timeout", "30", "--quarto-bin", "/opt/quarto", "--recalculate-fields",
+    "--soffice-bin", "/opt/lo/soffice"
   ))
 
   expect_identical(seen$shell_qmd, "/p/report.qmd")
@@ -48,6 +49,7 @@ test_that("options reach render_report() with the right types", {
   expect_true(seen$strict)
   expect_identical(seen$quarto_timeout, 30)
   expect_identical(seen$quarto_bin, "/opt/quarto")
+  expect_identical(seen$soffice_bin, "/opt/lo/soffice")
   expect_true(seen$recalculate_fields)
   expect_false(seen$resolve_same_page_crossrefs)
 })

@@ -63,6 +63,13 @@ error of class `quartifyr_quarto_timeout` whose message includes the tail of
 Quarto's stderr. To use an app-local Quarto instead of the one on `PATH`, pass
 `quarto_bin = "/path/to/quarto"` or set `QUARTO_PATH`.
 
+The two LibreOffice steps (`recalculate_fields`, `resolve_same_page_crossrefs`)
+find `soffice` the same way: `soffice_bin = "/path/to/soffice"`
+(`--soffice-bin`), else `QUARTIFYR_SOFFICE_BIN`, else `PATH`. When either step
+is requested the executable is checked before anything is rendered, and the
+resolved path and its `soffice --version` line are recorded in the result's
+`versions$libreoffice`.
+
 ## What is on disk after a failure
 
 A render that fails, times out or is killed must not leave an earlier render's
@@ -158,8 +165,8 @@ stderr. The exit status is 0 only when the render finished (and, with
 is complete). Any error, including a Quarto failure or
 timeout, prints a JSON object with `status: "error"`, an `errors` array and an
 `error_class`, and exits 1. Bad usage exits 2. Run it with `--help` for the
-remaining options (`--quarto-timeout`, `--quarto-bin`, `--reference-doc`,
-`--recalculate-fields`, ...).
+remaining options (`--quarto-timeout`, `--quarto-bin`, `--soffice-bin`,
+`--reference-doc`, `--recalculate-fields`, ...).
 
 A successful result looks like this:
 
