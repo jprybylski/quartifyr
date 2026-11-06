@@ -808,6 +808,7 @@ test_that("only this run's reportifyr log lines count toward missing_metadata", 
 
 test_that("a failing LibreOffice step still warns, and makes the result not ok", {
   fixture <- .render_report_fixture()
+  .mock_soffice_present()
   local_mocked_bindings(styling_recalculate_fields = function(...) stop("soffice hung"))
 
   expect_warning(

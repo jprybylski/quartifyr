@@ -119,11 +119,12 @@ test_that(".python_env_wiring() uses the .venv's parent directly and exports the
 
   wiring <- .python_env_wiring(venv)
 
-  expect_identical(wiring$options$venv_dir, project)
+  # (Compared as paths: dirname() writes forward slashes, tempdir() on Windows doesn't.)
+  expect_identical(normalizePath(wiring$options$venv_dir), normalizePath(project))
   expect_identical(wiring$env[["UV_PROJECT_ENVIRONMENT"]], venv)
   expect_identical(wiring$env[["UV_NO_SYNC"]], "1")
   # pyro's VIRTUAL_ENV for this is <venv_dir>/.venv, i.e. the environment itself.
-  expect_identical(file.path(wiring$options$venv_dir, ".venv"), venv)
+  expect_identical(normalizePath(file.path(wiring$options$venv_dir, ".venv")), normalizePath(venv))
 })
 
 test_that(".python_env_wiring() exposes a venv with another name through a .venv symlink", {
@@ -169,7 +170,7 @@ test_that(".use_python_env_for_pass2() applies for the caller's frame, then rest
     )
   })()
 
-  expect_identical(inside$venv_dir, project)
+  expect_identical(normalizePath(inside$venv_dir), normalizePath(project))
   expect_identical(unname(inside$env), c(venv, "1"))
   expect_null(getOption("venv_dir"))
   expect_identical(Sys.getenv("UV_NO_SYNC", "<unset>"), "<unset>")
