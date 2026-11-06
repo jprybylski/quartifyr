@@ -15,17 +15,25 @@ from quartifyr_styling import _soffice
 from quartifyr_styling._soffice import (
     SofficeNotFoundError,
     SofficeTimeoutError,
+    SofficeUnavailableError,
     profile_url,
     resolve_soffice,
     run_macro,
+    started_marker_basic,
+    warm_up_profile,
 )
 from quartifyr_styling.recalculate_fields import FieldRecalculationError, recalculate_fields
 
 posix_only = pytest.mark.skipif(sys.platform == "win32", reason="fake soffice is a POSIX shell script")
 
 
-def _fake_soffice(path: Path, body: str) -> Path:
-    path.write_text("#!/bin/sh\n" + body)
+# A real soffice exits after initialising an empty profile when asked to
+# --terminate_after_init; the fakes do the same so warm_up_profile() is quick.
+_WARMUP_EXIT = 'case "$*" in *terminate_after_init*) exit 0;; esac\n'
+
+
+def _fake_soffice(path: Path, body: str, *, warmup: bool = True) -> Path:
+    path.write_text("#!/bin/sh\n" + (_WARMUP_EXIT if warmup else "") + body)
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
     return path
 
@@ -220,3 +228,70 @@ def test_cli_reports_a_missing_soffice_bin_clearly(tmp_path, capsys):
     code = main(["--json", "recalculate-fields", "--docx", str(docx_path), "--soffice-bin", str(tmp_path / "nope")])
     assert code != 0
     assert "does not exist or is not executable" in capsys.readouterr().err
+
+
+@posix_only
+def test_macro_that_never_starts_is_reported_unavailable_without_waiting_for_the_timeout(tmp_path):
+    fake = _fake_soffice(tmp_path / "soffice", "sleep 300\n")
+    profile = tmp_path / "profile"
+    profile.mkdir()
+    started = time.monotonic()
+    with pytest.raises(SofficeUnavailableError, match="unavailable"):
+        run_macro(
+            str(fake),
+            tmp_path / "x.docx",
+            "macro:///Standard.Module1.Go",
+            profile_dir=profile,
+            stderr_path=tmp_path / "err.log",
+            timeout_seconds=120,
+            started_path=tmp_path / "macro-started",
+            start_timeout_seconds=1,
+        )
+    assert time.monotonic() - started < 15
+
+
+@posix_only
+def test_a_macro_that_started_but_runs_long_is_a_timeout_not_unavailable(tmp_path):
+    started = tmp_path / "macro-started"
+    fake = _fake_soffice(tmp_path / "soffice", f'echo started > "{started}"\nsleep 300\n')
+    profile = tmp_path / "profile"
+    profile.mkdir()
+    with pytest.raises(SofficeTimeoutError):
+        run_macro(
+            str(fake),
+            tmp_path / "x.docx",
+            "macro:///Standard.Module1.Go",
+            profile_dir=profile,
+            stderr_path=tmp_path / "err.log",
+            timeout_seconds=3,
+            started_path=started,
+            start_timeout_seconds=1,
+        )
+
+
+@posix_only
+def test_warm_up_runs_before_anything_is_seeded_and_a_failed_warm_up_is_not_fatal(tmp_path):
+    seen = tmp_path / "warmup-saw-basic.txt"
+    profile = tmp_path / "profile"
+    fake = _fake_soffice(
+        tmp_path / "soffice",
+        f'for a in "$@"; do case "$a" in -env:UserInstallation=*) echo "$a" > "{tmp_path}/arg.txt";; esac; done\n'
+        f'[ -d "{profile}/user/basic" ] && echo yes > "{seen}" || echo no > "{seen}"\nexit 0\n',
+        warmup=False,
+    )
+    assert warm_up_profile(str(fake), profile, stderr_path=tmp_path / "warm.log") is True
+    assert seen.read_text().strip() == "no"  # nothing seeded yet when LibreOffice first starts
+    assert profile_url(profile) in (tmp_path / "arg.txt").read_text()
+
+    failing = _fake_soffice(tmp_path / "failing-soffice", "exit 7\n", warmup=False)
+    assert warm_up_profile(str(failing), tmp_path / "p2", stderr_path=tmp_path / "w2.log") is False
+
+    hanging = _fake_soffice(tmp_path / "hanging-soffice", "sleep 300\n", warmup=False)
+    assert warm_up_profile(str(hanging), tmp_path / "p3", stderr_path=tmp_path / "w3.log", timeout_seconds=1) is False
+
+
+def test_started_marker_basic_is_xml_escaped_and_optional():
+    assert started_marker_basic(None) == ""
+    code = started_marker_basic('/tmp/a & "b"/macro-started')
+    assert "&amp;" in code and "&quot;b&quot;" in code
+    assert "For Output" in code

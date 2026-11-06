@@ -34,18 +34,13 @@ target share a page, removing the now-unneeded markers -- happens in
 plain python-docx/lxml, the same well-tested path ``layout.py`` already
 uses.
 
-EXPERIMENTAL / UNRELIABLE, inheriting ``recalculate_fields.py``'s own
-documented headless-LibreOffice flakiness (hangs, silent no-ops, or
-success, observed for that module across repeated runs of the *same*
-document) -- this module drives the identical ``soffice --headless ...
-macro:///...`` mechanism, just a different macro. Not independently
-verified end-to-end in this environment: every attempted run (including of
-the pre-existing ``recalculate_fields.py`` macro, tested for comparison)
-timed out rather than completing, so the Basic ``ViewCursor``/``Bookmarks``
-API calls used here are confirmed well-formed and are the documented,
-standard technique for this job, but have not been observed to actually
-complete against a real document. Treat as experimental until proven
-reliable in your own environment, the same as ``recalculate-fields``.
+EXPERIMENTAL, sharing ``recalculate_fields.py``'s headless-LibreOffice
+launcher (``_soffice.py``): the same profile warm-up that fixed the macOS
+hang, the same heartbeat check that reports a macro that never starts as
+unavailable after 30 seconds, and the same tree kill on timeout. This module
+drives the identical ``soffice --headless ... macro:///...`` mechanism with a
+different macro. Verified on macOS (a real document, repeated and concurrent
+runs); Windows and Linux were not re-tested.
 """
 
 from __future__ import annotations
@@ -62,14 +57,17 @@ from ._soffice import (
     SofficeError,
     SofficeNotFoundError,
     SofficeTimeoutError,
+    SofficeUnavailableError,
     resolve_soffice,
     rmtree_retrying,
     run_macro,
+    started_marker_basic,
+    warm_up_profile,
 )
 
 _MACRO_XBA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE script:module PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "module.dtd">
-<script:module xmlns:script="http://openoffice.org/2000/script" script:name="Module1" script:language="StarBasic" script:moduleType="normal">Sub ReadPages
+<script:module xmlns:script="http://openoffice.org/2000/script" script:name="Module1" script:language="StarBasic" script:moduleType="normal">Sub ReadPages{started}
     Dim oDoc As Object
     oDoc = ThisComponent
 
@@ -173,12 +171,15 @@ def _remove_markers(markers: list[tuple[str, str, object, object, object]]) -> N
                 parent.remove(el)
 
 
-def _seed_profile(profile_dir: Path, *, pairs_path: Path, results_path: Path) -> None:
+def _seed_profile(
+    profile_dir: Path, *, pairs_path: Path, results_path: Path, started_path: Path | None = None
+) -> None:
     standard_dir = profile_dir / "user" / "basic" / "Standard"
     standard_dir.mkdir(parents=True, exist_ok=True)
     macro = _MACRO_XBA_TEMPLATE.format(
         pairs_path=_xml_escape(str(pairs_path)),
         results_path=_xml_escape(str(results_path)),
+        started=started_marker_basic(started_path),
     )
     (standard_dir / "Module1.xba").write_text(macro, encoding="utf-8")
     (standard_dir / "script.xlb").write_text(_SCRIPT_XLB, encoding="utf-8")
@@ -226,7 +227,11 @@ def resolve_same_page_crossrefs(
         )
 
         profile_dir = tmp_dir / "profile"
-        _seed_profile(profile_dir, pairs_path=pairs_path, results_path=results_path)
+        started_path = tmp_dir / "macro-started"
+        # See recalculate_fields.py: the profile is initialised before the
+        # macro goes in, because a pre-seeded fresh profile hangs on macOS.
+        warm_up_profile(soffice, profile_dir, stderr_path=tmp_dir / "soffice-warmup.log")
+        _seed_profile(profile_dir, pairs_path=pairs_path, results_path=results_path, started_path=started_path)
 
         try:
             returncode, stderr_text = run_macro(
@@ -236,7 +241,10 @@ def resolve_same_page_crossrefs(
                 profile_dir=profile_dir,
                 stderr_path=tmp_dir / "soffice-stderr.log",
                 timeout_seconds=timeout_seconds,
+                started_path=started_path,
             )
+        except SofficeUnavailableError as exc:
+            raise SamePageCrossrefError(str(exc)) from None
         except SofficeTimeoutError:
             raise SamePageCrossrefError(
                 f"LibreOffice did not finish within {timeout_seconds}s reading page numbers for "

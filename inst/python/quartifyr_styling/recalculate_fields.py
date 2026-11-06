@@ -23,23 +23,21 @@ plain ``REF``-style cross-reference (e.g. this project's
 ``appendix_crossref`` shortcode) -- those still need a one-time manual
 update in Microsoft Word (Ctrl+A, then F9) after delivery.
 
-EXPERIMENTAL / UNRELIABLE (as of this writing): the underlying ``soffice
---headless ... macro:///...`` invocation has three distinct observed
-failure modes across repeated real-world runs -- (1) hangs indefinitely
-(reproduced in a sandboxed environment *and* a plain native macOS
-terminal, ruling out sandboxing as the cause), (2) exits cleanly within
-seconds without the macro having actually run at all (file untouched), and
-(3) works correctly end-to-end, ToC actually recalculated. All three were
-observed against the *same* document across different runs, so this isn't
-document-specific either. This module now defends against (1) by killing
-the whole process group on timeout (not just the tracked PID, which can
-leave an orphaned ``soffice.bin`` worker behind) and against (2) by
-verifying the ToC placeholder actually disappeared rather than trusting
-the exit code -- but the underlying non-determinism itself is unresolved
-and looks like a real LibreOffice/macOS interaction bug outside
-quartifyr's control. Treat this feature as experimental until proven
-reliable in your own environment; it fails loudly and cleanly either way
-(no silent false "success").
+EXPERIMENTAL. The underlying ``soffice --headless ... macro:///...``
+invocation was observed to fail in three ways across real-world runs of the
+same document: it hung, it exited cleanly within seconds without the macro
+having run (file untouched), or it worked. The macOS hang (LibreOffice
+26.2.x, every run) has a found cause: a fresh profile that already contains
+the seeded ``user/basic`` library when LibreOffice first starts never runs
+the macro. :func:`._soffice.warm_up_profile` therefore starts LibreOffice
+once on the empty profile and the macro files are written afterwards, after
+which the same command finishes in about two seconds. A macro that still
+never starts is detected through a heartbeat file the macro writes first and
+reported as unavailable after 30 seconds instead of waiting out the full
+timeout; a silent no-op is caught by verifying the ToC placeholder actually
+disappeared rather than trusting the exit code. A timeout kills the whole
+process tree (a plain ``proc.kill()`` can leave ``soffice.bin`` behind).
+Verified on macOS only; treat the feature as experimental elsewhere.
 """
 
 from __future__ import annotations
@@ -51,14 +49,17 @@ from ._soffice import (
     SofficeError,
     SofficeNotFoundError,
     SofficeTimeoutError,
+    SofficeUnavailableError,
     resolve_soffice,
     rmtree_retrying,
     run_macro,
+    started_marker_basic,
+    warm_up_profile,
 )
 
 _MACRO_XBA = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE script:module PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "module.dtd">
-<script:module xmlns:script="http://openoffice.org/2000/script" script:name="Module1" script:language="StarBasic" script:moduleType="normal">Sub UpdateAndSave
+<script:module xmlns:script="http://openoffice.org/2000/script" script:name="Module1" script:language="StarBasic" script:moduleType="normal">Sub UpdateAndSave@@STARTED@@
     Dim oDoc As Object
     oDoc = ThisComponent
 
@@ -104,10 +105,11 @@ class FieldRecalculationError(RuntimeError):
     """Raised when the headless LibreOffice recalculation step fails."""
 
 
-def _seed_profile(profile_dir: Path) -> None:
+def _seed_profile(profile_dir: Path, started_path: Path | None = None) -> None:
     standard_dir = profile_dir / "user" / "basic" / "Standard"
     standard_dir.mkdir(parents=True, exist_ok=True)
-    (standard_dir / "Module1.xba").write_text(_MACRO_XBA, encoding="utf-8")
+    macro = _MACRO_XBA.replace("@@STARTED@@", started_marker_basic(started_path))
+    (standard_dir / "Module1.xba").write_text(macro, encoding="utf-8")
     (standard_dir / "script.xlb").write_text(_SCRIPT_XLB, encoding="utf-8")
     (profile_dir / "user" / "basic" / "script.xlc").write_text(_SCRIPT_XLC, encoding="utf-8")
 
@@ -140,23 +142,29 @@ def recalculate_fields(
     # quietly.
     tmp = tempfile.mkdtemp(prefix="quartifyr-lo-profile-")
     try:
-        profile_dir = Path(tmp)
-        _seed_profile(profile_dir)
+        profile_dir = Path(tmp) / "profile"
+        started_path = Path(tmp) / "macro-started"
+        # Let LibreOffice initialise the profile before the macro is put in
+        # it: see warm_up_profile() (a pre-seeded fresh profile hangs on macOS).
+        warm_up_profile(soffice, profile_dir, stderr_path=Path(tmp) / "soffice-warmup.log")
+        _seed_profile(profile_dir, started_path)
         try:
             returncode, stderr_text = run_macro(
                 soffice,
                 docx_path,
                 "macro:///Standard.Module1.UpdateAndSave",
                 profile_dir=profile_dir,
-                stderr_path=profile_dir / "soffice-stderr.log",
+                stderr_path=Path(tmp) / "soffice-stderr.log",
                 timeout_seconds=timeout_seconds,
+                started_path=started_path,
             )
+        except SofficeUnavailableError as exc:
+            raise FieldRecalculationError(str(exc)) from None
         except SofficeTimeoutError:
             raise FieldRecalculationError(
                 f"LibreOffice did not finish within {timeout_seconds}s recalculating {docx_path} "
-                "and was force-killed. This has been observed to hang on macOS with LibreOffice "
-                "26.2 -- see this module's docstring and the repo-root README.md's "
-                "'Status and known limitations' section."
+                "after the macro had started, and was force-killed -- see this module's docstring "
+                "and the repo-root README.md's 'Status and known limitations' section."
             ) from None
         except SofficeError as exc:
             raise FieldRecalculationError(str(exc)) from None

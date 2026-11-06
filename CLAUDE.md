@@ -326,9 +326,13 @@ all inert without running it.
 
 **Word field recalculation (`styling_recalculate_fields()` /
 `quartifyr-styling recalculate-fields`, headless LibreOffice) is
-experimental and known-flaky.** Real-world runs against the same
-document have produced three different outcomes (hangs, silent no-op, or
-success), reproduced both sandboxed and in a plain macOS terminal. Off
+experimental.** Earlier runs against the same document produced hangs,
+silent no-ops and successes. The macOS hang (LibreOffice 26.2) was a
+first-start problem: a fresh profile that already holds the seeded Basic
+library never runs the macro, so `_soffice.warm_up_profile()` initialises
+the profile (`--terminate_after_init`) *before* the macro files are
+written, and `run_macro()` abandons a macro whose heartbeat file hasn't
+appeared in 30 s as "unavailable". Both steps share `_soffice.py`. Off
 by default (`render_report(..., recalculate_fields = FALSE)`). Don't
 treat a clean exit as proof it worked; see the repo-root README's
 "Status and known limitations" section before changing this code path.

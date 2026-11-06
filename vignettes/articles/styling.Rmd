@@ -277,8 +277,8 @@ no same-page markers. Read-only with respect to LibreOffice: it drives a
 headless-LibreOffice macro only to read page numbers, never to re-save
 the docx.
 
-**Experimental.** Inherits the same intermittent-hang behavior
-documented for `recalculate-fields` below. Off by default in
+**Experimental.** Inherits the headless-LibreOffice caveats documented for
+`recalculate-fields` below. Off by default in
 `render_report()`.
 
 ## `recalculate-fields`: headless ToC/field recalculation
@@ -294,11 +294,15 @@ fields automatically on open (via the reference-doc's own
 `updateFields` setting above), so this is only needed for headless
 consumers.
 
-**Experimental and known-flaky.** Real-world runs against the same
-document have produced three different outcomes: it hangs, it exits
-cleanly as a silent no-op, or it actually succeeds. Reproduced both
-sandboxed and in a plain native terminal, ruling out sandboxing as the
-cause. Off by default (`render_report(..., recalculate_fields = FALSE)`).
+**Experimental.** Earlier real-world runs against the same document
+produced three different outcomes: a hang, a clean exit that did nothing,
+or success. On macOS with LibreOffice 26.2 the hang had a cause: a fresh
+profile that already contains the seeded macro never runs it. The profile
+is now initialised first and the macro added afterwards, which took 100 of
+100 sequential and four-way concurrent runs on macOS 26.6 to success in
+under three seconds each. A macro that still never starts is abandoned
+after 30 seconds and reported as unavailable instead of waiting out the
+timeout. Windows and Linux were not re-tested. Off by default (`render_report(..., recalculate_fields = FALSE)`).
 When it does fail, it only produces a warning, not a render failure;
 the document is still fully usable, just needs a manual "select all,
 F9" in Word.

@@ -16,6 +16,16 @@
 
 ## Bug fixes
 
+* `--recalculate-fields` and `--resolve-same-page-crossrefs` no longer hang
+  on macOS with LibreOffice 26.2 (every run timed out). A fresh profile
+  that already holds the seeded macro when LibreOffice first starts never
+  runs it, so the profile is now initialised first (`--terminate_after_init`)
+  and the macro added afterwards; a run then takes about two seconds (100 of
+  100 sequential and concurrent runs on macOS 26.6 / LibreOffice 26.2.5.2).
+  The macro also writes a heartbeat file as its first action, and a
+  LibreOffice that doesn't start it within 30 seconds is abandoned and
+  reported as unavailable instead of waiting out the full timeout. Not
+  re-tested on Windows or Linux (#84).
 * The two headless-LibreOffice steps (`--recalculate-fields`,
   `--resolve-same-page-crossrefs`) now work on Windows and with profile
   paths that contain a space. The `-env:UserInstallation` profile URL was

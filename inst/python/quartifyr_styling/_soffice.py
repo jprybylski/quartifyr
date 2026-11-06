@@ -17,6 +17,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from xml.sax.saxutils import escape as xml_escape
 
 IS_WINDOWS = sys.platform == "win32"
 
@@ -31,6 +32,10 @@ class SofficeNotFoundError(SofficeError):
 
 class SofficeTimeoutError(SofficeError):
     """LibreOffice did not finish within the timeout and was force-killed."""
+
+
+class SofficeUnavailableError(SofficeError):
+    """LibreOffice never started the macro (a hung or unusable installation)."""
 
 
 SOFFICE_BIN_ENV = "QUARTIFYR_SOFFICE_BIN"
@@ -148,6 +153,78 @@ def rmtree_retrying(path: str | os.PathLike[str], *, attempts: int = 5, delay: f
             time.sleep(delay)
 
 
+def started_marker_basic(path: str | os.PathLike[str] | None) -> str:
+    """Basic statements (XML-escaped, for an ``.xba``) that write ``path`` as
+    the macro's first action, so :func:`run_macro` can tell a macro that never
+    started from one that is merely slow. Empty when ``path`` is None."""
+    if path is None:
+        return ""
+    escaped = xml_escape(str(path), {'"': "&quot;"})
+    return (
+        "\n    Dim nStarted As Integer"
+        "\n    nStarted = FreeFile"
+        f"\n    Open &quot;{escaped}&quot; For Output As #nStarted"
+        "\n    Print #nStarted, &quot;started&quot;"
+        "\n    Close #nStarted\n"
+    )
+
+
+def _launch(soffice: str, args: list[str], stderr_file) -> subprocess.Popen:
+    popen_extra: dict = {}
+    if IS_WINDOWS:
+        popen_extra["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    else:
+        popen_extra["start_new_session"] = True  # own process group; see kill_process_tree
+    return subprocess.Popen(
+        [soffice, "--headless", "--invisible", "--norestore", *args],
+        stdout=subprocess.DEVNULL,
+        stderr=stderr_file,
+        **popen_extra,
+    )
+
+
+def _read_text(path: Path) -> str:
+    try:
+        return Path(path).read_text(errors="replace")
+    except OSError:
+        return ""
+
+
+def warm_up_profile(
+    soffice: str,
+    profile_dir: Path,
+    *,
+    stderr_path: Path,
+    timeout_seconds: float = 60,
+) -> bool:
+    """Let LibreOffice initialise ``profile_dir`` before the macro files go in.
+
+    Why this exists (confirmed on macOS 26.6 / LibreOffice 26.2.5.2): a fresh
+    profile that already contains a seeded ``user/basic`` library when
+    LibreOffice starts for the first time never runs the macro; the process
+    just sits there until the caller's timeout. Starting LibreOffice once on
+    an empty profile (``--terminate_after_init``, about a second), and seeding
+    the macro afterwards, makes the very same command run it in under two
+    seconds. Returns False when the warm-up itself failed or timed out; that
+    is not an error, the caller seeds anyway and the start check in
+    :func:`run_macro` reports an unusable LibreOffice.
+    """
+    profile_dir = Path(profile_dir)
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    with open(stderr_path, "wb") as stderr_file:
+        proc = _launch(
+            soffice,
+            ["--terminate_after_init", f"-env:UserInstallation={profile_url(profile_dir)}"],
+            stderr_file,
+        )
+        try:
+            proc.wait(timeout=timeout_seconds)
+        except subprocess.TimeoutExpired:
+            kill_process_tree(proc, marker=str(profile_dir.resolve()))
+            return False
+    return proc.returncode == 0
+
+
 def run_macro(
     soffice: str,
     docx_path: str | os.PathLike[str],
@@ -156,6 +233,8 @@ def run_macro(
     profile_dir: Path,
     stderr_path: Path,
     timeout_seconds: float,
+    started_path: Path | None = None,
+    start_timeout_seconds: float = 30,
 ) -> tuple[int, str]:
     """Run ``soffice`` headless on ``docx_path`` with ``macro`` and a seeded profile.
 
@@ -165,37 +244,43 @@ def run_macro(
     ``soffice.bin`` that inherits it, and ``communicate()`` on a pipe then
     blocks forever waiting for a write end that never closes. The file is
     closed (so Windows can delete it) before this returns.
+
+    ``started_path``: a file the macro writes as its first action. If it has
+    not appeared after ``start_timeout_seconds`` the macro is never going to
+    run (a LibreOffice that cannot start it just waits), so the process is
+    killed and :class:`SofficeUnavailableError` raised in seconds instead of
+    after the full ``timeout_seconds``.
     """
-    popen_extra: dict = {}
-    if IS_WINDOWS:
-        popen_extra["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-    else:
-        popen_extra["start_new_session"] = True  # own process group; see kill_process_tree
-
+    started_at = time.monotonic()
     with open(stderr_path, "wb") as stderr_file:
-        proc = subprocess.Popen(
-            [
-                soffice,
-                "--headless",
-                "--invisible",
-                "--norestore",
-                f"-env:UserInstallation={profile_url(profile_dir)}",
-                str(docx_path),
-                macro,
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=stderr_file,
-            **popen_extra,
+        proc = _launch(
+            soffice,
+            [f"-env:UserInstallation={profile_url(profile_dir)}", str(docx_path), macro],
+            stderr_file,
         )
+        marker = str(Path(profile_dir).resolve())
         try:
-            returncode = proc.wait(timeout=timeout_seconds)
-        except subprocess.TimeoutExpired:
-            kill_process_tree(proc, marker=str(Path(profile_dir).resolve()))
-            raise SofficeTimeoutError(f"LibreOffice did not finish within {timeout_seconds}s") from None
+            while True:
+                try:
+                    returncode = proc.wait(timeout=0.25)
+                    break
+                except subprocess.TimeoutExpired:
+                    pass
+                elapsed = time.monotonic() - started_at
+                if elapsed >= timeout_seconds:
+                    raise SofficeTimeoutError(f"LibreOffice did not finish within {timeout_seconds}s")
+                if (
+                    started_path is not None
+                    and elapsed >= start_timeout_seconds
+                    and not Path(started_path).exists()
+                ):
+                    raise SofficeUnavailableError(
+                        f"LibreOffice is unavailable: it had not started the macro after "
+                        f"{start_timeout_seconds:g}s, so the step was abandoned instead of waiting "
+                        f"{timeout_seconds:g}s"
+                    )
+        except SofficeError:
+            kill_process_tree(proc, marker=marker)
+            raise
 
-    stderr_text = ""
-    try:
-        stderr_text = Path(stderr_path).read_text(errors="replace")
-    except OSError:
-        pass
-    return returncode, stderr_text
+    return returncode, _read_text(stderr_path)

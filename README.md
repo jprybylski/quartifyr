@@ -437,9 +437,14 @@ incomplete rather than papered over:
 
 - **Word field recalculation** (`styling_recalculate_fields()` /
   `quartifyr-styling recalculate-fields`, headless LibreOffice) is
-  experimental: it works, but has shown non-deterministic failure modes
-  in real testing (hangs, silent no-ops, or success, reproduced both
-  sandboxed and in a plain terminal). Off by default
+  experimental: it works, but earlier real testing showed hangs and
+  silent no-ops as well as success. The macOS hang (LibreOffice 26.2)
+  had a found cause, now worked around: a fresh profile that already
+  holds the seeded macro never runs it, so the profile is now initialised
+  first and the macro added afterwards. A macro that still never starts
+  is reported as `unavailable` after 30 seconds, not the full timeout.
+  Verified on macOS only; Windows and Linux behaviour is unconfirmed.
+  Off by default
   (`render_report(..., recalculate_fields = FALSE)`); without it,
   delivered docs need one manual "select all, F9" in Word to populate the
   ToC. Real Word itself needs none of this -- the reference-doc sets
