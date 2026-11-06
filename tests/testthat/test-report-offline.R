@@ -129,8 +129,7 @@ test_that(".python_env_wiring() uses the .venv's parent directly and exports the
   expect_identical(normalizePath(file.path(wiring$options$venv_dir, ".venv")), normalizePath(venv))
 })
 
-test_that(".python_env_wiring() exposes a venv with another name through a .venv symlink", {
-  skip_on_os("windows")
+test_that(".python_env_wiring() exposes a venv with another name through a .venv link (a junction on Windows)", {
   base <- withr::local_tempdir()
   venv <- .make_venv(base, "report-env")
 
@@ -235,7 +234,6 @@ test_that(".junction_command() builds an mklink /J call with backslash paths", {
 })
 
 test_that(".unlink_venv_link() removes the link and never what it points at", {
-  skip_on_os("windows")
   base <- withr::local_tempdir()
   venv <- .make_venv(base, "report-env")
   link <- file.path(withr::local_tempdir(), ".venv")
@@ -249,7 +247,6 @@ test_that(".unlink_venv_link() removes the link and never what it points at", {
 })
 
 test_that("the temporary link made for a differently named venv is removed without touching the venv", {
-  skip_on_os("windows")
   base <- withr::local_tempdir()
   venv <- .make_venv(base, "report-env")
   dir_made <- NULL
@@ -317,4 +314,34 @@ test_that(".unlink_venv_link() uses rmdir on Windows, which removes a junction a
   expect_null(.unlink_venv_link("C:/tmp/x/.venv"))
   expect_identical(seen[1:2], c("/c", "rmdir"))
   expect_false(any(c("/s", "/S") %in% seen)) # never recursive
+})
+
+test_that(".unlink_venv_link() aims rmdir at the link itself, never at the environment it resolves to", {
+  skip_on_os("windows")
+  # normalizePath() of an existing link gives its target. The command must be
+  # built from the link path as given, or `rmdir` would be pointed at the real
+  # environment (found on Windows, where the junction then survived).
+  base <- withr::local_tempdir()
+  venv <- .make_venv(base, "report-env")
+  link <- file.path(withr::local_tempdir(), ".venv")
+  expect_true(file.symlink(venv, link))
+  local_mocked_bindings(.is_windows = function() TRUE)
+  seen <- NULL
+  local_mocked_bindings(
+    run = function(command, args, ...) {
+      seen <<- args
+      list(status = 0L, stdout = "", stderr = "")
+    },
+    .package = "processx"
+  )
+
+  .unlink_venv_link(link)
+
+  expect_match(seen[[3]], "\\.venv$")
+  expect_false(grepl("report-env", seen[[3]], fixed = TRUE))
+})
+
+test_that(".windows_path() only swaps the slashes", {
+  expect_identical(.windows_path("C:/Users/me/My Docs/.venv"), "C:\\Users\\me\\My Docs\\.venv")
+  expect_identical(.windows_path("already\\back"), "already\\back")
 })

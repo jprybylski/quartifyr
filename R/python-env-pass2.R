@@ -31,14 +31,19 @@
 # anywhere (.Platform can't be mocked).
 .is_windows <- function() .Platform$OS.type == "windows"
 
+# `path` with backslashes, as cmd.exe wants it. Deliberately not
+# normalizePath(): for a path that is already a junction or symlink that
+# resolves it to its *target*, which is the one thing a command meant for the
+# link itself must never be pointed at.
+.windows_path <- function(path) gsub("/", "\\", path, fixed = TRUE)
+
 # The command that makes a directory junction `link` -> `venv` on Windows.
 # Unlike a symlink, a junction needs no privilege (no developer mode, no
 # administrator), and pyro only needs `<venv_dir>/.venv` to resolve to the venv.
 .junction_command <- function(venv, link) {
   list(
     command = Sys.getenv("COMSPEC", "cmd.exe"),
-    args = c("/c", "mklink", "/J", normalizePath(link, winslash = "\\", mustWork = FALSE),
-             normalizePath(venv, winslash = "\\", mustWork = FALSE))
+    args = c("/c", "mklink", "/J", .windows_path(link), .windows_path(venv))
   )
 }
 
@@ -67,7 +72,7 @@
   if (.is_windows()) {
     processx::run(
       Sys.getenv("COMSPEC", "cmd.exe"),
-      c("/c", "rmdir", normalizePath(link, winslash = "\\", mustWork = FALSE)),
+      c("/c", "rmdir", .windows_path(link)),
       error_on_status = FALSE, timeout = 30
     )
   } else {
