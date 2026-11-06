@@ -178,6 +178,10 @@
 # `.previous`. The moves are all-or-nothing: if one fails, the ones already
 # made are undone (a replaced `.previous` copy is restored too) before the
 # error is raised. Returns the new paths of what was moved.
+# file.rename() behind a name tests can replace to make one move fail (base
+# functions can't be mocked).
+.rename_file <- function(from, to) file.rename(from, to)
+
 .move_previous_outputs <- function(project_dir, stem) {
   outputs <- .render_output_paths(project_dir, stem)
   plan <- list()
@@ -197,9 +201,9 @@
   done <- list()
   undo <- function() {
     for (op in rev(done)) {
-      file.rename(op$to, op$from)
+      .rename_file(op$to, op$from)
       if (!is.null(op$backup)) {
-        file.rename(op$backup, op$to)
+        .rename_file(op$backup, op$to)
       }
     }
   }
@@ -210,13 +214,13 @@
         backup <- NULL
         if (file.exists(op$to)) {
           backup <- paste0(op$to, suffix)
-          if (!file.rename(op$to, backup)) {
+          if (!.rename_file(op$to, backup)) {
             stop("Could not move the previous output ", op$from, " to ", op$to, ".", call. = FALSE)
           }
         }
-        if (!file.rename(op$from, op$to)) {
+        if (!.rename_file(op$from, op$to)) {
           if (!is.null(backup)) {
-            file.rename(backup, op$to)
+            .rename_file(backup, op$to)
           }
           stop("Could not move the previous output ", op$from, " to ", op$to, ".", call. = FALSE)
         }

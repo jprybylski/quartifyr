@@ -50,7 +50,7 @@
   tryCatch(
     {
       unlink(failed, recursive = TRUE)
-      kept <- if (file.rename(stage$root, failed)) failed else stage$root
+      kept <- if (.rename_file(stage$root, failed)) failed else stage$root
       writeLines(
         c(
           paste0("This render of ", stem, ".qmd did not complete and was not delivered."),
@@ -75,12 +75,12 @@
   done <- list()
   undo <- function() {
     for (op in rev(done)) {
-      file.rename(op$to, op$from)
+      .rename_file(op$to, op$from)
     }
   }
   move <- function(from, to) {
     unlink(to, recursive = TRUE)
-    if (!file.rename(from, to)) {
+    if (!.rename_file(from, to)) {
       stop("Could not move the staged output ", from, " to ", to, ".", call. = FALSE)
     }
     done[[length(done) + 1L]] <<- list(from = from, to = to)

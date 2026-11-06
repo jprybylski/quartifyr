@@ -225,3 +225,9 @@ test_that("a strict rejection's own versions are not overwritten by the early-er
   parsed <- jsonlite::fromJSON(paste(res$out, collapse = "\n"))
   expect_null(parsed$versions$quarto) # the fake result has no versions, and none is invented
 })
+
+test_that(".cli_quarto_command() prefers --quarto-bin, then QUARTO_PATH, then quarto", {
+  expect_identical(.cli_quarto_command("/opt/quarto"), "/opt/quarto")
+  withr::with_envvar(c(QUARTO_PATH = "/env/quarto"), expect_identical(.cli_quarto_command(), "/env/quarto"))
+  withr::with_envvar(c(QUARTO_PATH = NA), expect_identical(.cli_quarto_command(), "quarto"))
+})

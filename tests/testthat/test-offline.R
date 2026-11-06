@@ -470,3 +470,28 @@ test_that(".render_python_env() prefers the configured python_env over the proje
   withr::local_options(quartifyr.python_env = "/opt/env")
   expect_identical(.render_python_env(project), "/opt/env")
 })
+
+test_that(".parse_py_version() reads the first version number and gives NULL for none", {
+  expect_identical(.parse_py_version("cpython-3.12.3-macos"), c(3L, 12L, 3L))
+  expect_identical(.parse_py_version("3.12"), c(3L, 12L))
+  expect_null(.parse_py_version("not a version"))
+})
+
+test_that(".satisfies_requires_python() handles every comparison operator", {
+  v <- c(3L, 12L, 3L)
+  expect_true(.satisfies_requires_python(v, "<=3.12.3"))
+  expect_false(.satisfies_requires_python(v, "<=3.12.2"))
+  expect_true(.satisfies_requires_python(v, "<3.13"))
+  expect_true(.satisfies_requires_python(v, "==3.12.3"))
+  expect_false(.satisfies_requires_python(v, "==3.12.4"))
+  expect_true(.satisfies_requires_python(v, "!=3.12.4"))
+  expect_false(.satisfies_requires_python(v, "!=3.12.3"))
+  expect_false(.satisfies_requires_python(v, "!=3.12.*"))
+})
+
+test_that(".venv_python_version() is NULL without a pyvenv.cfg or without a version line", {
+  empty <- withr::local_tempdir()
+  expect_null(.venv_python_version(empty))
+  writeLines(c("home = /usr/bin", "include-system-site-packages = false"), file.path(empty, "pyvenv.cfg"))
+  expect_null(.venv_python_version(empty))
+})

@@ -21,6 +21,10 @@
 # uv still has to be installed (reportifyr runs it), but it never reaches the
 # network and creates nothing in the project.
 
+# file.symlink() behind a name tests can replace (base functions can't be
+# mocked). FALSE when the link can't be made, e.g. without the privilege on Windows.
+.link_venv <- function(venv, link) suppressWarnings(file.symlink(venv, link))
+
 # The venv directory behind a python_env, which is either a venv itself or a
 # project directory that holds a `.venv` (the same two shapes .python_exe()
 # accepts).
@@ -46,7 +50,7 @@
     venv_dir <- dirname(venv)
   } else {
     venv_dir <- withr::local_tempdir(pattern = "quartifyr-venv-", .local_envir = .local_envir)
-    linked <- suppressWarnings(file.symlink(venv, file.path(venv_dir, ".venv")))
+    linked <- .link_venv(venv, file.path(venv_dir, ".venv"))
     if (!isTRUE(linked)) {
       cli::cli_abort(
         c(

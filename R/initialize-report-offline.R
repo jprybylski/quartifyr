@@ -1,3 +1,6 @@
+# reportifyr's shipped default for `name` ("" when reportifyr isn't installed).
+.reportifyr_extdata <- function(name) system.file("extdata", name, package = "reportifyr")
+
 #' Set up a reportifyr project without pyro, uv or the network
 #'
 #' `reportifyr::initialize_report_project()` creates the report folders, the
@@ -47,7 +50,7 @@ initialize_report_project_offline <- function(project_dir = ".", python_env = NU
   if (!is.null(python_env)) {
     .verify_python_env(python_env, modules = .reportifyr_python_modules)
   }
-  extdata <- function(name) system.file("extdata", name, package = "reportifyr")
+  extdata <- .reportifyr_extdata
   templates <- c(extdata("config.yaml"), extdata("standard_footnotes.yaml"))
   if (!all(nzchar(templates))) {
     cli::cli_abort(

@@ -1865,3 +1865,131 @@ test_that("a python_env missing a module reportifyr needs fails before anything 
   )
   expect_null(record$quarto_run)
 })
+
+# --- Failure and rollback branches of the stage/swap machinery ----------------
+
+# Replaces .rename_file() with one that fails for moves whose destination
+# matches `fail_to` (a regex) and otherwise really renames.
+.fail_renames_to <- function(fail_to, env = parent.frame()) {
+  local_mocked_bindings(
+    .rename_file = function(from, to) if (grepl(fail_to, to)) FALSE else file.rename(from, to),
+    .env = env
+  )
+}
+
+test_that(".move_previous_outputs() puts everything back, replaced .previous copies included, when a move fails", {
+  project <- withr::local_tempdir()
+  paths <- .render_output_paths(project, "report")
+  for (p in c(paths$shell, paths$final[[1]])) {
+    dir.create(dirname(p), recursive = TRUE, showWarnings = FALSE)
+    writeLines(paste("live", basename(p)), p)
+  }
+  # An older .previous shell, which moving the live one in replaces (and must restore).
+  older <- file.path(project, "report", ".previous", "shell", "report.docx")
+  dir.create(dirname(older), recursive = TRUE)
+  writeLines("older previous", older)
+  .fail_renames_to("[/\\\\]final[/\\\\]report-final\\.docx$")
+
+  expect_error(.move_previous_outputs(project, "report"), "Could not move the previous output")
+
+  expect_identical(readLines(paths$shell), "live report.docx")
+  expect_identical(readLines(paths$final[[1]]), "live report-final.docx")
+  expect_identical(readLines(older), "older previous")
+  expect_identical(list.files(dirname(older), all.files = TRUE, no.. = TRUE), "report.docx") # no .replaced-* left
+})
+
+test_that(".move_previous_outputs() restores the replaced copy when the move into place itself fails", {
+  project <- withr::local_tempdir()
+  paths <- .render_output_paths(project, "report")
+  dir.create(dirname(paths$shell), recursive = TRUE)
+  writeLines("live", paths$shell)
+  older <- file.path(project, "report", ".previous", "shell", "report.docx")
+  dir.create(dirname(older), recursive = TRUE)
+  writeLines("older previous", older)
+  # The live file's move to .previous fails, after the old copy was set aside.
+  local_mocked_bindings(.rename_file = function(from, to) {
+    # Only the live file's move into .previous (not the set-aside of the old copy).
+    if (!grepl("\\.previous", from) && grepl("[/\\\\]shell[/\\\\]report\\.docx$", from) &&
+      grepl("\\.previous", to)) {
+      return(FALSE)
+    }
+    file.rename(from, to)
+  })
+
+  expect_error(.move_previous_outputs(project, "report"), "Could not move the previous output")
+  expect_identical(readLines(older), "older previous")
+  expect_identical(readLines(paths$shell), "live")
+})
+
+test_that(".move_previous_outputs() stops, touching nothing, when the old .previous copy can't be set aside", {
+  project <- withr::local_tempdir()
+  paths <- .render_output_paths(project, "report")
+  dir.create(dirname(paths$shell), recursive = TRUE)
+  writeLines("live", paths$shell)
+  older <- file.path(project, "report", ".previous", "shell", "report.docx")
+  dir.create(dirname(older), recursive = TRUE)
+  writeLines("older previous", older)
+  .fail_renames_to("\\.replaced-")
+
+  expect_error(.move_previous_outputs(project, "report"), "Could not move the previous output")
+  expect_identical(readLines(paths$shell), "live")
+  expect_identical(readLines(older), "older previous")
+})
+
+test_that(".retire_stage() has nothing to keep when the staging folder is already gone", {
+  project <- withr::local_tempdir()
+  dir.create(file.path(project, "report"))
+  stage <- list(root = file.path(project, "report", ".staging-abc"))
+  expect_null(.retire_stage(project, stage, "whatever", "report"))
+  expect_false(dir.exists(file.path(project, "report", ".failed")))
+})
+
+test_that(".retire_stage() keeps the files where they are when they can't be renamed to .failed", {
+  project <- withr::local_tempdir()
+  dir.create(file.path(project, "report"))
+  stage <- .new_stage(project)
+  writeLines("partial", file.path(stage$draft_dir, "report-draft.docx"))
+  .fail_renames_to("\\.failed$")
+
+  kept <- .retire_stage(project, stage, "disk said no", "report")
+
+  expect_identical(kept, stage$root)
+  expect_true(file.exists(file.path(stage$root, "FAILED")))
+  expect_true(file.exists(file.path(stage$draft_dir, "report-draft.docx")))
+})
+
+test_that(".promote_stage() merges into an existing intermediate_files folder instead of replacing it", {
+  project <- withr::local_tempdir()
+  live_intermediate <- file.path(project, "report", "draft", "intermediate_files")
+  dir.create(live_intermediate, recursive = TRUE)
+  writeLines("from an earlier render", file.path(live_intermediate, "report-clean.docx"))
+  stage <- .new_stage(project)
+  staged_intermediate <- file.path(stage$draft_dir, "intermediate_files")
+  dir.create(staged_intermediate)
+  writeLines("new", file.path(staged_intermediate, "report-tabs.docx"))
+  writeLines("draft", file.path(stage$draft_dir, "report-draft.docx"))
+
+  .promote_stage(project, stage)
+
+  expect_setequal(list.files(live_intermediate), c("report-clean.docx", "report-tabs.docx"))
+  expect_true(file.exists(file.path(project, "report", "draft", "report-draft.docx")))
+})
+
+test_that(".rebase_path() moves staged paths and leaves other paths and NULL alone", {
+  stage <- list(root = "/p/report/.staging-abc")
+  expect_null(.rebase_path(NULL, stage, "/p/report"))
+  expect_identical(.rebase_path("/p/report/.staging-abc/draft/a.docx", stage, "/p/report"), "/p/report/draft/a.docx")
+  expect_identical(.rebase_path("/elsewhere/a.docx", stage, "/p/report"), "/elsewhere/a.docx")
+  expect_identical(.rebase_path("/p/report/.staging-abc/draft/a.docx", stage, NULL), "/p/report/.staging-abc/draft/a.docx")
+})
+
+test_that(".soffice_info() reports no version when `soffice --version` fails", {
+  skip_on_os("windows")
+  dir <- withr::local_tempdir()
+  script <- file.path(dir, "soffice")
+  writeLines(c("#!/bin/sh", "exit 3"), script)
+  Sys.chmod(script, "755")
+  info <- .soffice_info(script)
+  expect_identical(info$path, script)
+  expect_null(info$version)
+})

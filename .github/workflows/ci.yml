@@ -245,7 +245,7 @@ jobs:
               > "$RUNNER_TEMP/render-failed.json" || code=$?
             test "$code" -eq 1
           )
-          uv run python scripts/validate_render_result.py \
+          uv run --extra dev python scripts/validate_render_result.py \
             "$RUNNER_TEMP/render-ok.json=ok" "$RUNNER_TEMP/render-failed.json=error"
 
   offline-pipeline:

@@ -183,3 +183,28 @@ test_that(".use_python_env_for_pass2() does nothing without a python_env", {
   expect_null(getOption("venv_dir"))
   expect_identical(Sys.getenv("UV_PROJECT_ENVIRONMENT", "<unset>"), "<unset>")
 })
+
+test_that("initialize_report_project_offline() says so when reportifyr's defaults can't be found", {
+  local_mocked_bindings(.reportifyr_extdata = function(name) "")
+  project <- withr::local_tempdir()
+  expect_error(
+    initialize_report_project_offline(project),
+    class = "quartifyr_report_project_offline"
+  )
+  expect_false(dir.exists(file.path(project, "report")))
+})
+
+test_that(".python_env_venv() leaves a directory that is neither a venv nor holds one as it is", {
+  plain <- withr::local_tempdir()
+  expect_identical(.python_env_venv(plain), plain)
+})
+
+test_that(".python_env_wiring() explains when a .venv name can't be made with a symlink", {
+  base <- withr::local_tempdir()
+  venv <- .make_venv(base, "report-env")
+  local_mocked_bindings(.link_venv = function(venv, link) FALSE)
+  expect_error(
+    (function() .python_env_wiring(venv))(),
+    class = "quartifyr_python_env_invalid"
+  )
+})
