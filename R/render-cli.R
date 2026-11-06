@@ -27,6 +27,16 @@
   if (file.exists(shell) && grepl("^(/|[A-Za-z]:[/\\\\])", shell)) shell else file.path(project, shell)
 }
 
+# The Quarto executable render_report() would use: --quarto-bin, then
+# QUARTO_PATH, then `quarto` on PATH.
+.cli_quarto_command <- function(quarto_bin = NULL) {
+  if (!is.null(quarto_bin)) {
+    return(quarto_bin)
+  }
+  from_env <- Sys.getenv("QUARTO_PATH")
+  if (nzchar(from_env)) from_env else "quarto"
+}
+
 .render_cli_usage <- function() {
   paste(
     "Usage: Rscript render.R --project <dir> --shell <report.qmd> [options]",
@@ -86,7 +96,7 @@
   parsed
 }
 
-.render_cli_error_json <- function(e, started_at = NULL, finished_at = NULL) {
+.render_cli_error_json <- function(e, started_at = NULL, finished_at = NULL, versions = NULL) {
   # An incomplete strict render carries the full result; report all of it.
   if (inherits(e, "quartifyr_render_incomplete") && !is.null(e$result)) {
     payload <- .render_result_as_list(e$result)
@@ -98,6 +108,9 @@
       started_at = started_at,
       finished_at = finished_at
     )
+  }
+  if (!is.null(versions) && is.null(payload$versions)) {
+    payload$versions <- versions
   }
   if (!is.null(e$missing_metadata)) {
     payload$missing_metadata <- as.list(e$missing_metadata)
@@ -163,7 +176,13 @@
   if (inherits(outcome, "error")) {
     writeLines(paste0("quartifyr render failed: ", conditionMessage(outcome)), err)
     if (isTRUE(parsed$json)) {
-      writeLines(as.character(.render_cli_error_json(outcome, started_at, .timestamp_utc())), out)
+      # Which tools were in play is as useful for a render that stopped early,
+      # when it can be told without starting anything but `quarto --version`.
+      versions <- tryCatch(
+        .tool_versions(.cli_quarto_command(parsed$`quarto-bin`)),
+        error = function(e) NULL
+      )
+      writeLines(as.character(.render_cli_error_json(outcome, started_at, .timestamp_utc(), versions)), out)
     }
     return(invisible(1L))
   }

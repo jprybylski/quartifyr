@@ -229,6 +229,25 @@ jobs:
       - name: Run bare-bones pieces-only integration test
         run: uv run python scripts/bare_bones_integration_test.py
 
+      # The R tests validate hand-built result objects against the v1 schema;
+      # this checks what the noninteractive script really prints, for a
+      # success and for a forced failure.
+      - name: Validate real render.R --json output against the v1 schema
+        shell: bash
+        run: |
+          (
+            cd examples/demo-report
+            script="$(Rscript -e 'cat(system.file("scripts", "render.R", package = "quartifyr"))')"
+            Rscript "$script" --project . --shell report.qmd --status final --json --strict \
+              > "$RUNNER_TEMP/render-ok.json"
+            code=0
+            Rscript "$script" --project . --shell report.qmd --reference-doc does-not-exist.docx --json \
+              > "$RUNNER_TEMP/render-failed.json" || code=$?
+            test "$code" -eq 1
+          )
+          uv run python scripts/validate_render_result.py \
+            "$RUNNER_TEMP/render-ok.json=ok" "$RUNNER_TEMP/render-failed.json=error"
+
   offline-pipeline:
     name: offline init + render (no network)
     # Proves quartifyr's setup and render work with no network at all, as in
@@ -299,12 +318,17 @@ jobs:
           Rscript -e 'reportifyr::initialize_report_project(project_dir = getwd())'
           Rscript -e 'quartifyr::initialize_quartifyr_project(getwd())'
 
+      # Installed now, while the network is up, so the offline check can
+      # validate its own render.R --json output against the v1 schema.
+      - name: Install a JSON-schema validator for the offline check
+        run: python3 -m pip install --quiet --target "$RUNNER_TEMP/jsonschema" jsonschema
+
       - name: Initialize and render with the network disabled
         run: |
           offline_home="$(mktemp -d)"
           sudo -E unshare --net -- \
             setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups \
-            env PATH="$PATH" HOME="$offline_home" \
+            env PATH="$PATH" HOME="$offline_home" SCHEMA_PYTHONPATH="$RUNNER_TEMP/jsonschema" \
             bash scripts/offline_pipeline_check.sh
 
   action-smoke-test:

@@ -16,6 +16,27 @@
 
 ## Bug fixes
 
+* Contract gaps in the offline and result work (#82):
+  * In offline mode a pass-2 uv failure is now recognised with the real
+    reportifyr and pyro, which don't pass uv's message on (pyro says only
+    "<script> failed."; reportifyr's docx validation discards it). Pass 2's
+    output is kept and, when it doesn't explain the failure, uv is asked
+    directly with a no-op `uv run -m reportipyr.cli --help`. The old test
+    stubbed an error message real reportifyr never produces.
+  * A relative `reference_doc`, `style` or `override` (and `--reference-doc`,
+    `--style`, `--override`) is resolved against the caller's directory
+    before the render moves into the project, so the file that is checked,
+    hashed and used is the same one.
+  * `inputs` is hashed before the render starts, and now includes
+    `_quarto.yml`, an explicit `style`/`override` YAML and one row per Quarto
+    extension under `_extensions/`. The early-error JSON carries `versions`.
+  * The schema requires `artifacts`, `inputs` and `versions` for a render
+    that finished (`ok` or `warning`), and CI validates the real
+    `render.R --json` output (a success and a forced failure) against it, in
+    the full-pipeline and offline jobs (`scripts/validate_render_result.py`).
+  * Offline, an environment whose interpreter doesn't match the project's pin
+    (`.python-version`, else `requires-python`) is reported as a result
+    warning instead of uv's silent "Using incompatible environment".
 * A failed, rejected or interrupted render no longer leaves a
   complete-looking docx in `report/draft` or `report/final`. A render now
   works in `report/.staging-<id>/` (Quarto is pointed at it with

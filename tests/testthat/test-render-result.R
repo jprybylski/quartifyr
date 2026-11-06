@@ -103,14 +103,6 @@ test_that(".parse_rpfy_log picks out the two placeholder-left-alone warnings", {
   expect_identical(.parse_rpfy_log(character(0))$missing_figures, character(0))
 })
 
-.validate_render_json <- function(json) {
-  skip_if_not_installed("jsonvalidate")
-  schema_path <- system.file("schemas", "render-result-v1.schema.json", package = "quartifyr")
-  skip_if(!nzchar(schema_path), "schema not installed")
-  validator <- jsonvalidate::json_validator(schema_path, engine = "ajv")
-  validator(as.character(json), verbose = TRUE, greedy = TRUE)
-}
-
 test_that("the JSON form validates against the full v1 schema", {
   shell <- withr::local_tempfile(fileext = ".docx")
   writeLines("x", shell)
@@ -241,4 +233,28 @@ test_that("print() of a clean result reports ok and nothing else", {
 
   expect_match(shown, "quartifyr render: ok")
   expect_no_match(shown, "unfilled|missing metadata")
+})
+
+test_that("the schema requires artifacts, inputs and versions once a render has finished", {
+  shell <- withr::local_tempfile(fileext = ".docx")
+  writeLines("x", shell)
+  result <- .new_render_result(shell, NULL, NULL, inputs = NULL, versions = list(quarto = "1"))
+  as_json <- function(x) jsonlite::toJSON(x, auto_unbox = TRUE, null = "null")
+  full <- .render_result_as_list(result)
+  expect_true(.validate_render_json(as_json(full)))
+
+  for (field in c("artifacts", "inputs", "versions")) {
+    trimmed <- full
+    trimmed[[field]] <- NULL
+    expect_false(.validate_render_json(as_json(trimmed)), info = field)
+  }
+
+  # A render that stopped early (status "error") is exempt.
+  expect_true(.validate_render_json(as_json(list(
+    schema_version = 1L, status = "error", errors = list("quarto render failed")
+  ))))
+  warned <- full
+  warned$status <- "warning"
+  warned$versions <- NULL
+  expect_false(.validate_render_json(as_json(warned)))
 })

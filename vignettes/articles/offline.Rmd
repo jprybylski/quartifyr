@@ -81,6 +81,20 @@ pass 2) rather than the generic "quartifyr-styling failed". An error that doesn'
 look like uv or the network (a bad figure, a missing sidecar) keeps its own
 message.
 
+Pass 2 needs some help to be recognised, because reportifyr and pyro don't pass
+uv's message on: pyro reports only "<script> failed.", and reportifyr's first
+step, the docx validation, throws uv's output away. In offline mode quartifyr
+therefore keeps what pass 2 prints (that is where uv's error shows up when it
+shows up at all) and, if that doesn't explain the failure, runs the cheapest
+command pass 2 would run (`uv run -m reportipyr.cli --help`) to see what uv says.
+If uv works there, the original error is left as it was.
+
+An environment whose Python doesn't match the project's pin (`.python-version`,
+else `requires-python`) is reported as a warning in the result. Offline, uv
+doesn't recreate the environment; it only prints "Using incompatible
+environment" and carries on, so without the warning a render can run on an
+interpreter the project never asked for.
+
 Don't run two renders of one project at the same time, offline or not: they
 share the project's `.venv` and its `report/` folders.
 
@@ -168,5 +182,7 @@ interface and an empty `HOME`. It initializes and renders the demo (once with
 uv, once with `python_env`) and fails if anything needs the network or writes
 to `~/.local/bin`. The uv render runs with an empty uv cache and without the
 variables above set by hand, and fails if the log shows the environment being
-removed or reinstalled, so it checks that `render_report()` sets them itself. The same script can be run by hand on Linux; the header of
-the script shows how.
+removed or reinstalled, so it checks that `render_report()` sets them itself.
+It also validates what `render.R --json` prints, for a success and a forced
+failure, against the result schema. The same script can be run by hand on
+Linux; the header of the script shows how.

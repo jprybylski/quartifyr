@@ -192,22 +192,89 @@
   )
 }
 
+# What to show of a failure whose cause was found in `text` rather than in the
+# condition itself: the lines that read like uv's complaint, else the tail.
+.uv_failure_detail <- function(text, max_lines = 12) {
+  lines <- strsplit(paste(text, collapse = "\n"), "\n", fixed = TRUE)[[1]]
+  lines <- trimws(lines[nzchar(trimws(lines))])
+  hits <- lines[vapply(lines, .looks_like_uv_failure, logical(1)) | grepl("^error", lines, ignore.case = TRUE)]
+  paste(utils::tail(if (length(hits) > 0) unique(hits) else lines, max_lines), collapse = "\n")
+}
+
+# Runs `fn()` with everything it prints to stdout also collected in
+# `into$lines`, still shown as it happens. reportifyr/pyro send uv's stderr
+# through a callback that `cat()`s it, so this is where a pass-2 uv error
+# becomes readable at all: pyro's own error carries only "<script> failed.".
+.tee_stdout <- function(fn, into) {
+  connection <- textConnection("captured_lines", "w", local = TRUE)
+  sink(connection, split = TRUE)
+  on.exit({
+    sink()
+    into$lines <- c(into$lines, textConnectionValue(connection))
+    close(connection)
+  })
+  fn()
+}
+
+# Ask uv itself why it can't run reportifyr's Python module offline, by
+# running the cheapest command pass 2 would (`uv run -m reportipyr.cli
+# --help`) the way reportifyr does. reportifyr's `validate_docx()` -- the first
+# thing pass 2 runs -- throws away uv's stderr, so when that is what failed
+# there is otherwise nothing to read. Returns uv's stderr when the probe
+# fails, NULL when it works (so the original failure wasn't uv's) or can't be
+# run.
+.probe_uv <- function(project_dir) {
+  tryCatch(
+    withr::with_dir(project_dir, {
+      venv_dir <- if (is.null(getOption("venv_dir"))) getwd() else getOption("venv_dir")
+      if (!dir.exists(file.path(venv_dir, ".venv"))) {
+        return(NULL) # nothing for uv to run in; pyro would only log an error
+      }
+      withr::with_options(list(venv_dir = venv_dir), {
+        paths <- pyro::get_venv_uv_paths()
+        res <- processx::run(
+          paths$uv, c("run", "-m", "reportipyr.cli", "--help"),
+          env = c("current", VIRTUAL_ENV = paths$venv, PYTHONPATH = system.file("python", package = "reportifyr")),
+          error_on_status = FALSE, timeout = 60
+        )
+        if (isTRUE(res$status == 0)) NULL else paste(res$stderr, collapse = "\n")
+      })
+    }),
+    error = function(e) NULL
+  )
+}
+
 # Runs `expr`; in offline mode, turns a failure that looks like uv reaching
 # for the network into a `quartifyr_offline_failure` naming `step`. Errors
 # that already say what is wrong (a missing sidecar, an earlier offline
-# failure) and ones that don't look like uv passes through unchanged.
-.with_offline_context <- function(expr, step) {
+# failure) and ones that don't look like uv pass through unchanged.
+#
+# The condition itself often can't say: pyro reports only "<script> failed."
+# and reportifyr only "validate-docx failed". So `evidence()` supplies what the
+# step printed while it ran (uv's stderr, where it was shown at all), and
+# `probe()` -- consulted only when that still doesn't explain it -- asks uv
+# directly.
+.with_offline_context <- function(expr, step, evidence = NULL, probe = NULL) {
   tryCatch(
     expr,
     error = function(e) {
-      if (
-        !.offline_mode() ||
-          inherits(e, c("quartifyr_pass2_failed", "quartifyr_offline_failure")) ||
-          !.looks_like_uv_failure(.error_text(e))
-      ) {
+      if (!.offline_mode() || inherits(e, c("quartifyr_pass2_failed", "quartifyr_offline_failure"))) {
         stop(e)
       }
-      detail <- .process_error_detail(e)
+      text <- .error_text(e)
+      if (!is.null(evidence)) {
+        text <- paste(c(text, evidence()), collapse = "\n")
+      }
+      if (!.looks_like_uv_failure(text) && !is.null(probe)) {
+        probed <- probe()
+        if (!is.null(probed)) {
+          text <- paste(c(text, probed), collapse = "\n")
+        }
+      }
+      if (!.looks_like_uv_failure(text)) {
+        stop(e)
+      }
+      detail <- .uv_failure_detail(text)
       .abort_offline(
         step = step,
         resource = "uv to sync or download the project's Python environment, which a render in offline mode never does",
@@ -219,4 +286,134 @@
       )
     }
   )
+}
+
+# --- Is the environment the project's pin would accept? -----------------------
+#
+# Offline, uv runs with --no-sync semantics (UV_NO_SYNC): it uses the project's
+# environment exactly as it is. If that environment's interpreter doesn't
+# satisfy the project's pin, uv only prints "Using incompatible environment
+# (`.venv`) due to `--no-sync`" and carries on, which is how a render ends up
+# on an interpreter the project never asked for (and why the environment used
+# to be recreated on every call online). So say so in the result.
+
+.parse_py_version <- function(text) {
+  hit <- regmatches(text, regexpr("[0-9]+(\\.[0-9]+){0,2}", text))
+  if (length(hit) == 0) NULL else as.integer(strsplit(hit, ".", fixed = TRUE)[[1]])
+}
+
+.pad_version <- function(v, n = 3L) c(v, rep(0L, max(0L, n - length(v))))[seq_len(n)]
+
+# -1, 0 or 1
+.compare_versions <- function(a, b) {
+  a <- .pad_version(a)
+  b <- .pad_version(b)
+  for (i in seq_along(a)) {
+    if (a[[i]] != b[[i]]) {
+      return(if (a[[i]] < b[[i]]) -1L else 1L)
+    }
+  }
+  0L
+}
+
+# Whether `version` (integer vector) satisfies a PEP 440 `requires-python`
+# specifier such as ">=3.10,<3.14". NA when the specifier uses something this
+# doesn't understand, so an exotic pin never produces a false alarm.
+.satisfies_requires_python <- function(version, spec) {
+  parts <- trimws(strsplit(spec, ",", fixed = TRUE)[[1]])
+  parts <- parts[nzchar(parts)]
+  if (length(parts) == 0) {
+    return(NA)
+  }
+  results <- vapply(parts, function(part) {
+    m <- regmatches(part, regexec("^(>=|<=|==|!=|~=|>|<)\\s*([0-9]+(?:\\.[0-9]+)*)(\\.\\*)?$", part))[[1]]
+    if (length(m) == 0) {
+      return(NA)
+    }
+    op <- m[[2]]
+    wanted <- as.integer(strsplit(m[[3]], ".", fixed = TRUE)[[1]])
+    wildcard <- nzchar(m[[4]])
+    prefix_equal <- function(n) identical(.pad_version(version)[seq_len(n)], .pad_version(wanted)[seq_len(n)])
+    switch(op,
+      ">=" = .compare_versions(version, wanted) >= 0,
+      ">" = .compare_versions(version, wanted) > 0,
+      "<=" = .compare_versions(version, wanted) <= 0,
+      "<" = .compare_versions(version, wanted) < 0,
+      "==" = if (wildcard) prefix_equal(length(wanted)) else .compare_versions(version, wanted) == 0L,
+      "!=" = if (wildcard) !prefix_equal(length(wanted)) else .compare_versions(version, wanted) != 0L,
+      "~=" = .compare_versions(version, wanted) >= 0 && prefix_equal(max(1L, length(wanted) - 1L))
+    )
+  }, logical(1))
+  if (anyNA(results)) NA else all(results)
+}
+
+# The interpreter version recorded in `<env>/pyvenv.cfg`, or NULL.
+.venv_python_version <- function(env) {
+  cfg <- file.path(env, "pyvenv.cfg")
+  if (!file.exists(cfg)) {
+    return(NULL)
+  }
+  lines <- readLines(cfg, warn = FALSE)
+  hit <- grep("^(version|version_info)\\s*=", lines, value = TRUE)
+  if (length(hit) == 0) NULL else .parse_py_version(sub("^[^=]*=", "", hit[[1]]))
+}
+
+# What the project asks of its interpreter: `.python-version` (uv's own pin)
+# first, else `requires-python` in pyproject.toml. NULL when there is none or
+# it isn't one this can read.
+.project_python_pin <- function(project_dir) {
+  pin_file <- file.path(project_dir, ".python-version")
+  if (file.exists(pin_file)) {
+    lines <- trimws(readLines(pin_file, warn = FALSE))
+    lines <- lines[nzchar(lines) & !startsWith(lines, "#")]
+    wanted <- if (length(lines) > 0) .parse_py_version(lines[[1]]) else NULL
+    if (!is.null(wanted)) {
+      return(list(source = ".python-version", text = lines[[1]], wanted = wanted))
+    }
+  }
+  pyproject <- file.path(project_dir, "pyproject.toml")
+  if (file.exists(pyproject)) {
+    hit <- grep("^\\s*requires-python\\s*=", readLines(pyproject, warn = FALSE), value = TRUE)
+    if (length(hit) > 0) {
+      spec <- gsub("^[^=]*=\\s*[\"']|[\"']\\s*(#.*)?$", "", hit[[1]])
+      return(list(source = "requires-python in pyproject.toml", text = spec, spec = spec))
+    }
+  }
+  NULL
+}
+
+# NULL when the environment's interpreter suits the project's pin (or either
+# can't be determined); otherwise a sentence saying how it doesn't.
+.python_env_mismatch <- function(project_dir, env) {
+  have <- .venv_python_version(env)
+  pin <- .project_python_pin(project_dir)
+  if (is.null(have) || is.null(pin)) {
+    return(NULL)
+  }
+  ok <- if (!is.null(pin$wanted)) {
+    # A pin names as many components as it names: "3.12" accepts any 3.12.x.
+    identical(.pad_version(have)[seq_along(pin$wanted)], pin$wanted)
+  } else {
+    .satisfies_requires_python(have, pin$spec)
+  }
+  if (isTRUE(ok) || is.na(ok)) {
+    return(NULL)
+  }
+  paste0(
+    "The Python environment in ", env, " runs Python ", paste(have, collapse = "."),
+    ", but the project pins ", pin$text, " (", pin$source, "). Offline, uv uses the environment as it is ",
+    "(\"Using incompatible environment\"), so the render ran on an interpreter the project did not ask for. ",
+    "Recreate the environment with the pinned interpreter, or relax the pin."
+  )
+}
+
+# The environment pass 2 and the styling steps will use: the configured
+# python_env if there is one, else the project's own `.venv`.
+.render_python_env <- function(project_dir) {
+  configured <- .configured_python_env()
+  if (!is.null(configured)) {
+    return(configured)
+  }
+  venv_dir <- if (is.null(getOption("venv_dir"))) project_dir else getOption("venv_dir")
+  file.path(venv_dir, ".venv")
 }

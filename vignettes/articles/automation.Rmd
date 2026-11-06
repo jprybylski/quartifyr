@@ -132,8 +132,8 @@ uv cache. The project must have been initialised beforehand. See
 | `missing_metadata` | artifacts the shell references that have no metadata sidecar |
 | `warnings`, `errors` | the messages behind a non-`"ok"` status |
 | `log_dir` | reportifyr's log directory for the project |
-| `inputs` | `role`, `path`, `sha256` and `bytes` for the files the render read: the shell `.qmd`, each figure, table and metadata sidecar it uses, `standard_footnotes.yaml`, `config.yaml` and the reference-doc |
-| `versions` | quartifyr, reportifyr, Quarto, the `quartifyr_styling` Python package and R (`NULL` where unknown) |
+| `inputs` | `role`, `path`, `sha256` and `bytes` for what the render read, hashed before it started: the shell `.qmd`, `_quarto.yml`, each figure, table and metadata sidecar it uses, `standard_footnotes.yaml`, `config.yaml`, the reference-doc, an explicit `style`/`override` YAML, and one row per Quarto extension under `_extensions/` (hashed over its files) |
+| `versions` | quartifyr, reportifyr, Quarto, the `quartifyr_styling` Python package, R and, when a LibreOffice step ran, LibreOffice (`NULL` where unknown). Also present on the JSON for a render that stopped early, where it could be determined |
 | `started_at`, `finished_at` | UTC ISO 8601 timestamps |
 
 `status` describes whether the delivered document is complete. `"error"` means

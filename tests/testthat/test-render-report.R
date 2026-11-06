@@ -32,8 +32,15 @@
 # A quarto::render() stand-in that actually creates the shell docx it
 # claims to, so downstream reportifyr::make_doc_dirs()-style path derivation
 # (mocked below, per-test) has something real to reason about.
+# The real processx::run(), kept so calls to a (fake) `uv` can reach it while
+# everything else is mocked.
+.real_processx_run <- processx::run
+
 .mock_quarto_run <- function(record_into) {
   function(command, args, wd = ".", error_on_status = TRUE, ...) {
+    if (identical(basename(command), "uv")) {
+      return(.real_processx_run(command, args, error_on_status = error_on_status, ...))
+    }
     if (!identical(args[[1]], "render")) {
       return(list(status = 0, stdout = "1.9.9\n", stderr = ""))
     }
@@ -1068,7 +1075,7 @@ test_that("the result records inputs, tool versions and timestamps", {
 
   expect_setequal(
     result$inputs$role,
-    c("shell_qmd", "standard_footnotes", "config", "reference_doc", "figure", "sidecar")
+    c("shell_qmd", "quarto_yml", "standard_footnotes", "config", "reference_doc", "figure", "sidecar")
   )
   expect_identical(
     result$inputs$sha256[result$inputs$role == "figure"],
@@ -1565,4 +1572,246 @@ test_that("the render's quarto call points at the staging folder", {
   )
   args <- record$quarto_run$args
   expect_match(args[which(args == "--output-dir") + 1], "^report/\\.staging-[0-9a-f]+/shell$")
+})
+
+
+# --- Relative reference_doc / style / override; inputs hashed up front -------
+
+test_that("a relative reference_doc, style and override resolve against the caller's directory, not the project's", {
+  fixture <- .render_report_fixture()
+  outside <- withr::local_tempdir()
+  for (name in c("ref.docx", "style.yaml", "override.yaml")) {
+    file.create(file.path(outside, name))
+  }
+  seen <- new.env()
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
+  local_mocked_bindings(
+    styling_build_abbreviations_tex = function(...) invisible(NULL),
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) {
+      assign("layout", list(style = style, override = override), envir = seen)
+      invisible(docx)
+    }
+  )
+  local_mocked_bindings(run = .mock_quarto_run(seen), .package = "processx")
+  local_mocked_bindings(
+    make_doc_dirs = .mock_make_doc_dirs,
+    build_report = function(docx_in, docx_out, ...) {
+      dir.create(dirname(docx_out), recursive = TRUE, showWarnings = FALSE)
+      writeLines("draft", docx_out)
+    },
+    .package = "reportifyr"
+  )
+
+  result <- withr::with_dir(outside, render_report(
+    fixture$shell_qmd,
+    reference_doc = "ref.docx", style = "style.yaml", override = "override.yaml",
+    standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+    config_yaml = fixture$config_yaml
+  ))
+
+  args <- seen$quarto_run$args
+  expect_identical(
+    normalizePath(args[which(args == "--reference-doc") + 1]),
+    normalizePath(file.path(outside, "ref.docx"))
+  )
+  expect_identical(normalizePath(seen$layout$style), normalizePath(file.path(outside, "style.yaml")))
+  expect_identical(normalizePath(seen$layout$override), normalizePath(file.path(outside, "override.yaml")))
+
+  # What was checked and hashed is what was used.
+  expect_identical(
+    normalizePath(result$inputs$path[result$inputs$role == "reference_doc"]),
+    normalizePath(file.path(outside, "ref.docx"))
+  )
+  expect_identical(
+    normalizePath(result$inputs$path[result$inputs$role == "style"]),
+    normalizePath(file.path(outside, "style.yaml"))
+  )
+})
+
+test_that("a relative reference_doc that only exists in the caller's directory is found", {
+  fixture <- .render_report_fixture()
+  outside <- withr::local_tempdir()
+  file.create(file.path(outside, "ref.docx"))
+  .mock_all <- function() {
+    local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL), .env = parent.frame())
+  }
+  expect_error(
+    withr::with_dir(outside, render_report(fixture$shell_qmd, reference_doc = "missing.docx")),
+    "reference-doc not found: .*missing\\.docx"
+  )
+})
+
+test_that("inputs are hashed before the render, so a file changed during it keeps its starting hash", {
+  fixture <- .render_report_fixture()
+  before <- .sha256_file(fixture$config_yaml)
+  result <- .run_render(fixture, build = function(doc_dirs) writeLines("changed during the render", fixture$config_yaml))
+
+  expect_false(identical(.sha256_file(fixture$config_yaml), before))
+  expect_identical(result$inputs$sha256[result$inputs$role == "config"], before)
+})
+
+test_that("inputs list _quarto.yml, the style and override YAMLs and each Quarto extension", {
+  fixture <- .render_report_fixture()
+  style <- file.path(fixture$project_dir, "style.yaml")
+  override <- file.path(fixture$project_dir, "override.yaml")
+  writeLines("a: 1", style)
+  writeLines("b: 2", override)
+  ext <- file.path(fixture$project_dir, "_extensions", "acme", "thing")
+  dir.create(ext, recursive = TRUE)
+  writeLines("title: thing", file.path(ext, "_extension.yml"))
+  writeLines("-- filter", file.path(ext, "filter.lua"))
+
+  result <- .run_render(fixture, style = style, override = override)
+  rows <- result$inputs[result$inputs$role %in% c("quarto_yml", "style", "override", "extension"), ]
+
+  expect_setequal(rows$role, c("quarto_yml", "style", "override", "extension"))
+  expect_identical(basename(rows$path[rows$role == "extension"]), "thing")
+  expect_identical(rows$sha256[rows$role == "style"], .sha256_file(style))
+
+  hash_before <- rows$sha256[rows$role == "extension"]
+  writeLines("-- a different filter", file.path(ext, "filter.lua"))
+  again <- .run_render(fixture, style = style, override = override)
+  expect_false(identical(again$inputs$sha256[again$inputs$role == "extension"], hash_before))
+  expect_true(.validate_render_json(.render_result_json(again)))
+})
+
+test_that(".extension_table() has one row per extension directory and none without any", {
+  expect_identical(nrow(.extension_table(NULL)), 0L)
+  empty <- withr::local_tempdir()
+  expect_identical(nrow(.extension_table(empty)), 0L)
+
+  dir.create(file.path(empty, "a", "one"), recursive = TRUE)
+  dir.create(file.path(empty, "two"))
+  writeLines("x", file.path(empty, "a", "one", "_extension.yml"))
+  writeLines("y", file.path(empty, "two", "_extension.yaml"))
+  table <- .extension_table(empty)
+  expect_identical(sort(basename(table$path)), c("one", "two"))
+  expect_true(all(grepl("^[0-9a-f]{64}$", table$sha256)))
+})
+
+# --- Offline: pass-2 uv failures through the real reportifyr/pyro chain -------
+
+# A `uv` first on PATH that fails the way uv does with no index to reach: the
+# error goes to stderr, nothing to stdout, non-zero exit.
+.fake_failing_uv <- function(env = parent.frame()) {
+  bin <- withr::local_tempdir(.local_envir = env)
+  script <- file.path(bin, "uv")
+  writeLines(c(
+    "#!/bin/sh",
+    "echo 'error: Failed to fetch: `https://pypi.org/simple/lxml/`' >&2",
+    "exit 2"
+  ), script)
+  Sys.chmod(script, "755")
+  withr::local_path(bin, action = "prefix", .local_envir = env)
+  bin
+}
+
+# A mocked build_report() that runs one of reportifyr's real Python calls
+# (the real wrapper over the real pyro::run_python_script, or the real
+# validate_docx()) so the failure that comes back is the one a real offline
+# render would see, with nothing stubbed between uv and the error.
+.run_real_reportifyr_call <- function(fixture, which, ...) {
+  dir.create(file.path(fixture$project_dir, ".venv"))
+  withr::local_options(venv_dir = fixture$project_dir)
+  withr::local_options(rpfy.no_log = TRUE)
+  .run_render(
+    fixture, offline = TRUE,
+    build = function(doc_dirs) {
+      ns <- asNamespace("reportifyr")
+      if (which == "script") {
+        get("run_python_script", ns)(c("run", "-m", "reportipyr.cli", "remove-footnotes"), "Remove footnotes script")
+      } else {
+        get("validate_docx", ns)(doc_dirs$doc_in, NULL)
+      }
+    },
+    ...
+  )
+}
+
+test_that("offline, a uv failure inside reportifyr's real python wrapper is a quartifyr_offline_failure", {
+  skip_on_os("windows")
+  skip_if_not_installed("reportifyr")
+  fixture <- .render_report_fixture()
+  .fake_failing_uv()
+  err <- suppressMessages(tryCatch(.run_real_reportifyr_call(fixture, "script"), error = function(e) e))
+
+  expect_s3_class(err, "quartifyr_offline_failure")
+  expect_match(conditionMessage(err), "fill the shell with reportifyr \\(pass 2\\)")
+  # The condition reportifyr/pyro raised only says "failed."; uv's own words
+  # come from what pass 2 printed.
+  expect_match(paste(format(err), conditionMessage(err), collapse = "\n"), "Failed to fetch")
+})
+
+test_that("offline, reportifyr's validate step (which discards uv's stderr) is still recognised, by asking uv", {
+  skip_on_os("windows")
+  skip_if_not_installed("reportifyr")
+  fixture <- .render_report_fixture()
+  .fake_failing_uv()
+  err <- suppressMessages(tryCatch(.run_real_reportifyr_call(fixture, "validate"), error = function(e) e))
+
+  expect_s3_class(err, "quartifyr_offline_failure")
+  expect_match(paste(format(err), collapse = "\n"), "Failed to fetch")
+})
+
+test_that("offline, an unrelated failure with a healthy uv is left alone even after the probe", {
+  skip_on_os("windows")
+  skip_if_not_installed("reportifyr")
+  fixture <- .render_report_fixture()
+  bin <- withr::local_tempdir()
+  writeLines(c("#!/bin/sh", "exit 0"), file.path(bin, "uv"))
+  Sys.chmod(file.path(bin, "uv"), "755")
+  withr::local_path(bin, action = "prefix")
+  dir.create(file.path(fixture$project_dir, ".venv"))
+  withr::local_options(venv_dir = fixture$project_dir)
+
+  err <- tryCatch(
+    .run_render(fixture, offline = TRUE, build = function(doc_dirs) stop("validate-docx failed -- check log file")),
+    error = function(e) e
+  )
+  expect_false(inherits(err, "quartifyr_offline_failure"))
+  expect_match(conditionMessage(err), "validate-docx failed")
+})
+
+test_that("online, a pass-2 uv-looking failure is never relabelled and pass 2 isn't wrapped", {
+  fixture <- .render_report_fixture()
+  err <- tryCatch(
+    .run_render(fixture, offline = FALSE, build = function(doc_dirs) stop("error: Failed to fetch: https://pypi.org/")),
+    error = function(e) e
+  )
+  expect_false(inherits(err, "quartifyr_offline_failure"))
+})
+
+test_that(".tee_stdout() collects what is printed and still passes the value through", {
+  into <- new.env()
+  into$lines <- character(0)
+  out <- utils::capture.output(value <- .tee_stdout(function() { cat("one\ntwo\n"); 42 }, into))
+  expect_identical(value, 42)
+  expect_identical(into$lines, c("one", "two"))
+  expect_identical(out, c("one", "two")) # still shown as it happened
+  expect_identical(sink.number(), 0L)
+
+  try(.tee_stdout(function() { cat("before\n"); stop("boom") }, into), silent = TRUE)
+  expect_identical(sink.number(), 0L)
+  expect_true("before" %in% into$lines)
+})
+
+test_that("offline, an interpreter that doesn't match the project's pin is reported in the result", {
+  fixture <- .render_report_fixture()
+  dir.create(file.path(fixture$project_dir, ".venv"))
+  writeLines("version = 3.12.3", file.path(fixture$project_dir, ".venv", "pyvenv.cfg"))
+  writeLines("3.12.16", file.path(fixture$project_dir, ".python-version"))
+  withr::local_options(venv_dir = NULL, quartifyr.python_env = NULL)
+  withr::local_envvar(QUARTIFYR_PYTHON_ENV = NA)
+
+  result <- .run_render(fixture, offline = TRUE)
+  expect_identical(result$status, "warning")
+  expect_match(result$warnings, "runs Python 3.12.3, but the project pins 3.12.16")
+  expect_true(.validate_render_json(.render_result_json(result)))
+
+  # Online, uv would recreate the environment itself, so nothing is said.
+  online <- .run_render(fixture, offline = FALSE)
+  expect_identical(online$status, "ok")
+
+  # And strict turns it into a failure.
+  expect_error(.run_render(fixture, offline = TRUE, strict = TRUE), class = "quartifyr_render_incomplete")
 })

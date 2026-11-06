@@ -283,6 +283,12 @@ render_report <- function(
   config_yaml <- .absolute_path(config_yaml)
   figures_path <- .absolute_path(figures_path)
   tables_path <- .absolute_path(tables_path)
+  # A relative reference_doc/style/override means "relative to where the caller
+  # is", exactly like the paths above, and must keep meaning that inside
+  # with_dir(project_dir, ...) and when it is handed to quarto and Python.
+  if (!is.null(reference_doc)) reference_doc <- .absolute_path(reference_doc)
+  if (!is.null(style)) style <- .absolute_path(style)
+  if (!is.null(override)) override <- .absolute_path(override)
   quarto_yml <- file.path(dirname(shell_qmd), "_quarto.yml")
   .stop_on_finding(.check_output_dir(dirname(shell_qmd)))
 
@@ -359,6 +365,18 @@ render_report <- function(
   # has finished and been accepted (R/render-stage.R).
   stem <- sub("\\.qmd$", "", basename(shell_qmd))
   started_at <- Sys.time()
+  # Offline, uv won't fix an environment whose interpreter the project's pin
+  # rejects; it only prints a warning. Put it in the result.
+  python_env_warnings <- if (offline) {
+    .python_env_mismatch(project_dir, .render_python_env(project_dir))
+  }
+  # Hashed now, before the render can change anything, so `inputs` records
+  # what this render started from.
+  inputs <- .input_table(
+    shell_qmd, figures_path, tables_path, standard_footnotes_yaml, config_yaml, reference_doc_used,
+    quarto_yml = quarto_yml, style = style, override = override,
+    extensions_dir = file.path(project_dir, "_extensions")
+  )
   .discard_stale_staging(project_dir)
   .move_previous_outputs(project_dir, stem)
 
@@ -479,19 +497,25 @@ render_report <- function(
         out
       })
     }
+    # In offline mode keep what pass 2 prints: it is the only place uv's own
+    # error text ever shows up (see .with_offline_context()).
+    pass2_output <- new.env(parent = emptyenv())
+    pass2_output$lines <- character(0)
     paths <- .with_offline_context(
       .with_missing_metadata_context(
-        run_pass2(),
+        if (offline) .tee_stdout(run_pass2, pass2_output) else run_pass2(),
         project_dir = project_dir, shell_qmd = shell_qmd,
         figures_path = figures_path, tables_path = tables_path
       ),
-      step = "fill the shell with reportifyr (pass 2)"
+      step = "fill the shell with reportifyr (pass 2)",
+      evidence = function() c(pass2_output$lines, .rpfy_log_new_lines(log_dir, log_snapshot)),
+      probe = function() .probe_uv(project_dir)
     )
 
     # --- What pass 2 left behind ----------------------------------------------
     produced <- Filter(Negate(is.null), list(paths$draft, paths$final))
     run_errors <- character(0)
-    run_warnings <- character(0)
+    run_warnings <- as.character(python_env_warnings)
 
     not_produced <- character(0)
     for (output_path in produced) {
@@ -572,9 +596,7 @@ render_report <- function(
       missing_metadata = missing_metadata,
       log_dir = log_dir,
       not_produced = where(not_produced),
-      inputs = .input_table(
-        shell_qmd, figures_path, tables_path, standard_footnotes_yaml, config_yaml, reference_doc_used
-      ),
+      inputs = inputs,
       versions = .tool_versions(quarto_command, if (uses_libreoffice) soffice_command),
       started_at = .timestamp_utc(started_at),
       finished_at = .timestamp_utc()

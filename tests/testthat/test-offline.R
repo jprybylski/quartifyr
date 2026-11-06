@@ -405,3 +405,68 @@ test_that(".with_offline_context() leaves ordinary and already-classed errors al
 
   expect_identical(.with_offline_context("fine", step), "fine")
 })
+
+# --- Interpreter vs. the project's pin ------------------------------------------
+
+test_that(".satisfies_requires_python() reads the common PEP 440 specifiers", {
+  v <- c(3L, 12L, 3L)
+  expect_true(.satisfies_requires_python(v, ">=3.10"))
+  expect_true(.satisfies_requires_python(v, ">=3.10, <3.13"))
+  expect_false(.satisfies_requires_python(v, ">=3.13"))
+  expect_false(.satisfies_requires_python(v, ">3.12.3"))
+  expect_true(.satisfies_requires_python(v, "==3.12.*"))
+  expect_false(.satisfies_requires_python(v, "==3.11.*"))
+  expect_true(.satisfies_requires_python(v, "!=3.11.*"))
+  expect_true(.satisfies_requires_python(v, "~=3.12"))
+  expect_false(.satisfies_requires_python(v, "~=3.12.4"))
+  expect_true(is.na(.satisfies_requires_python(v, "===3.12")))
+  expect_true(is.na(.satisfies_requires_python(v, "")))
+})
+
+.python_env_fixture <- function(version, pin = NULL, requires = NULL, key = "version", env = parent.frame()) {
+  project <- withr::local_tempdir(.local_envir = env)
+  dir.create(file.path(project, ".venv"))
+  writeLines(c("home = /usr/bin", paste0(key, " = ", version)), file.path(project, ".venv", "pyvenv.cfg"))
+  if (!is.null(pin)) writeLines(c("# the pin", pin), file.path(project, ".python-version"))
+  if (!is.null(requires)) {
+    writeLines(c("[project]", paste0("requires-python = \"", requires, "\"  # comment")), file.path(project, "pyproject.toml"))
+  }
+  project
+}
+
+test_that(".python_env_mismatch() flags an interpreter that doesn't match .python-version", {
+  project <- .python_env_fixture("3.12.3", pin = "3.12.16")
+  msg <- .python_env_mismatch(project, file.path(project, ".venv"))
+  expect_match(msg, "runs Python 3.12.3")
+  expect_match(msg, "pins 3.12.16 \\(.python-version\\)")
+
+  # uv writes version_info, and a pin may be coarser than the interpreter.
+  project <- .python_env_fixture("3.12.3.final.0", pin = "3.12", key = "version_info")
+  expect_null(.python_env_mismatch(project, file.path(project, ".venv")))
+  project <- .python_env_fixture("3.12.3", pin = "cpython-3.12.3-macos-aarch64-none")
+  expect_null(.python_env_mismatch(project, file.path(project, ".venv")))
+  project <- .python_env_fixture("3.11.9", pin = "3.12")
+  expect_match(.python_env_mismatch(project, file.path(project, ".venv")), "pins 3.12")
+})
+
+test_that(".python_env_mismatch() falls back to requires-python and stays quiet when it can't tell", {
+  project <- .python_env_fixture("3.9.18", requires = ">=3.10")
+  expect_match(.python_env_mismatch(project, file.path(project, ".venv")), "requires-python in pyproject.toml")
+  project <- .python_env_fixture("3.12.3", requires = ">=3.10")
+  expect_null(.python_env_mismatch(project, file.path(project, ".venv")))
+
+  no_pin <- .python_env_fixture("3.12.3")
+  expect_null(.python_env_mismatch(no_pin, file.path(no_pin, ".venv")))
+  no_venv <- withr::local_tempdir()
+  writeLines("3.12.16", file.path(no_venv, ".python-version"))
+  expect_null(.python_env_mismatch(no_venv, file.path(no_venv, ".venv")))
+})
+
+test_that(".render_python_env() prefers the configured python_env over the project's .venv", {
+  project <- withr::local_tempdir()
+  withr::local_options(quartifyr.python_env = NULL, venv_dir = NULL)
+  withr::local_envvar(QUARTIFYR_PYTHON_ENV = NA)
+  expect_identical(.render_python_env(project), file.path(project, ".venv"))
+  withr::local_options(quartifyr.python_env = "/opt/env")
+  expect_identical(.render_python_env(project), "/opt/env")
+})

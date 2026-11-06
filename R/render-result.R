@@ -264,13 +264,24 @@
 }
 
 # What went into a render, so a downstream build manifest can say which
-# sources produced a document: the shell .qmd, every figure/table the shell
-# references with its metadata sidecar, standard_footnotes.yaml, config.yaml
-# and the reference-doc. Only files that exist are listed.
+# sources produced a document: the shell .qmd, _quarto.yml, every
+# figure/table the shell references with its metadata sidecar,
+# standard_footnotes.yaml, config.yaml, the reference-doc, any explicit
+# style/override YAML, and each Quarto extension under _extensions/ (one row
+# per extension, hashed over its files). Only things that exist are listed.
+# Called before anything is rendered, so what is recorded is what the render
+# started from even if a file changes while it runs.
 .input_table <- function(shell_qmd, figures_path, tables_path, standard_footnotes_yaml,
-                         config_yaml, reference_doc) {
-  roles <- c("shell_qmd", "standard_footnotes", "config", "reference_doc")
-  paths <- c(shell_qmd, standard_footnotes_yaml, config_yaml, if (is.null(reference_doc)) NA_character_ else reference_doc)
+                         config_yaml, reference_doc, quarto_yml = NULL, style = NULL,
+                         override = NULL, extensions_dir = NULL) {
+  as_path <- function(x) if (is.null(x)) NA_character_ else x
+  roles <- c(
+    "shell_qmd", "quarto_yml", "standard_footnotes", "config", "reference_doc", "style", "override"
+  )
+  paths <- c(
+    shell_qmd, as_path(quarto_yml), standard_footnotes_yaml, config_yaml,
+    as_path(reference_doc), as_path(style), as_path(override)
+  )
   placeholders <- tryCatch(.scan_placeholders(shell_qmd), error = function(e) NULL)
   for (name in unique(if (is.null(placeholders)) character(0) else placeholders$name)) {
     kind <- .artifact_kind(name)
@@ -278,7 +289,40 @@
     roles <- c(roles, kind, "sidecar")
     paths <- c(paths, artifact, .sidecar_path(artifact))
   }
-  .file_table(roles, paths)
+  rbind(.file_table(roles, paths), .extension_table(extensions_dir))
+}
+
+# One row per Quarto extension (a directory holding `_extension.yml`) under
+# `extensions_dir`: its path, a SHA-256 over the sorted "<relative path>
+# <file hash>" lines of everything in it, and its total size.
+.extension_table <- function(extensions_dir) {
+  empty <- data.frame(
+    role = character(0), path = character(0), sha256 = character(0), bytes = numeric(0),
+    stringsAsFactors = FALSE
+  )
+  if (is.null(extensions_dir) || !dir.exists(extensions_dir)) {
+    return(empty)
+  }
+  manifests <- list.files(
+    extensions_dir, pattern = "^_extension\\.ya?ml$", recursive = TRUE, full.names = TRUE
+  )
+  dirs <- sort(unique(dirname(manifests)))
+  if (length(dirs) == 0) {
+    return(empty)
+  }
+  rows <- lapply(dirs, function(dir) {
+    files <- sort(list.files(dir, recursive = TRUE, full.names = FALSE, all.files = TRUE))
+    full <- file.path(dir, files)
+    lines <- paste(files, vapply(full, .sha256_file, character(1), USE.NAMES = FALSE), sep = "  ")
+    data.frame(
+      role = "extension",
+      path = dir,
+      sha256 = paste(as.character(unclass(openssl::sha256(paste(lines, collapse = "\n")))), collapse = ""),
+      bytes = sum(file.size(full)),
+      stringsAsFactors = FALSE
+    )
+  })
+  do.call(rbind, rows)
 }
 
 # Tool versions that shaped the output. A version that can't be determined is
