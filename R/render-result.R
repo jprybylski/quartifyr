@@ -160,7 +160,10 @@
       project_dir, "report", "draft",
       paste0(stem, c("-clean", "-tabs", "-tabsfigs", "-draft"), ".docx")
     ),
-    final = file.path(project_dir, "report", "final", paste0(stem, "-final.docx"))
+    final = file.path(
+      project_dir, "report", "final",
+      paste0(stem, c("-final.docx", "-final_docx_metadata.json"))
+    )
   )
 }
 
@@ -168,27 +171,69 @@
 # render's docx where a caller (or a person opening the folder) would take it
 # for this render's. So before rendering, whatever this render is about to
 # regenerate is moved to `report/.previous/<shell|draft|final>/`, replacing
-# the copy already there. Returns the new paths of what was moved.
+# the copy already there. Because a render only ever delivers into those
+# folders once it has finished and been accepted (see R/render-stage.R), what
+# is moved here is always a delivered render, never a partial one, so a failed
+# run followed by another run can't push the last good outputs out of
+# `.previous`. The moves are all-or-nothing: if one fails, the ones already
+# made are undone (a replaced `.previous` copy is restored too) before the
+# error is raised. Returns the new paths of what was moved.
 .move_previous_outputs <- function(project_dir, stem) {
-  moved <- character(0)
   outputs <- .render_output_paths(project_dir, stem)
+  plan <- list()
   for (role in names(outputs)) {
-    existing <- outputs[[role]][file.exists(outputs[[role]])]
-    if (length(existing) == 0) {
-      next
-    }
-    dest_dir <- file.path(project_dir, "report", ".previous", role)
-    dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
-    for (path in existing) {
-      dest <- file.path(dest_dir, basename(path))
-      unlink(dest)
-      if (!file.rename(path, dest)) {
-        stop("Could not move the previous output ", path, " to ", dest, ".", call. = FALSE)
-      }
-      moved <- c(moved, dest)
+    for (path in outputs[[role]][file.exists(outputs[[role]])]) {
+      plan[[length(plan) + 1L]] <- list(
+        from = path,
+        to = file.path(project_dir, "report", ".previous", role, basename(path))
+      )
     }
   }
-  moved
+  if (length(plan) == 0) {
+    return(character(0))
+  }
+
+  suffix <- paste0(".replaced-", paste(as.character(unclass(openssl::rand_bytes(4))), collapse = ""))
+  done <- list()
+  undo <- function() {
+    for (op in rev(done)) {
+      file.rename(op$to, op$from)
+      if (!is.null(op$backup)) {
+        file.rename(op$backup, op$to)
+      }
+    }
+  }
+  tryCatch(
+    {
+      for (op in plan) {
+        dir.create(dirname(op$to), recursive = TRUE, showWarnings = FALSE)
+        backup <- NULL
+        if (file.exists(op$to)) {
+          backup <- paste0(op$to, suffix)
+          if (!file.rename(op$to, backup)) {
+            stop("Could not move the previous output ", op$from, " to ", op$to, ".", call. = FALSE)
+          }
+        }
+        if (!file.rename(op$from, op$to)) {
+          if (!is.null(backup)) {
+            file.rename(backup, op$to)
+          }
+          stop("Could not move the previous output ", op$from, " to ", op$to, ".", call. = FALSE)
+        }
+        done[[length(done) + 1L]] <- list(from = op$from, to = op$to, backup = backup)
+      }
+    },
+    error = function(e) {
+      undo()
+      stop(e)
+    }
+  )
+  for (op in done) {
+    if (!is.null(op$backup)) {
+      unlink(op$backup)
+    }
+  }
+  vapply(plan, function(op) op$to, character(1))
 }
 
 # TRUE when `path` exists and was written by the render that began at
@@ -285,17 +330,22 @@
 # threw: "error" = unfilled placeholders or a requested post-processing step
 # that failed; "warning" = complete but something reportifyr flagged (e.g. a
 # missing metadata sidecar); "ok" = nothing to report.
-.new_render_result <- function(shell, draft, final, warnings = character(0), errors = character(0),
-                               unfilled_placeholders = character(0), missing_metadata = character(0),
-                               log_dir = NULL, not_produced = character(0), inputs = NULL,
-                               versions = NULL, started_at = NULL, finished_at = NULL) {
-  status <- if (length(errors) > 0 || length(unfilled_placeholders) > 0) {
+.result_status <- function(warnings = character(0), errors = character(0),
+                            unfilled_placeholders = character(0), missing_metadata = character(0)) {
+  if (length(errors) > 0 || length(unfilled_placeholders) > 0) {
     "error"
   } else if (length(warnings) > 0 || length(missing_metadata) > 0) {
     "warning"
   } else {
     "ok"
   }
+}
+
+.new_render_result <- function(shell, draft, final, warnings = character(0), errors = character(0),
+                               unfilled_placeholders = character(0), missing_metadata = character(0),
+                               log_dir = NULL, not_produced = character(0), inputs = NULL,
+                               versions = NULL, started_at = NULL, finished_at = NULL) {
+  status <- .result_status(warnings, errors, unfilled_placeholders, missing_metadata)
   structure(
     list(
       shell = shell,

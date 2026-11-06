@@ -40,6 +40,9 @@ examples/*/report/draft/*
 examples/*/report/final/*
 # the previous render's outputs, moved aside by render_report() before each render
 examples/*/report/.previous/
+# a render that failed or was rejected by strict, and one still in progress
+examples/*/report/.failed/
+examples/*/report/.staging-*/
 !examples/*/report/draft/readme.txt
 !examples/*/report/final/readme.txt
 

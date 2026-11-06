@@ -39,8 +39,11 @@
     }
     assign("quarto_run", list(command = command, args = args, wd = wd), envir = record_into)
     output_name <- args[which(args == "--output") + 1]
-    dir.create(file.path(wd, "report", "shell"), recursive = TRUE, showWarnings = FALSE)
-    file.create(file.path(wd, "report", "shell", output_name))
+    # render_report() points quarto at its staging folder with --output-dir
+    # (relative to the project); without it quarto uses _quarto.yml's.
+    output_dir <- if ("--output-dir" %in% args) args[which(args == "--output-dir") + 1] else file.path("report", "shell")
+    dir.create(file.path(wd, output_dir), recursive = TRUE, showWarnings = FALSE)
+    file.create(file.path(wd, output_dir, output_name))
     list(status = 0, stdout = "", stderr = "")
   }
 }
@@ -53,6 +56,14 @@
     doc_draft = paste0(base, "-draft.docx"),
     doc_final = paste0(sub("draft", "final", base), "-final.docx")
   )
+}
+
+# render_report() works in report/.staging-<id>/ and moves the finished
+# render into report/{shell,draft,final}/, so the paths the mocks see are
+# staged ones while the result carries the delivered ones.
+.is_staged <- function(path) grepl("[/\\\\]\\.staging-[0-9a-f]+[/\\\\]", path)
+.live_path <- function(fixture, role, name) {
+  file.path(fixture$project_dir, "report", role, name)
 }
 
 # --- Pre-flight validation (no mocking needed) ------------------------------
@@ -288,7 +299,12 @@ test_that("orchestrates quarto render -> apply-layout -> build_report() for stat
   ))
 
   expect_identical(record$apply_layout$status, "draft")
-  expect_identical(normalizePath(record$apply_layout$docx), normalizePath(result$shell))
+  expect_true(.is_staged(record$apply_layout$docx))
+  expect_identical(basename(record$apply_layout$docx), basename(result$shell))
+  expect_identical(
+    normalizePath(result$shell),
+    normalizePath(.live_path(fixture, "shell", "report.docx"))
+  )
 
   # Mirror render_report()'s own expression exactly (dirname() of the
   # *normalized* shell_qmd) rather than normalizing project_dir
@@ -303,7 +319,12 @@ test_that("orchestrates quarto render -> apply-layout -> build_report() for stat
   expect_identical(record$build_report$standard_footnotes_yaml, fixture$standard_footnotes_yaml)
   expect_identical(record$build_report$config_yaml, fixture$config_yaml)
 
-  expect_identical(result$draft, record$build_report$docx_out)
+  expect_true(.is_staged(record$build_report$docx_out))
+  expect_identical(basename(result$draft), basename(record$build_report$docx_out))
+  expect_identical(
+    normalizePath(dirname(result$draft)),
+    normalizePath(file.path(fixture$project_dir, "report", "draft"))
+  )
   expect_null(result$final)
 })
 
@@ -336,8 +357,13 @@ test_that("also runs finalize_document() and returns a final path for status = '
   )
 
   expect_true("document-status:FINAL" %in% record$quarto_run$args)
-  expect_identical(result$final, record$finalize$docx_out)
-  expect_identical(record$finalize$docx_in, result$draft)
+  expect_true(.is_staged(record$finalize$docx_out))
+  expect_identical(basename(result$final), basename(record$finalize$docx_out))
+  expect_identical(basename(record$finalize$docx_in), basename(result$draft))
+  expect_identical(
+    normalizePath(dirname(result$final)),
+    normalizePath(file.path(fixture$project_dir, "report", "final"))
+  )
 })
 
 # --- Opt-in post-processing steps --------------------------------------------
@@ -387,7 +413,9 @@ test_that("recalculate_fields = TRUE runs styling_recalculate_fields() on each p
     recalculate_fields = TRUE
   )
 
-  expect_identical(recalculated, result$draft)
+  # The step ran on the staged file, before the render was accepted.
+  expect_true(all(.is_staged(recalculated)))
+  expect_identical(basename(recalculated), basename(result$draft))
 })
 
 test_that("recalculate_fields = FALSE (the default) never calls styling_recalculate_fields()", {
@@ -456,7 +484,8 @@ test_that("resolve_same_page_crossrefs = TRUE runs styling_resolve_same_page_cro
     resolve_same_page_crossrefs = TRUE
   )
 
-  expect_identical(resolved, result$draft)
+  expect_true(all(.is_staged(resolved)))
+  expect_identical(basename(resolved), basename(result$draft))
 })
 
 test_that("a failing styling_resolve_same_page_crossrefs() only warns, and the render still succeeds", {
@@ -856,10 +885,11 @@ test_that("rejects an invalid quarto_bin before doing any work", {
   result
 }
 
-# After a failed second render: nothing from the first one is left in the
-# live folders, and its files are kept under report/.previous/.
-.expect_outputs_moved_aside <- function(fixture, first, shell_rendered = FALSE) {
-  expect_identical(file.exists(first$shell), shell_rendered)
+# After a failed second render: nothing from the first one (or from the
+# failed one) is left in the live folders, and the first one's files are kept
+# under report/.previous/.
+.expect_outputs_moved_aside <- function(fixture, first) {
+  expect_false(file.exists(first$shell))
   expect_false(file.exists(first$draft))
   expect_false(file.exists(first$final))
   previous <- file.path(fixture$project_dir, "report", ".previous")
@@ -909,8 +939,9 @@ test_that("a pass-2 failure on a second render leaves no draft or final from the
   local_mocked_bindings(build_report = function(...) stop("python exploded"), .package = "reportifyr")
 
   expect_error(.render_again(fixture), "python exploded")
-  # Pass 1 had already written this render's own shell by then.
-  .expect_outputs_moved_aside(fixture, first, shell_rendered = TRUE)
+  # Pass 1 had already written this render's own shell, but into staging.
+  .expect_outputs_moved_aside(fixture, first)
+  expect_true(file.exists(file.path(fixture$project_dir, "report", ".failed", "shell", "report.docx")))
 })
 
 test_that("a second successful render replaces the outputs and refreshes .previous/", {
@@ -951,16 +982,20 @@ test_that("a previous output that can't be moved aside stops the render", {
   skip_on_os("windows")
   fixture <- .render_report_fixture()
   first <- .first_render(fixture)
-  blocker <- file.path(fixture$project_dir, "report", ".previous", "draft", basename(first$draft))
-  dir.create(blocker, recursive = TRUE)
-  file.create(file.path(blocker, "keep"))
+  # .previous/draft is a file, so nothing can be moved into it. The shell is
+  # moved first (shell, draft, final), and must be put back.
+  previous <- file.path(fixture$project_dir, "report", ".previous")
+  unlink(previous, recursive = TRUE)
+  dir.create(previous)
+  file.create(file.path(previous, "draft"))
   local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
 
   expect_error(
     suppressWarnings(.render_again(fixture)),
     "Could not move the previous output"
   )
-  expect_true(file.exists(first$draft))
+  expect_true(all(file.exists(c(first$shell, first$draft, first$final))))
+  expect_false(dir.exists(file.path(fixture$project_dir, "report", ".failed")))
 })
 
 test_that(".move_previous_outputs() moves only what exists and reports where it went", {
@@ -984,10 +1019,10 @@ test_that(".move_previous_outputs() moves only what exists and reports where it 
 test_that(".move_previous_outputs() replaces an older .previous copy", {
   project <- withr::local_tempdir()
   paths <- .render_output_paths(project, "report")
-  dir.create(dirname(paths$final), recursive = TRUE)
-  writeLines("old", paths$final)
+  dir.create(dirname(paths$final[[1]]), recursive = TRUE)
+  writeLines("old", paths$final[[1]])
   .move_previous_outputs(project, "report")
-  writeLines("new", paths$final)
+  writeLines("new", paths$final[[1]])
   .move_previous_outputs(project, "report")
 
   kept <- file.path(project, "report", ".previous", "final", "report-final.docx")
@@ -1003,7 +1038,8 @@ test_that(".render_output_paths() agrees with reportifyr::make_doc_dirs()", {
   theirs <- withr::with_dir(project, reportifyr::make_doc_dirs(paths$shell))
 
   expect_setequal(
-    normalizePath(c(paths$shell, paths$draft, paths$final), mustWork = FALSE),
+    # (the metadata sidecar next to the final docx is quartifyr's addition)
+    normalizePath(c(paths$shell, paths$draft, paths$final[[1]]), mustWork = FALSE),
     normalizePath(unlist(theirs, use.names = FALSE), mustWork = FALSE)
   )
 })
@@ -1350,4 +1386,183 @@ test_that(".soffice_info() reports the first line of `soffice --version`", {
   expect_identical(info$path, script)
   expect_identical(info$version, "LibreOffice 26.2.5.2 deadbeef")
   expect_null(.soffice_info(file.path(dir, "missing")))
+})
+
+# --- Stage and swap: only an accepted render reaches report/{draft,final} ----
+
+.live_docx <- function(fixture) {
+  list.files(
+    file.path(fixture$project_dir, "report", c("shell", "draft", "final")),
+    pattern = "\\.docx$", full.names = TRUE, recursive = TRUE
+  )
+}
+
+test_that("a strict render with an unfilled placeholder leaves no docx in report/draft or report/final", {
+  fixture <- .render_report_fixture()
+  err <- tryCatch(
+    .run_render(fixture, status = "final", strict = TRUE, unfilled = "gone.png"),
+    error = function(e) e
+  )
+
+  expect_s3_class(err, "quartifyr_render_incomplete")
+  expect_identical(.live_docx(fixture), character(0))
+
+  # The rejected render is kept for diagnosis, and the error's result says where.
+  failed <- file.path(fixture$project_dir, "report", ".failed")
+  expect_true(file.exists(file.path(failed, "final", "report-final.docx")))
+  expect_match(paste(readLines(file.path(failed, "FAILED")), collapse = "\n"), "strict")
+  expect_identical(
+    normalizePath(err$result$final),
+    normalizePath(file.path(failed, "final", "report-final.docx"))
+  )
+  expect_true(all(file.exists(err$result$artifacts$path)))
+})
+
+test_that("a pass-2 failure after the draft was written leaves no draft in report/draft", {
+  fixture <- .render_report_fixture()
+  err <- tryCatch(
+    .run_render(fixture, build = function(doc_dirs) stop("pass 2 died after writing the draft")),
+    error = function(e) e
+  )
+
+  expect_match(conditionMessage(err), "pass 2 died")
+  expect_identical(.live_docx(fixture), character(0))
+  expect_false(file.exists(file.path(fixture$project_dir, "report", "draft", "report-draft.docx")))
+  failed <- file.path(fixture$project_dir, "report", ".failed")
+  expect_true(file.exists(file.path(failed, "draft", "report-draft.docx")))
+  expect_match(paste(readLines(file.path(failed, "FAILED")), collapse = "\n"), "pass 2 died")
+  expect_identical(list.files(file.path(fixture$project_dir, "report"), pattern = "^\\.staging-"), character(0))
+})
+
+test_that("success, then a failure after partial writes, then success keeps the first render in .previous", {
+  fixture <- .render_report_fixture()
+  gen <- function(label) function(doc_dirs) writeLines(label, doc_dirs$doc_draft)
+
+  first <- .run_render(fixture, build = gen("gen1"))
+  expect_identical(readLines(first$draft), "gen1")
+
+  expect_error(
+    .run_render(fixture, build = function(doc_dirs) {
+      writeLines("partial", doc_dirs$doc_draft)
+      stop("second render died")
+    }),
+    "second render died"
+  )
+  previous_draft <- file.path(fixture$project_dir, "report", ".previous", "draft", "report-draft.docx")
+  expect_identical(readLines(previous_draft), "gen1")
+  expect_identical(.live_docx(fixture), character(0))
+
+  third <- .run_render(fixture, build = gen("gen3"))
+  expect_identical(readLines(third$draft), "gen3")
+  # The failed second render's partial output never displaced the first.
+  expect_identical(readLines(previous_draft), "gen1")
+})
+
+test_that("a non-strict incomplete render is still delivered, with status error", {
+  fixture <- .render_report_fixture()
+  result <- .run_render(fixture, unfilled = "gone.png")
+
+  expect_identical(result$status, "error")
+  expect_true(file.exists(result$draft))
+  expect_identical(
+    normalizePath(dirname(result$draft)),
+    normalizePath(file.path(fixture$project_dir, "report", "draft"))
+  )
+  expect_false(dir.exists(file.path(fixture$project_dir, "report", ".failed")))
+})
+
+test_that("the staging folder is gone after a successful render", {
+  fixture <- .render_report_fixture()
+  .run_render(fixture, status = "final")
+  expect_identical(list.files(file.path(fixture$project_dir, "report"), pattern = "^\\.staging-"), character(0))
+})
+
+test_that("a staging folder left by a killed render is discarded by the next one", {
+  fixture <- .render_report_fixture()
+  stale <- file.path(fixture$project_dir, "report", ".staging-deadbeef0000", "final")
+  dir.create(stale, recursive = TRUE)
+  writeLines("from a killed render", file.path(stale, "report-final.docx"))
+
+  result <- .run_render(fixture, status = "final")
+
+  expect_false(dir.exists(dirname(stale)))
+  expect_identical(readLines(result$final), "final")
+})
+
+test_that("a failed render's folder is replaced by the next failure, not accumulated", {
+  fixture <- .render_report_fixture()
+  fail_with <- function(msg) {
+    try(.run_render(fixture, build = function(doc_dirs) stop(msg)), silent = TRUE)
+  }
+  fail_with("first failure")
+  fail_with("second failure")
+  failed <- file.path(fixture$project_dir, "report", ".failed")
+  expect_match(paste(readLines(file.path(failed, "FAILED")), collapse = "\n"), "second failure")
+  expect_false(grepl("first failure", paste(readLines(file.path(failed, "FAILED")), collapse = "\n")))
+})
+
+test_that("reportifyr's metadata sidecar is repointed from the staging folder to report/final", {
+  fixture <- .render_report_fixture()
+  # Build what finalize_document() leaves in a staged final/ folder.
+  stage <- .new_stage(fixture$project_dir)
+  staged_docx <- file.path(stage$final_dir, "report-final.docx")
+  writeLines("final", staged_docx)
+  staged_rel <- file.path("report", basename(stage$root), "final", "report-final.docx")
+  writeLines(
+    sprintf('{"object_meta": {"path": "%s", "hash": "abc"}}', staged_rel),
+    file.path(stage$final_dir, "report-final_docx_metadata.json")
+  )
+
+  .promote_stage(fixture$project_dir, stage)
+
+  meta <- readLines(file.path(fixture$project_dir, "report", "final", "report-final_docx_metadata.json"))
+  expect_match(meta, "\"path\": \"report/final/report-final.docx\"", fixed = TRUE)
+  expect_false(grepl(".staging-", meta, fixed = TRUE))
+  expect_false(dir.exists(stage$root))
+})
+
+test_that(".promote_stage() undoes its moves when one of them fails", {
+  project <- withr::local_tempdir()
+  dir.create(file.path(project, "report"))
+  stage <- .new_stage(project)
+  writeLines("shell", file.path(stage$shell_dir, "report.docx"))
+  writeLines("draft", file.path(stage$draft_dir, "report-draft.docx"))
+  # report/draft is a file, so the draft can't be moved in after the shell was.
+  file.create(file.path(project, "report", "draft"))
+
+  expect_error(suppressWarnings(.promote_stage(project, stage)), "Could not move the staged output")
+  expect_true(file.exists(file.path(stage$shell_dir, "report.docx")))
+  expect_false(file.exists(file.path(project, "report", "shell", "report.docx")))
+})
+
+test_that(".with_stage() keeps the staged files under .failed when the run errors or is interrupted", {
+  project <- withr::local_tempdir()
+  dir.create(file.path(project, "report"))
+  try(.with_stage(project, "report", function(stage, outcome) {
+    writeLines("x", file.path(stage$draft_dir, "report-draft.docx"))
+    stop("kaboom")
+  }), silent = TRUE)
+  failed <- file.path(project, "report", ".failed")
+  expect_true(file.exists(file.path(failed, "draft", "report-draft.docx")))
+  expect_match(paste(readLines(file.path(failed, "FAILED")), collapse = "\n"), "kaboom")
+
+  value <- .with_stage(project, "report", function(stage, outcome) {
+    outcome$accepted <- TRUE
+    "fine"
+  })
+  expect_identical(value, "fine")
+})
+
+test_that("the render's quarto call points at the staging folder", {
+  fixture <- .render_report_fixture()
+  record <- new.env()
+  .base_render_report_mocks(record)
+  render_report(
+    fixture$shell_qmd,
+    reference_doc = fixture$reference_doc,
+    standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+    config_yaml = fixture$config_yaml
+  )
+  args <- record$quarto_run$args
+  expect_match(args[which(args == "--output-dir") + 1], "^report/\\.staging-[0-9a-f]+/shell$")
 })

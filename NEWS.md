@@ -16,6 +16,21 @@
 
 ## Bug fixes
 
+* A failed, rejected or interrupted render no longer leaves a
+  complete-looking docx in `report/draft` or `report/final`. A render now
+  works in `report/.staging-<id>/` (Quarto is pointed at it with
+  `--output-dir`) and is only moved into `report/{shell,draft,final}` once it
+  has finished and been accepted, so a `strict = TRUE` rejection, a pass-2
+  failure partway through (reportifyr's `-clean`/`-tabs`/`-draft` files) or a
+  killed R process never reaches the live folders. What a failed or rejected
+  render produced is kept in `report/.failed/` with a `FAILED` file giving the
+  reason (the next failure replaces it); a killed render's staging folder is
+  deleted by the next render. `report/.previous/` now only ever receives
+  delivered outputs, so a failure followed by another render no longer pushes
+  the last good outputs out of it, and moving the previous outputs there is
+  all or nothing instead of stopping half way. reportifyr's
+  `<final>_docx_metadata.json` is repointed from the staging folder to
+  `report/final/` (#81).
 * `--recalculate-fields` and `--resolve-same-page-crossrefs` no longer hang
   on macOS with LibreOffice 26.2 (every run timed out). A fresh profile
   that already holds the seeded macro when LibreOffice first starts never
