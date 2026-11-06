@@ -50,10 +50,6 @@ reliable in your own environment, the same as ``recalculate-fields``.
 
 from __future__ import annotations
 
-import os
-import shutil
-import signal
-import subprocess
 import tempfile
 from pathlib import Path
 from xml.sax.saxutils import escape as _xml_escape
@@ -62,6 +58,14 @@ import docx
 from docx.oxml.ns import qn
 
 from ._ooxml_fields import SAME_PAGE_MARKER_PREFIX, match_ref_field_run_group, strip_hyperlink_switch
+from ._soffice import (
+    SofficeError,
+    SofficeNotFoundError,
+    SofficeTimeoutError,
+    resolve_soffice,
+    rmtree_retrying,
+    run_macro,
+)
 
 _MACRO_XBA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE script:module PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "module.dtd">
@@ -181,23 +185,6 @@ def _seed_profile(profile_dir: Path, *, pairs_path: Path, results_path: Path) ->
     (profile_dir / "user" / "basic" / "script.xlc").write_text(_SCRIPT_XLC, encoding="utf-8")
 
 
-def _kill_process_tree(proc: subprocess.Popen) -> None:
-    """See ``recalculate_fields.py``'s identical helper: soffice can spawn a
-    detached ``soffice.bin`` worker that a plain ``proc.kill()`` misses;
-    killing the whole process group (``start_new_session=True`` at launch)
-    reaches it.
-    """
-    try:
-        pgid = os.getpgid(proc.pid)
-        os.killpg(pgid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        pass
-
-
 def resolve_same_page_crossrefs(
     docx_path: str | Path,
     *,
@@ -220,12 +207,16 @@ def resolve_same_page_crossrefs(
     if not markers:
         return docx_path
 
-    if shutil.which(soffice_bin) is None:
-        raise SamePageCrossrefError(
-            f"'{soffice_bin}' not found on PATH -- install LibreOffice (e.g. `brew install --cask libreoffice`)"
-        )
+    try:
+        soffice = resolve_soffice(soffice_bin)
+    except SofficeNotFoundError as exc:
+        raise SamePageCrossrefError(str(exc)) from None
 
-    with tempfile.TemporaryDirectory(prefix="quartifyr-same-page-") as tmp:
+    # mkdtemp + rmtree_retrying rather than TemporaryDirectory: see
+    # recalculate_fields.py for why a Windows LibreOffice that outlives its
+    # kill must not turn a timeout into a cleanup crash.
+    tmp = tempfile.mkdtemp(prefix="quartifyr-same-page-")
+    try:
         tmp_dir = Path(tmp)
         pairs_path = tmp_dir / "pairs.txt"
         results_path = tmp_dir / "results.txt"
@@ -237,39 +228,26 @@ def resolve_same_page_crossrefs(
         profile_dir = tmp_dir / "profile"
         _seed_profile(profile_dir, pairs_path=pairs_path, results_path=results_path)
 
-        # See recalculate_fields.py's identical note: stderr must go to a
-        # real file, not a pipe, or Popen.communicate()-style waiting can
-        # deadlock against soffice's detached worker.
-        stderr_path = tmp_dir / "soffice-stderr.log"
-        with open(stderr_path, "wb") as stderr_file:
-            proc = subprocess.Popen(
-                [
-                    soffice_bin,
-                    "--headless",
-                    "--invisible",
-                    "--norestore",
-                    f"-env:UserInstallation=file://{profile_dir}",
-                    str(docx_path),
-                    "macro:///Standard.Module1.ReadPages",
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=stderr_file,
-                start_new_session=True,
+        try:
+            returncode, stderr_text = run_macro(
+                soffice,
+                docx_path,
+                "macro:///Standard.Module1.ReadPages",
+                profile_dir=profile_dir,
+                stderr_path=tmp_dir / "soffice-stderr.log",
+                timeout_seconds=timeout_seconds,
             )
-            try:
-                returncode = proc.wait(timeout=timeout_seconds)
-            except subprocess.TimeoutExpired:
-                _kill_process_tree(proc)
-                raise SamePageCrossrefError(
-                    f"LibreOffice did not finish within {timeout_seconds}s reading page numbers for "
-                    f"{docx_path} and was force-killed. This drives the same headless-LibreOffice "
-                    "mechanism as quartifyr-styling recalculate-fields, which has been observed to hang "
-                    "intermittently -- see this module's docstring and the repo-root README.md's 'Status and known limitations' "
-                    "recalculation' section."
-                ) from None
+        except SofficeTimeoutError:
+            raise SamePageCrossrefError(
+                f"LibreOffice did not finish within {timeout_seconds}s reading page numbers for "
+                f"{docx_path} and was force-killed. This drives the same headless-LibreOffice "
+                "mechanism as quartifyr-styling recalculate-fields -- see this module's docstring "
+                "and the repo-root README.md's 'Status and known limitations' section."
+            ) from None
+        except SofficeError as exc:
+            raise SamePageCrossrefError(str(exc)) from None
 
         if returncode != 0:
-            stderr_text = stderr_path.read_text(errors="replace") if stderr_path.exists() else ""
             raise SamePageCrossrefError(f"LibreOffice page-number lookup failed (exit {returncode}):\n{stderr_text}")
 
         if not results_path.exists():
@@ -284,6 +262,8 @@ def resolve_same_page_crossrefs(
                 continue
             marker, _target, marker_page, target_page = line.split("\t")
             pages[marker] = (int(marker_page), int(target_page))
+    finally:
+        rmtree_retrying(tmp)
 
     # Markers LibreOffice couldn't resolve (bookmark lookup failed for that
     # pair) are left as-is -- still hyperlinked, the same safe fallback as

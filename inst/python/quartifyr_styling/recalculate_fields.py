@@ -44,12 +44,17 @@ reliable in your own environment; it fails loudly and cleanly either way
 
 from __future__ import annotations
 
-import os
-import shutil
-import signal
-import subprocess
 import tempfile
 from pathlib import Path
+
+from ._soffice import (
+    SofficeError,
+    SofficeNotFoundError,
+    SofficeTimeoutError,
+    resolve_soffice,
+    rmtree_retrying,
+    run_macro,
+)
 
 _MACRO_XBA = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE script:module PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "module.dtd">
@@ -107,27 +112,6 @@ def _seed_profile(profile_dir: Path) -> None:
     (profile_dir / "user" / "basic" / "script.xlc").write_text(_SCRIPT_XLC, encoding="utf-8")
 
 
-def _kill_process_tree(proc: subprocess.Popen) -> None:
-    """Kill proc's entire process group, not just the single tracked PID.
-
-    soffice's launcher can spawn a detached soffice.bin worker; a plain
-    proc.kill() only signals the PID Python is tracking and can leave that
-    worker running as an orphan. Reproduced: a real-world run left soffice
-    alive and unkillable via the ordinary timeout path for several minutes.
-    start_new_session=True (set where this process is started) puts the
-    whole tree in its own process group so os.killpg reaches all of it.
-    """
-    try:
-        pgid = os.getpgid(proc.pid)
-        os.killpg(pgid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        pass
-
-
 def recalculate_fields(
     docx_path: str | Path,
     *,
@@ -142,62 +126,47 @@ def recalculate_fields(
     docx_path = Path(docx_path).resolve()
     if not docx_path.exists():
         raise FileNotFoundError(f"docx not found: {docx_path}")
-    if shutil.which(soffice_bin) is None:
-        raise FieldRecalculationError(
-            f"'{soffice_bin}' not found on PATH -- install LibreOffice "
-            "(e.g. `brew install --cask libreoffice`)"
-        )
+    try:
+        soffice = resolve_soffice(soffice_bin)
+    except SofficeNotFoundError as exc:
+        raise FieldRecalculationError(str(exc)) from None
 
     # A fresh, isolated profile per call avoids the single-instance-per-
     # profile lock LibreOffice otherwise takes, so concurrent invocations
-    # (e.g. rendering several reports in parallel) don't collide.
-    with tempfile.TemporaryDirectory(prefix="quartifyr-lo-profile-") as tmp:
+    # (e.g. rendering several reports in parallel) don't collide. Not a
+    # TemporaryDirectory: on Windows a LibreOffice that outlives its kill can
+    # still hold files in here, and the cleanup error would mask the real
+    # (timeout) failure -- rmtree_retrying() waits a moment and then gives up
+    # quietly.
+    tmp = tempfile.mkdtemp(prefix="quartifyr-lo-profile-")
+    try:
         profile_dir = Path(tmp)
         _seed_profile(profile_dir)
-
-        # NOTE: deliberately NOT using subprocess.run(capture_output=True).
-        # soffice's --headless launcher forks a detached soffice.bin worker
-        # that inherits stdout/stderr; when those are pipes (what
-        # capture_output/PIPE creates), Popen.communicate() blocks forever
-        # waiting for the pipe's write end to close, which it never does --
-        # even after the process we actually care about has finished and
-        # written the file. Redirecting to real files (not pipes) avoids
-        # that deadlock entirely. Reproduced consistently: this hung every
-        # time under subprocess.run(capture_output=True), every time it
-        # succeeded when output went straight to a real fd (a terminal, or
-        # here, a file).
-        stderr_path = profile_dir / "soffice-stderr.log"
-        with open(stderr_path, "wb") as stderr_file:
-            proc = subprocess.Popen(
-                [
-                    soffice_bin,
-                    "--headless",
-                    "--invisible",
-                    "--norestore",
-                    f"-env:UserInstallation=file://{profile_dir}",
-                    str(docx_path),
-                    "macro:///Standard.Module1.UpdateAndSave",
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=stderr_file,
-                start_new_session=True,  # own process group; see _kill_process_tree
+        try:
+            returncode, stderr_text = run_macro(
+                soffice,
+                docx_path,
+                "macro:///Standard.Module1.UpdateAndSave",
+                profile_dir=profile_dir,
+                stderr_path=profile_dir / "soffice-stderr.log",
+                timeout_seconds=timeout_seconds,
             )
-            try:
-                returncode = proc.wait(timeout=timeout_seconds)
-            except subprocess.TimeoutExpired:
-                _kill_process_tree(proc)
-                raise FieldRecalculationError(
-                    f"LibreOffice did not finish within {timeout_seconds}s recalculating {docx_path} "
-                    "and was force-killed. This has been observed to hang intermittently on macOS "
-                    "(reproduced both in a sandboxed environment and a plain native terminal) -- see "
-                    "this module's docstring and the repo-root README.md's 'Status and known limitations' recalculation' section."
-                ) from None
+        except SofficeTimeoutError:
+            raise FieldRecalculationError(
+                f"LibreOffice did not finish within {timeout_seconds}s recalculating {docx_path} "
+                "and was force-killed. This has been observed to hang on macOS with LibreOffice "
+                "26.2 -- see this module's docstring and the repo-root README.md's "
+                "'Status and known limitations' section."
+            ) from None
+        except SofficeError as exc:
+            raise FieldRecalculationError(str(exc)) from None
 
         if returncode != 0:
-            stderr_text = stderr_path.read_text(errors="replace") if stderr_path.exists() else ""
             raise FieldRecalculationError(
                 f"LibreOffice field recalculation failed (exit {returncode}):\n{stderr_text}"
             )
+    finally:
+        rmtree_retrying(tmp)
 
     # A clean exit code alone isn't trustworthy here: reproduced a run that
     # exited 0 within seconds without the macro actually having run (the

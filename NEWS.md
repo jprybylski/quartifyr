@@ -1,5 +1,20 @@
 # quartifyr
 
+# quartifyr (development version)
+
+## Bug fixes
+
+* The two headless-LibreOffice steps (`--recalculate-fields`,
+  `--resolve-same-page-crossrefs`) now work on Windows and with profile
+  paths that contain a space. The `-env:UserInstallation` profile URL was
+  built as `file://<path>`, which is malformed on Windows and breaks on a
+  space; it is now a proper `file:///` URI. A timeout now kills the whole
+  LibreOffice process tree on Windows too (`taskkill /T /F` plus a sweep by
+  profile path; the POSIX-only process-group kill raised there), and a
+  `soffice` that still holds its temporary profile no longer turns a
+  timeout into a `PermissionError`. Both steps share one launcher
+  (`quartifyr_styling/_soffice.py`) (#86).
+
 # quartifyr 0.3.2
 
 ## New features
