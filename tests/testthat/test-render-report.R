@@ -2045,7 +2045,8 @@ test_that("an extension's hash doesn't depend on the locale's sort order", {
   files <- c("B.lua", "_extension.yml", "z.lua")
   expected_lines <- paste(files, vapply(file.path(dir, "a", files), .sha256_file, character(1), USE.NAMES = FALSE), sep = "  ")
   expect_identical(
-    table$sha256[table$path == file.path(dir, "a")],
+    # (list.files() reports forward slashes; the temporary directory may not.)
+    table$sha256[basename(table$path) == "a"],
     paste(as.character(unclass(openssl::sha256(paste(expected_lines, collapse = "\n")))), collapse = "")
   )
 })

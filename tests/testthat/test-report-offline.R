@@ -261,3 +261,60 @@ test_that("the temporary link made for a differently named venv is removed witho
   expect_false(dir.exists(dir_made))
   expect_true(file.exists(file.path(venv, "pyvenv.cfg")))
 })
+
+# --- The Windows branches, run anywhere with the platform and processx mocked ---
+
+test_that(".link_venv() uses a junction on Windows and reports whether it worked", {
+  local_mocked_bindings(.is_windows = function() TRUE)
+  base <- withr::local_tempdir()
+  venv <- .make_venv(base, "tools-venv")
+  link <- file.path(withr::local_tempdir(), ".venv")
+  calls <- list()
+  fake_run <- function(command, args, ...) {
+    calls[[length(calls) + 1L]] <<- list(command = command, args = args)
+    dir.create(link) # what a successful mklink /J leaves behind
+    list(status = 0L, stdout = "", stderr = "")
+  }
+  local_mocked_bindings(run = fake_run, .package = "processx")
+
+  expect_true(.link_venv(venv, link))
+
+  expect_identical(calls[[1]]$args[1:3], c("/c", "mklink", "/J"))
+})
+
+test_that(".link_venv() falls back to a symlink when mklink fails or can't be run", {
+  skip_on_os("windows")
+  local_mocked_bindings(.is_windows = function() TRUE)
+  base <- withr::local_tempdir()
+  venv <- .make_venv(base, "tools-venv")
+
+  local_mocked_bindings(run = function(...) list(status = 1L, stdout = "", stderr = "denied"), .package = "processx")
+  link1 <- file.path(withr::local_tempdir(), ".venv")
+  expect_true(.link_venv(venv, link1)) # the symlink fallback worked here
+  expect_true(dir.exists(link1))
+
+  local_mocked_bindings(run = function(...) stop("no cmd.exe"), .package = "processx")
+  link2 <- file.path(withr::local_tempdir(), ".venv")
+  expect_true(.link_venv(venv, link2))
+
+  # And when nothing can make a link, the answer is FALSE (wiring then explains).
+  local_mocked_bindings(run = function(...) list(status = 1L, stdout = "", stderr = ""), .package = "processx")
+  local_mocked_bindings(.is_windows = function() TRUE)
+  link3 <- file.path(venv, "pyvenv.cfg", "not-a-dir", ".venv") # a parent that can't exist
+  expect_false(.link_venv(venv, link3))
+})
+
+test_that(".unlink_venv_link() uses rmdir on Windows, which removes a junction and nothing behind it", {
+  local_mocked_bindings(.is_windows = function() TRUE)
+  seen <- NULL
+  local_mocked_bindings(
+    run = function(command, args, ...) {
+      seen <<- args
+      list(status = 0L, stdout = "", stderr = "")
+    },
+    .package = "processx"
+  )
+  expect_null(.unlink_venv_link("C:/tmp/x/.venv"))
+  expect_identical(seen[1:2], c("/c", "rmdir"))
+  expect_false(any(c("/s", "/S") %in% seen)) # never recursive
+})

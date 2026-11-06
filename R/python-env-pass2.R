@@ -27,6 +27,10 @@
 # uv still has to be installed (reportifyr runs it), but it never reaches the
 # network and creates nothing in the project.
 
+# TRUE on Windows. A function so tests can exercise the Windows branches
+# anywhere (.Platform can't be mocked).
+.is_windows <- function() .Platform$OS.type == "windows"
+
 # The command that makes a directory junction `link` -> `venv` on Windows.
 # Unlike a symlink, a junction needs no privilege (no developer mode, no
 # administrator), and pyro only needs `<venv_dir>/.venv` to resolve to the venv.
@@ -42,7 +46,7 @@
 # FALSE when it can't be made. A function of its own so tests can replace it
 # (base functions can't be mocked).
 .link_venv <- function(venv, link) {
-  if (.Platform$OS.type == "windows") {
+  if (.is_windows()) {
     cmd <- .junction_command(venv, link)
     res <- tryCatch(
       processx::run(cmd$command, cmd$args, error_on_status = FALSE, timeout = 30),
@@ -60,7 +64,7 @@
 # a recursive unlink of the temporary directory could follow it into the real
 # environment.
 .unlink_venv_link <- function(link) {
-  if (.Platform$OS.type == "windows") {
+  if (.is_windows()) {
     processx::run(
       Sys.getenv("COMSPEC", "cmd.exe"),
       c("/c", "rmdir", normalizePath(link, winslash = "\\", mustWork = FALSE)),
