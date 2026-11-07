@@ -356,9 +356,16 @@ test_that(".looks_like_uv_failure() recognises uv/network failures and not ordin
     "error sending request for url",
     "System command 'uv_setup.sh' failed",
     "Because x was not found in the package registry",
-    "cannot run while uv is offline"
+    "Network connectivity is disabled, but the requested data wasn't found in the cache",
+    "tcp connect error: Network is unreachable (os error 101)"
   )
-  no <- c("Figure footnotes script failed.", "python exploded", "Metadata file not found for: a.png")
+  no <- c(
+    "Figure footnotes script failed.", "python exploded", "Metadata file not found for: a.png",
+    # Words in a path or message, not a failure of uv.
+    "Error in /home/me/offline-study/report/OUTPUTS/figures/fig.png: bad value",
+    "C:/projects/network-model/report.qmd: unexpected token",
+    "this table is offline-only", "network of sites"
+  )
   expect_true(all(.looks_like_uv_failure(yes)))
   expect_false(any(.looks_like_uv_failure(no)))
 })
@@ -404,4 +411,151 @@ test_that(".with_offline_context() leaves ordinary and already-classed errors al
   expect_identical(tryCatch(.with_offline_context(stop(already), step), error = function(e) e), already)
 
   expect_identical(.with_offline_context("fine", step), "fine")
+})
+
+# --- Interpreter vs. the project's pin ------------------------------------------
+
+test_that(".satisfies_requires_python() reads the common PEP 440 specifiers", {
+  v <- c(3L, 12L, 3L)
+  expect_true(.satisfies_requires_python(v, ">=3.10"))
+  expect_true(.satisfies_requires_python(v, ">=3.10, <3.13"))
+  expect_false(.satisfies_requires_python(v, ">=3.13"))
+  expect_false(.satisfies_requires_python(v, ">3.12.3"))
+  expect_true(.satisfies_requires_python(v, "==3.12.*"))
+  expect_false(.satisfies_requires_python(v, "==3.11.*"))
+  expect_true(.satisfies_requires_python(v, "!=3.11.*"))
+  expect_true(.satisfies_requires_python(v, "~=3.12"))
+  expect_false(.satisfies_requires_python(v, "~=3.12.4"))
+  expect_true(is.na(.satisfies_requires_python(v, "===3.12")))
+  expect_true(is.na(.satisfies_requires_python(v, "")))
+})
+
+.python_env_fixture <- function(version, pin = NULL, requires = NULL, key = "version", env = parent.frame()) {
+  project <- withr::local_tempdir(.local_envir = env)
+  dir.create(file.path(project, ".venv"))
+  writeLines(c("home = /usr/bin", paste0(key, " = ", version)), file.path(project, ".venv", "pyvenv.cfg"))
+  if (!is.null(pin)) writeLines(c("# the pin", pin), file.path(project, ".python-version"))
+  if (!is.null(requires)) {
+    writeLines(c("[project]", paste0("requires-python = \"", requires, "\"  # comment")), file.path(project, "pyproject.toml"))
+  }
+  project
+}
+
+test_that(".python_env_mismatch() flags an interpreter that doesn't match .python-version", {
+  project <- .python_env_fixture("3.12.3", pin = "3.12.16")
+  msg <- .python_env_mismatch(project, file.path(project, ".venv"))
+  expect_match(msg, "runs Python 3.12.3")
+  expect_match(msg, "pins 3.12.16 \\(.python-version\\)")
+
+  # uv writes version_info, and a pin may be coarser than the interpreter.
+  project <- .python_env_fixture("3.12.3.final.0", pin = "3.12", key = "version_info")
+  expect_null(.python_env_mismatch(project, file.path(project, ".venv")))
+  project <- .python_env_fixture("3.12.3", pin = "cpython-3.12.3-macos-aarch64-none")
+  expect_null(.python_env_mismatch(project, file.path(project, ".venv")))
+  project <- .python_env_fixture("3.11.9", pin = "3.12")
+  expect_match(.python_env_mismatch(project, file.path(project, ".venv")), "pins 3.12")
+})
+
+test_that(".python_env_mismatch() falls back to requires-python and stays quiet when it can't tell", {
+  project <- .python_env_fixture("3.9.18", requires = ">=3.10")
+  expect_match(.python_env_mismatch(project, file.path(project, ".venv")), "requires-python in pyproject.toml")
+  project <- .python_env_fixture("3.12.3", requires = ">=3.10")
+  expect_null(.python_env_mismatch(project, file.path(project, ".venv")))
+
+  no_pin <- .python_env_fixture("3.12.3")
+  expect_null(.python_env_mismatch(no_pin, file.path(no_pin, ".venv")))
+  no_venv <- withr::local_tempdir()
+  writeLines("3.12.16", file.path(no_venv, ".python-version"))
+  expect_null(.python_env_mismatch(no_venv, file.path(no_venv, ".venv")))
+})
+
+test_that(".render_python_env() prefers the configured python_env over the project's .venv", {
+  project <- withr::local_tempdir()
+  withr::local_options(quartifyr.python_env = NULL, venv_dir = NULL)
+  withr::local_envvar(QUARTIFYR_PYTHON_ENV = NA)
+  expect_identical(.render_python_env(project), file.path(project, ".venv"))
+  withr::local_options(quartifyr.python_env = "/opt/env")
+  expect_identical(.render_python_env(project), "/opt/env")
+})
+
+test_that(".parse_py_version() reads the first version number and gives NULL for none", {
+  expect_identical(.parse_py_version("cpython-3.12.3-macos"), c(3L, 12L, 3L))
+  expect_identical(.parse_py_version("3.12"), c(3L, 12L))
+  expect_null(.parse_py_version("not a version"))
+})
+
+test_that(".satisfies_requires_python() handles every comparison operator", {
+  v <- c(3L, 12L, 3L)
+  expect_true(.satisfies_requires_python(v, "<=3.12.3"))
+  expect_false(.satisfies_requires_python(v, "<=3.12.2"))
+  expect_true(.satisfies_requires_python(v, "<3.13"))
+  expect_true(.satisfies_requires_python(v, "==3.12.3"))
+  expect_false(.satisfies_requires_python(v, "==3.12.4"))
+  expect_true(.satisfies_requires_python(v, "!=3.12.4"))
+  expect_false(.satisfies_requires_python(v, "!=3.12.3"))
+  expect_false(.satisfies_requires_python(v, "!=3.12.*"))
+})
+
+test_that(".venv_python_version() is NULL without a pyvenv.cfg or without a version line", {
+  empty <- withr::local_tempdir()
+  expect_null(.venv_python_version(empty))
+  writeLines(c("home = /usr/bin", "include-system-site-packages = false"), file.path(empty, "pyvenv.cfg"))
+  expect_null(.venv_python_version(empty))
+})
+
+test_that("a project under a folder named for the setup is not mistaken for a uv failure", {
+  step <- "fill the shell with reportifyr (pass 2)"
+  withr::local_options(quartifyr.offline = TRUE)
+  path <- "/srv/firewalled/offline-study/network-model/report/OUTPUTS/figures/fig.png"
+
+  err <- tryCatch(
+    .with_offline_context(
+      stop("Figure footnotes script failed."), step,
+      evidence = function() c(paste("[ERROR] could not read", path), paste("Traceback ... in", path)),
+      probe = function() paste("see", path)
+    ),
+    error = function(e) e
+  )
+
+  expect_false(inherits(err, "quartifyr_offline_failure"))
+  expect_match(conditionMessage(err), "Figure footnotes script failed")
+})
+
+test_that("uv's coarser version_info is compared only on the components it has", {
+  # uv writes `version_info = 3.12`; a 3.12.13 pin is not a mismatch.
+  project <- .python_env_fixture("3.12", pin = "3.12.13", key = "version_info")
+  expect_null(.python_env_mismatch(project, file.path(project, ".venv")))
+  # ... but 3.11 against a 3.12.13 pin is.
+  project <- .python_env_fixture("3.11", pin = "3.12.13", key = "version_info")
+  expect_match(.python_env_mismatch(project, file.path(project, ".venv")), "runs Python 3.11")
+  # And a requires-python that the unknown patch level can't change the answer of.
+  project <- .python_env_fixture("3.12", requires = ">=3.12", key = "version_info")
+  expect_null(.python_env_mismatch(project, file.path(project, ".venv")))
+  project <- .python_env_fixture("3.12", requires = ">=3.12.13", key = "version_info")
+  expect_null(.python_env_mismatch(project, file.path(project, ".venv"))) # could be 3.12.13+: unknown
+  project <- .python_env_fixture("3.12", requires = ">=3.13", key = "version_info")
+  expect_match(.python_env_mismatch(project, file.path(project, ".venv")), "requires-python")
+})
+
+test_that(".satisfies_partial_version() answers only when the missing components can't matter", {
+  expect_true(.satisfies_partial_version(c(3L, 12L), ">=3.10"))
+  expect_false(.satisfies_partial_version(c(3L, 9L), ">=3.10"))
+  expect_true(is.na(.satisfies_partial_version(c(3L, 12L), ">=3.12.5")))
+  expect_true(is.na(.satisfies_partial_version(c(3L, 12L), "===3.12")))
+  expect_true(.satisfies_partial_version(c(3L, 12L, 4L), ">=3.12.3"))
+})
+
+test_that(".venv_python_version() takes the most specific version the file records", {
+  dir <- withr::local_tempdir()
+  writeLines(c("version = 3.12", "version_info = 3.12.13"), file.path(dir, "pyvenv.cfg"))
+  expect_identical(.venv_python_version(dir), c(3L, 12L, 13L))
+  writeLines(c("version_info = 3.12", "version = 3.12.3"), file.path(dir, "pyvenv.cfg"))
+  expect_identical(.venv_python_version(dir), c(3L, 12L, 3L))
+})
+
+test_that("the interpreter check also works when python_env is the folder that holds .venv", {
+  project <- .python_env_fixture("3.11.9", pin = "3.12.16")
+  msg <- .python_env_mismatch(project, project) # not project/.venv
+  expect_match(msg, "runs Python 3.11.9")
+  expect_match(msg, file.path(project, ".venv"), fixed = TRUE)
 })

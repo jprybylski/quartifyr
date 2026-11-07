@@ -19,6 +19,7 @@ render_report(
   resolve_same_page_crossrefs = FALSE,
   quarto_timeout = 600,
   quarto_bin = NULL,
+  soffice_bin = NULL,
   strict = FALSE,
   offline = NULL
 )
@@ -108,6 +109,12 @@ the \code{QUARTO_PATH} environment variable if set, else \code{quarto} on
 duration of the call, so the \code{quarto} R package's own helpers
 (\code{quarto_inspect()}, \code{quarto_list_extensions()}) use the same binary.}
 
+\item{soffice_bin}{Path to the LibreOffice executable used by
+\code{recalculate_fields} and \code{resolve_same_page_crossrefs}. \code{NULL} (default)
+uses the \code{QUARTIFYR_SOFFICE_BIN} environment variable if set, else
+\code{soffice} on \code{PATH}. When either step is requested the executable is
+checked before anything is rendered, and the path and \code{soffice --version} that ran are recorded in the result's \code{versions$libreoffice}.}
+
 \item{strict}{If \code{TRUE}, signal an error of class
 \code{quartifyr_render_incomplete} (carrying the result as \verb{$result}) when
 the render finished but the result's \code{status} is not \code{"ok"}: unfilled
@@ -185,17 +192,40 @@ figures, and footnotes from \verb{OUTPUTS/}, and (when \code{status = "final"})
 }
 \section{After a failed render}{
 
-Once the project checks pass and the render starts, the outputs it is about
-to regenerate (\verb{report/shell/<name>.docx}, \verb{report/draft/<name>-*.docx} and
-\verb{report/final/<name>-final.docx}) are moved to \verb{report/.previous/} first,
-replacing the copy already there. A render that fails, times out or is
-killed therefore leaves nothing in \code{report/shell}, \code{report/draft} or
-\code{report/final} that came from an earlier render, and the last good outputs
-stay recoverable in \verb{report/.previous/} (add it to \code{.gitignore}). A
-failure in the project checks that run first touches nothing. The
-\code{abbreviations.tex} next to the shell \code{.qmd} is regenerated regardless.
-An output counts as produced only if it was written after the render
-began.
+A render works in \verb{report/.staging-<id>/} and only reaches \code{report/shell},
+\code{report/draft} and \code{report/final} once it has finished and been accepted
+(\code{strict = TRUE} rejects anything whose status is not \code{"ok"}; otherwise a
+finished render is delivered as it is, with \code{status} saying whether it is
+complete). So the live folders only ever hold delivered renders, whatever
+Quarto and reportifyr were doing when a render went wrong.
+
+Once the project checks pass and a render starts, the outputs it is about
+to regenerate (\verb{report/shell/<name>.docx}, \verb{report/draft/<name>-*.docx},
+\verb{report/final/<name>-final.docx} and its \verb{_docx_metadata.json}, and what
+reportifyr leaves in \verb{report/draft/intermediate_files/}) are moved
+to \verb{report/.previous/} first, replacing the copy already there, all or
+nothing. After a render that fails, times out, is rejected by \code{strict} or
+is interrupted:
+\itemize{
+\item \code{report/shell}, \code{report/draft} and \code{report/final} hold nothing from this
+render, or from the earlier one;
+\item \verb{report/.previous/} holds the last delivered outputs, and is not touched
+by a failed render (a failure followed by another render never pushes
+the last good outputs out of it);
+\item the failed render's own files, partial ones included, are kept in
+\verb{report/.failed/} with a \code{FAILED} file giving the reason, until the next
+failure replaces them. For a \code{strict} rejection the error's \code{result}
+points at the files there;
+\item a failure in the project checks that run first touches nothing.
+}
+
+If the R process is killed outright (SIGKILL, a closed session), nothing
+can clean up: the render's files are left in \verb{report/.staging-<id>/}, the
+live folders hold nothing from it, and the next render deletes that folder.
+Add \verb{report/.previous/}, \verb{report/.failed/} and \verb{report/.staging-*/} to
+\code{.gitignore}. \code{abbreviations.tex} next to the shell \code{.qmd} is regenerated
+regardless, and an output counts as produced only if it was written after
+the render began. Renders of one project must not run concurrently.
 }
 
 \section{Known upstream gotcha}{

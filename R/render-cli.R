@@ -17,7 +17,7 @@
 
 .render_cli_value_options <- c(
   "project", "shell", "status", "reference-doc", "style", "override",
-  "quarto-timeout", "quarto-bin"
+  "quarto-timeout", "quarto-bin", "soffice-bin"
 )
 .render_cli_flag_options <- c("json", "strict", "offline", "recalculate-fields", "resolve-same-page-crossrefs", "help")
 
@@ -25,6 +25,16 @@
 # unless it is an existing absolute path.
 .cli_shell_path <- function(project, shell) {
   if (file.exists(shell) && grepl("^(/|[A-Za-z]:[/\\\\])", shell)) shell else file.path(project, shell)
+}
+
+# The Quarto executable render_report() would use: --quarto-bin, then
+# QUARTO_PATH, then `quarto` on PATH.
+.cli_quarto_command <- function(quarto_bin = NULL) {
+  if (!is.null(quarto_bin)) {
+    return(quarto_bin)
+  }
+  from_env <- Sys.getenv("QUARTO_PATH")
+  if (nzchar(from_env)) from_env else "quarto"
 }
 
 .render_cli_usage <- function() {
@@ -42,6 +52,8 @@
     "                                  Default: on when quartifyr.offline or UV_OFFLINE is set.",
     "  --quarto-timeout <seconds>      Default 600; Inf disables.",
     "  --quarto-bin <path>             Quarto executable (default: QUARTO_PATH, then PATH).",
+    "  --soffice-bin <path>            LibreOffice executable for the two LibreOffice steps",
+    "                                  (default: QUARTIFYR_SOFFICE_BIN, then PATH).",
     "  --reference-doc <file>          docx reference-doc.",
     "  --style <file>, --override <file>   Style YAML paths (see render_report()).",
     "  --recalculate-fields            Run the headless-LibreOffice field recalculation.",
@@ -84,7 +96,7 @@
   parsed
 }
 
-.render_cli_error_json <- function(e, started_at = NULL, finished_at = NULL) {
+.render_cli_error_json <- function(e, started_at = NULL, finished_at = NULL, versions = NULL) {
   # An incomplete strict render carries the full result; report all of it.
   if (inherits(e, "quartifyr_render_incomplete") && !is.null(e$result)) {
     payload <- .render_result_as_list(e$result)
@@ -96,6 +108,9 @@
       started_at = started_at,
       finished_at = finished_at
     )
+  }
+  if (!is.null(versions) && is.null(payload$versions)) {
+    payload$versions <- versions
   }
   if (!is.null(e$missing_metadata)) {
     payload$missing_metadata <- as.list(e$missing_metadata)
@@ -136,6 +151,7 @@
   if (!is.null(parsed$style)) call_args$style <- parsed$style
   if (!is.null(parsed$override)) call_args$override <- parsed$override
   if (!is.null(parsed$`quarto-bin`)) call_args$quarto_bin <- parsed$`quarto-bin`
+  if (!is.null(parsed$`soffice-bin`)) call_args$soffice_bin <- parsed$`soffice-bin`
   if (!is.null(parsed$`quarto-timeout`)) {
     timeout <- suppressWarnings(as.numeric(parsed$`quarto-timeout`))
     if (is.na(timeout)) {
@@ -160,7 +176,13 @@
   if (inherits(outcome, "error")) {
     writeLines(paste0("quartifyr render failed: ", conditionMessage(outcome)), err)
     if (isTRUE(parsed$json)) {
-      writeLines(as.character(.render_cli_error_json(outcome, started_at, .timestamp_utc())), out)
+      # Which tools were in play is as useful for a render that stopped early,
+      # when it can be told without starting anything but `quarto --version`.
+      versions <- tryCatch(
+        .tool_versions(.cli_quarto_command(parsed$`quarto-bin`)),
+        error = function(e) NULL
+      )
+      writeLines(as.character(.render_cli_error_json(outcome, started_at, .timestamp_utc(), versions)), out)
     }
     return(invisible(1L))
   }

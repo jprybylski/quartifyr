@@ -160,35 +160,97 @@
       project_dir, "report", "draft",
       paste0(stem, c("-clean", "-tabs", "-tabsfigs", "-draft"), ".docx")
     ),
-    final = file.path(project_dir, "report", "final", paste0(stem, "-final.docx"))
+    final = file.path(
+      project_dir, "report", "final",
+      paste0(stem, c("-final.docx", "-final_docx_metadata.json"))
+    ),
+    # build_report() moves everything but the draft itself out of
+    # report/draft into this folder when it finishes, so a successful render's
+    # -clean/-tabs/-tabsfigs files (a near-complete document) live here, not at
+    # the top of report/draft. They are moved aside too.
+    intermediate = file.path(
+      project_dir, "report", "draft", "intermediate_files",
+      paste0(stem, c("-clean", "-tabs", "-tabsfigs", "-draft"), ".docx")
+    )
   )
 }
+
+# Where `.previous` keeps an output of role `role`, relative to `report/.previous`.
+.previous_subdir <- function(role) {
+  if (identical(role, "intermediate")) file.path("draft", "intermediate_files") else role
+}
+
+# file.rename() behind a name tests can replace to make one move fail (base
+# functions can't be mocked).
+.rename_file <- function(from, to) file.rename(from, to)
 
 # A render that fails, times out or is killed must not leave an earlier
 # render's docx where a caller (or a person opening the folder) would take it
 # for this render's. So before rendering, whatever this render is about to
 # regenerate is moved to `report/.previous/<shell|draft|final>/`, replacing
-# the copy already there. Returns the new paths of what was moved.
+# the copy already there. Because a render only ever delivers into those
+# folders once it has finished and been accepted (see R/render-stage.R), what
+# is moved here is always a delivered render, never a partial one, so a failed
+# run followed by another run can't push the last good outputs out of
+# `.previous`. The moves are all-or-nothing: if one fails, the ones already
+# made are undone (a replaced `.previous` copy is restored too) before the
+# error is raised. Returns the new paths of what was moved.
 .move_previous_outputs <- function(project_dir, stem) {
-  moved <- character(0)
   outputs <- .render_output_paths(project_dir, stem)
+  plan <- list()
   for (role in names(outputs)) {
-    existing <- outputs[[role]][file.exists(outputs[[role]])]
-    if (length(existing) == 0) {
-      next
-    }
-    dest_dir <- file.path(project_dir, "report", ".previous", role)
-    dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
-    for (path in existing) {
-      dest <- file.path(dest_dir, basename(path))
-      unlink(dest)
-      if (!file.rename(path, dest)) {
-        stop("Could not move the previous output ", path, " to ", dest, ".", call. = FALSE)
-      }
-      moved <- c(moved, dest)
+    for (path in outputs[[role]][file.exists(outputs[[role]])]) {
+      plan[[length(plan) + 1L]] <- list(
+        from = path,
+        to = file.path(project_dir, "report", ".previous", .previous_subdir(role), basename(path))
+      )
     }
   }
-  moved
+  if (length(plan) == 0) {
+    return(character(0))
+  }
+
+  suffix <- paste0(".replaced-", paste(as.character(unclass(openssl::rand_bytes(4))), collapse = ""))
+  done <- list()
+  undo <- function() {
+    for (op in rev(done)) {
+      .rename_file(op$to, op$from)
+      if (!is.null(op$backup)) {
+        .rename_file(op$backup, op$to)
+      }
+    }
+  }
+  tryCatch(
+    {
+      for (op in plan) {
+        dir.create(dirname(op$to), recursive = TRUE, showWarnings = FALSE)
+        backup <- NULL
+        if (file.exists(op$to)) {
+          backup <- paste0(op$to, suffix)
+          if (!.rename_file(op$to, backup)) {
+            stop("Could not move the previous output ", op$from, " to ", op$to, ".", call. = FALSE)
+          }
+        }
+        if (!.rename_file(op$from, op$to)) {
+          if (!is.null(backup)) {
+            .rename_file(backup, op$to)
+          }
+          stop("Could not move the previous output ", op$from, " to ", op$to, ".", call. = FALSE)
+        }
+        done[[length(done) + 1L]] <- list(from = op$from, to = op$to, backup = backup)
+      }
+    },
+    error = function(e) {
+      undo()
+      stop(e)
+    }
+  )
+  for (op in done) {
+    if (!is.null(op$backup)) {
+      unlink(op$backup)
+    }
+  }
+  vapply(plan, function(op) op$to, character(1))
 }
 
 # TRUE when `path` exists and was written by the render that began at
@@ -219,13 +281,24 @@
 }
 
 # What went into a render, so a downstream build manifest can say which
-# sources produced a document: the shell .qmd, every figure/table the shell
-# references with its metadata sidecar, standard_footnotes.yaml, config.yaml
-# and the reference-doc. Only files that exist are listed.
+# sources produced a document: the shell .qmd, _quarto.yml, every
+# figure/table the shell references with its metadata sidecar,
+# standard_footnotes.yaml, config.yaml, the reference-doc, any explicit
+# style/override YAML, and each Quarto extension under _extensions/ (one row
+# per extension, hashed over its files). Only things that exist are listed.
+# Called before anything is rendered, so what is recorded is what the render
+# started from even if a file changes while it runs.
 .input_table <- function(shell_qmd, figures_path, tables_path, standard_footnotes_yaml,
-                         config_yaml, reference_doc) {
-  roles <- c("shell_qmd", "standard_footnotes", "config", "reference_doc")
-  paths <- c(shell_qmd, standard_footnotes_yaml, config_yaml, if (is.null(reference_doc)) NA_character_ else reference_doc)
+                         config_yaml, reference_doc, quarto_yml = NULL, style = NULL,
+                         override = NULL, extensions_dir = NULL) {
+  as_path <- function(x) if (is.null(x)) NA_character_ else x
+  roles <- c(
+    "shell_qmd", "quarto_yml", "standard_footnotes", "config", "reference_doc", "style", "override"
+  )
+  paths <- c(
+    shell_qmd, as_path(quarto_yml), standard_footnotes_yaml, config_yaml,
+    as_path(reference_doc), as_path(style), as_path(override)
+  )
   placeholders <- tryCatch(.scan_placeholders(shell_qmd), error = function(e) NULL)
   for (name in unique(if (is.null(placeholders)) character(0) else placeholders$name)) {
     kind <- .artifact_kind(name)
@@ -233,12 +306,47 @@
     roles <- c(roles, kind, "sidecar")
     paths <- c(paths, artifact, .sidecar_path(artifact))
   }
-  .file_table(roles, paths)
+  rbind(.file_table(roles, paths), .extension_table(extensions_dir))
+}
+
+# One row per Quarto extension (a directory holding `_extension.yml`) under
+# `extensions_dir`: its path, a SHA-256 over the sorted "<relative path>
+# <file hash>" lines of everything in it, and its total size.
+.extension_table <- function(extensions_dir) {
+  empty <- data.frame(
+    role = character(0), path = character(0), sha256 = character(0), bytes = numeric(0),
+    stringsAsFactors = FALSE
+  )
+  if (is.null(extensions_dir) || !dir.exists(extensions_dir)) {
+    return(empty)
+  }
+  manifests <- list.files(
+    extensions_dir, pattern = "^_extension\\.ya?ml$", recursive = TRUE, full.names = TRUE
+  )
+  # method = "radix" sorts in the C locale: the hash below must not depend on
+  # the machine's collation (en_US and C order the same names differently).
+  dirs <- sort(unique(dirname(manifests)), method = "radix")
+  if (length(dirs) == 0) {
+    return(empty)
+  }
+  rows <- lapply(dirs, function(dir) {
+    files <- sort(list.files(dir, recursive = TRUE, full.names = FALSE, all.files = TRUE), method = "radix")
+    full <- file.path(dir, files)
+    lines <- paste(files, vapply(full, .sha256_file, character(1), USE.NAMES = FALSE), sep = "  ")
+    data.frame(
+      role = "extension",
+      path = dir,
+      sha256 = paste(as.character(unclass(openssl::sha256(paste(lines, collapse = "\n")))), collapse = ""),
+      bytes = sum(file.size(full)),
+      stringsAsFactors = FALSE
+    )
+  })
+  do.call(rbind, rows)
 }
 
 # Tool versions that shaped the output. A version that can't be determined is
 # NULL (null in the JSON) rather than missing, so consumers see it was asked.
-.tool_versions <- function(quarto_command) {
+.tool_versions <- function(quarto_command, soffice_command = NULL) {
   pkg_version <- function(pkg) {
     tryCatch(as.character(utils::packageVersion(pkg)), error = function(e) NULL)
   }
@@ -255,7 +363,9 @@
     reportifyr = pkg_version("reportifyr"),
     quarto = quarto,
     quartifyr_styling = .styling_version(),
-    r = as.character(getRversion())
+    r = as.character(getRversion()),
+    # Only asked when a LibreOffice step was requested (NULL otherwise).
+    libreoffice = if (is.null(soffice_command)) NULL else .soffice_info(soffice_command)
   )
 }
 
@@ -283,17 +393,22 @@
 # threw: "error" = unfilled placeholders or a requested post-processing step
 # that failed; "warning" = complete but something reportifyr flagged (e.g. a
 # missing metadata sidecar); "ok" = nothing to report.
-.new_render_result <- function(shell, draft, final, warnings = character(0), errors = character(0),
-                               unfilled_placeholders = character(0), missing_metadata = character(0),
-                               log_dir = NULL, not_produced = character(0), inputs = NULL,
-                               versions = NULL, started_at = NULL, finished_at = NULL) {
-  status <- if (length(errors) > 0 || length(unfilled_placeholders) > 0) {
+.result_status <- function(warnings = character(0), errors = character(0),
+                            unfilled_placeholders = character(0), missing_metadata = character(0)) {
+  if (length(errors) > 0 || length(unfilled_placeholders) > 0) {
     "error"
   } else if (length(warnings) > 0 || length(missing_metadata) > 0) {
     "warning"
   } else {
     "ok"
   }
+}
+
+.new_render_result <- function(shell, draft, final, warnings = character(0), errors = character(0),
+                               unfilled_placeholders = character(0), missing_metadata = character(0),
+                               log_dir = NULL, not_produced = character(0), inputs = NULL,
+                               versions = NULL, started_at = NULL, finished_at = NULL) {
+  status <- .result_status(warnings, errors, unfilled_placeholders, missing_metadata)
   structure(
     list(
       shell = shell,

@@ -326,9 +326,13 @@ all inert without running it.
 
 **Word field recalculation (`styling_recalculate_fields()` /
 `quartifyr-styling recalculate-fields`, headless LibreOffice) is
-experimental and known-flaky.** Real-world runs against the same
-document have produced three different outcomes (hangs, silent no-op, or
-success), reproduced both sandboxed and in a plain macOS terminal. Off
+experimental.** Earlier runs against the same document produced hangs,
+silent no-ops and successes. The macOS hang (LibreOffice 26.2) was a
+first-start problem: a fresh profile that already holds the seeded Basic
+library never runs the macro, so `_soffice.warm_up_profile()` initialises
+the profile (`--terminate_after_init`) *before* the macro files are
+written, and `run_macro()` abandons a macro whose heartbeat file hasn't
+appeared within half the timeout (at least 30 s; `QUARTIFYR_SOFFICE_START_TIMEOUT` overrides) as "unavailable". Both steps share `_soffice.py`. Off
 by default (`render_report(..., recalculate_fields = FALSE)`). Don't
 treat a clean exit as proof it worked; see the repo-root README's
 "Status and known limitations" section before changing this code path.
@@ -375,15 +379,31 @@ uv's), and `uv lock`/`uv sync` honour `UV_OFFLINE=1` natively. So
 `.provision_python_with_pyro()` (`R/initialize.R`) sets that variable,
 refuses up front when uv isn't installed, and passes the installed version
 explicitly. pyro also hides uv's stderr (it's only on the processx condition),
-which `.process_error_detail()` digs out. A configured `python_env`
-(`R/offline.R`) bypasses pyro entirely, and its interpreter must be invoked by
-the venv's own `bin/python` path: `normalizePath()` resolves that symlink to
-the base interpreter, which silently loses the venv's site-packages (every
-module then looks "missing"). `reportifyr`'s own pyro/uv setup stays upstream.
-`inst/extensions/quarto-plus/` is an unmodified MIT-licensed upstream copy;
-see `inst/extensions/README.md`. `scripts/offline_pipeline_check.sh` (run by
-the `offline-pipeline` CI job inside `unshare --net`) is the only real "no
-network" check, and can't be reproduced on macOS.
+which `.process_error_detail()` digs out. reportifyr's `validate_docx()` throws
+uv's stderr away entirely and pyro's `run_python_script()` reduces it to
+"<script> failed.", so the offline relabel (`.with_offline_context()`) can't
+match on the condition: it matches on what pass 2 printed (`.tee_stdout()`)
+and, failing that, on a no-op `uv run` of its own (`.probe_uv()`); a test that
+stubs a uv-looking message proves nothing here (the real-chain tests drive
+reportifyr's own `run_python_script`/`validate_docx` against a fake `uv`).
+A configured `python_env` (`R/offline.R`) bypasses pyro for quartifyr's own
+calls, and its interpreter must be invoked by the venv's own `bin/python` path:
+`normalizePath()` resolves that symlink to the base interpreter, which silently
+loses the venv's site-packages (every module then looks "missing"). It also
+serves reportifyr's pass 2 (`R/python-env-pass2.R`): `options(venv_dir)` for
+pyro, plus `UV_PROJECT_ENVIRONMENT` and `UV_NO_SYNC` for uv. Without
+`UV_PROJECT_ENVIRONMENT` uv ignores `VIRTUAL_ENV` ("will be ignored; use
+`--active`") and creates `.venv` next to `pyproject.toml`; with it and
+`UV_NO_SYNC`, uv uses the env and writes neither `.venv` nor `uv.lock`
+(confirmed with uv 0.12.3). uv must still be installed: reportifyr runs it for
+every call. `initialize_report_project_offline()` replaces
+`reportifyr::initialize_report_project()` for that setup (the latter goes
+through `pyro::initialize_python()`). `inst/extensions/quarto-plus/` is an
+unmodified MIT-licensed upstream copy; see `inst/extensions/README.md`.
+`scripts/offline_pipeline_check.sh` (run by the `offline-pipeline` CI job inside
+`unshare --net`) is the only CI "no network" check; on macOS, `sandbox-exec -p
+'(version 1)(allow default)(deny network-outbound (remote ip "*:*"))' <cmd>`
+gives a local approximation.
 
 **Restore the examples' `renv.lock` against a dated CRAN snapshot, never
 Posit Package Manager's moving `latest`.** Once `latest` moves past a pinned

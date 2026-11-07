@@ -24,6 +24,17 @@ if curl --silent --head --max-time 5 https://pypi.org >/dev/null 2>&1; then
   exit 1
 fi
 
+# Validate `render.R --json` output against the shipped v1 schema, with the
+# validator the CI job installed (SCHEMA_PYTHONPATH) while it was still online.
+# Run by hand without it, the validation is skipped with a note.
+validate_json() {
+  if [ -z "${SCHEMA_PYTHONPATH:-}" ]; then
+    echo "note: SCHEMA_PYTHONPATH not set; skipping JSON schema validation of $*"
+    return 0
+  fi
+  PYTHONPATH="$SCHEMA_PYTHONPATH" python3 "$repo_root/scripts/validate_render_result.py" "$@"
+}
+
 # Fresh HOME, so reportifyr's git-identity lookup needs one.
 git config --global user.name "quartifyr offline CI"
 git config --global user.email "quartifyr-ci@users.noreply.github.com"
@@ -64,6 +75,7 @@ fi
 cat "$render_log" >&2
 cat "$result"
 Rscript -e 'r <- jsonlite::fromJSON(commandArgs(TRUE)[[1]]); stopifnot(identical(r$status, "ok"), file.exists(r$final))' "$result"
+validate_json "$result=ok"
 if grep -E "Removed virtual environment|^Installed [0-9]+ package" "$render_log" "$result"; then
   echo "error: the render re-synced or recreated the Python environment" >&2
   exit 1
@@ -74,6 +86,47 @@ env_dir="$PWD/.venv"
 Rscript -e 'quartifyr::initialize_quartifyr_project(getwd(), python_env = commandArgs(TRUE)[[1]])' "$env_dir"
 QUARTIFYR_PYTHON_ENV="$env_dir" Rscript "$script" --project . --shell report.qmd --status draft --json --strict > "$result"
 Rscript -e 'r <- jsonlite::fromJSON(commandArgs(TRUE)[[1]]); stopifnot(identical(r$status, "ok"))' "$result"
+validate_json "$result=ok"
+
+echo "== a fresh project copy, set up and rendered with only python_env (no pyro, no project .venv)"
+# One existing environment serves both passes: the offline initializer creates
+# the report folders, config and marker without pyro, and the render points
+# reportifyr's pass 2 (through pyro and uv) at that environment. Nothing may be
+# created in the project (no .venv, no changed uv.lock) and nothing may reach
+# the network (this runs without one). uv itself must still be installed:
+# reportifyr runs it, offline and without syncing.
+fresh="$(mktemp -d)"
+tar -C . --exclude=./.venv --exclude=./renv --exclude=./.Rprofile --exclude=./.rpfy-logs \
+  --exclude=./.report_init.json --exclude=./report/draft --exclude=./report/final \
+  --exclude=./report/shell --exclude=./report/.previous --exclude=./report/.failed -cf - . \
+  | tar -C "$fresh" -xf -
+lock_before="$(cksum < "$fresh/uv.lock")"
+# Run from the example (its renv library has quartifyr), against the copy.
+Rscript -e 'quartifyr::initialize_report_project_offline(commandArgs(TRUE)[[1]], python_env = commandArgs(TRUE)[[2]])' "$fresh" "$env_dir"
+test -f "$fresh/.report_init.json"
+QUARTIFYR_PYTHON_ENV="$env_dir" Rscript "$script" --project "$fresh" --shell report.qmd --status final \
+  --json --strict --offline > "$result"
+Rscript -e 'r <- jsonlite::fromJSON(commandArgs(TRUE)[[1]]); stopifnot(identical(r$status, "ok"), file.exists(r$final))' "$result"
+validate_json "$result=ok"
+if [ -e "$fresh/.venv" ]; then
+  echo "error: a render with python_env created $fresh/.venv" >&2
+  exit 1
+fi
+if [ "$lock_before" != "$(cksum < "$fresh/uv.lock")" ]; then
+  echo "error: a render with python_env rewrote uv.lock" >&2
+  exit 1
+fi
+
+echo "== a forced failure still prints a result that matches the schema"
+failed="$(mktemp)"
+code=0
+Rscript "$script" --project . --shell report.qmd --reference-doc does-not-exist.docx --json --offline \
+  > "$failed" 2> /dev/null || code=$?
+if [ "$code" -ne 1 ]; then
+  echo "error: the forced failure exited $code, expected 1" >&2
+  exit 1
+fi
+validate_json "$failed=error"
 
 if [ -e "$HOME/.local/bin" ]; then
   echo "error: something wrote to $HOME/.local/bin:" >&2

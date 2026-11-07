@@ -4,12 +4,16 @@
 \alias{styling_resolve_same_page_crossrefs}
 \title{Resolve "same-page" cross-reference hyperlink markers in a filled docx}
 \usage{
-styling_resolve_same_page_crossrefs(docx, timeout = 120)
+styling_resolve_same_page_crossrefs(docx, timeout = 120, soffice_bin = NULL)
 }
 \arguments{
 \item{docx}{Path to the filled docx to resolve (modified in place).}
 
 \item{timeout}{Timeout in seconds (default \code{120}).}
+
+\item{soffice_bin}{Path to the LibreOffice executable. \code{NULL} (default)
+uses the \code{QUARTIFYR_SOFFICE_BIN} environment variable if set, else
+\code{soffice} on \code{PATH}.}
 }
 \value{
 The docx path (invisibly).

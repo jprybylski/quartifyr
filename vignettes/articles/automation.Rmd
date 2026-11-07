@@ -63,22 +63,49 @@ error of class `quartifyr_quarto_timeout` whose message includes the tail of
 Quarto's stderr. To use an app-local Quarto instead of the one on `PATH`, pass
 `quarto_bin = "/path/to/quarto"` or set `QUARTO_PATH`.
 
+The two LibreOffice steps (`recalculate_fields`, `resolve_same_page_crossrefs`)
+find `soffice` the same way: `soffice_bin = "/path/to/soffice"`
+(`--soffice-bin`), else `QUARTIFYR_SOFFICE_BIN`, else `PATH`. When either step
+is requested the executable is checked before anything is rendered, and the
+resolved path and its `soffice --version` line are recorded in the result's
+`versions$libreoffice`.
+
 ## What is on disk after a failure
 
-A render that fails, times out or is killed must not leave an earlier render's
-output where it could pass for the new one. Once the project checks pass and
-the render starts, `render_report()` first moves the outputs it is about to
-regenerate (`report/shell/<name>.docx`, `report/draft/<name>-*.docx`,
-`report/final/<name>-final.docx`) to `report/.previous/`, replacing the copy
-already there. After a failure:
+A render that fails, times out or is killed must not leave a complete-looking
+document where a caller would take it for the new one. A render therefore
+works in `report/.staging-<id>/` and only moves into `report/shell`,
+`report/draft` and `report/final` once it has finished and been accepted:
+with `strict`, anything whose status is not `"ok"` is rejected; without it, a
+finished render is delivered as it is and `status` says whether it is
+complete.
 
-* `report/draft` and `report/final` hold nothing from an earlier render, and
-  `report/shell` holds the shell only if Quarto got as far as writing it;
-* the last good outputs are in `report/.previous/{shell,draft,final}/` (add
-  that folder to `.gitignore`);
-* the JSON error object has no `artifacts`, `draft` or `final`;
+Once the project checks pass and the render starts, `render_report()` first
+moves the outputs it is about to regenerate (`report/shell/<name>.docx`,
+`report/draft/<name>-*.docx`, `report/final/<name>-final.docx` and its
+`_docx_metadata.json`, and the `-clean`/`-tabs`/`-tabsfigs` files reportifyr keeps in
+`report/draft/intermediate_files/`) to `report/.previous/`, replacing the copy already
+there, all or nothing. After a failure, a `strict` rejection or an
+interruption:
+
+* `report/shell`, `report/draft` and `report/final` hold nothing from this
+  render, or from an earlier one;
+* the last good outputs are in `report/.previous/{shell,draft,final}/`, and a
+  failed render never replaces them (so a failure followed by another run
+  doesn't lose them);
+* the failed render's own files, partial ones included, are in
+  `report/.failed/` with a `FAILED` file giving the reason, until the next
+  failure replaces them. A `strict` rejection's JSON result points at those
+  files, so a caller can inspect what was rejected;
+* otherwise the JSON error object has no `artifacts`, `draft` or `final`;
 * a failure in the project checks that run first (a missing reference-doc, for
   example) touches nothing, because no render started.
+
+If R is killed outright (SIGKILL, a closed session), nothing can clean up. The
+render's files stay in `report/.staging-<id>/`, nothing from it is in the live
+folders, and the next render deletes that folder. Add `report/.previous/`,
+`report/.failed/` and `report/.staging-*/` to `.gitignore`, and don't run two
+renders of one project at once.
 
 An output also counts as produced only if it was written after the render
 began, so a file that predates it is reported as not produced.
@@ -106,8 +133,8 @@ uv cache. The project must have been initialised beforehand. See
 | `missing_metadata` | artifacts the shell references that have no metadata sidecar |
 | `warnings`, `errors` | the messages behind a non-`"ok"` status |
 | `log_dir` | reportifyr's log directory for the project |
-| `inputs` | `role`, `path`, `sha256` and `bytes` for the files the render read: the shell `.qmd`, each figure, table and metadata sidecar it uses, `standard_footnotes.yaml`, `config.yaml` and the reference-doc |
-| `versions` | quartifyr, reportifyr, Quarto, the `quartifyr_styling` Python package and R (`NULL` where unknown) |
+| `inputs` | `role`, `path`, `sha256` and `bytes` for what the render read, hashed before it started: the shell `.qmd`, `_quarto.yml`, each figure, table and metadata sidecar it uses, `standard_footnotes.yaml`, `config.yaml`, the reference-doc, an explicit `style`/`override` YAML, and one row per Quarto extension under `_extensions/` (hashed over its files) |
+| `versions` | quartifyr, reportifyr, Quarto, the `quartifyr_styling` Python package, R and, when a LibreOffice step ran, LibreOffice (`NULL` where unknown). Also present on the JSON for a render that stopped early, where it could be determined |
 | `started_at`, `finished_at` | UTC ISO 8601 timestamps |
 
 `status` describes whether the delivered document is complete. `"error"` means
@@ -158,8 +185,8 @@ stderr. The exit status is 0 only when the render finished (and, with
 is complete). Any error, including a Quarto failure or
 timeout, prints a JSON object with `status: "error"`, an `errors` array and an
 `error_class`, and exits 1. Bad usage exits 2. Run it with `--help` for the
-remaining options (`--quarto-timeout`, `--quarto-bin`, `--reference-doc`,
-`--recalculate-fields`, ...).
+remaining options (`--quarto-timeout`, `--quarto-bin`, `--soffice-bin`,
+`--reference-doc`, `--recalculate-fields`, ...).
 
 A successful result looks like this:
 

@@ -32,15 +32,25 @@
 # A quarto::render() stand-in that actually creates the shell docx it
 # claims to, so downstream reportifyr::make_doc_dirs()-style path derivation
 # (mocked below, per-test) has something real to reason about.
+# The real processx::run(), kept so calls to a (fake) `uv` can reach it while
+# everything else is mocked.
+.real_processx_run <- processx::run
+
 .mock_quarto_run <- function(record_into) {
   function(command, args, wd = ".", error_on_status = TRUE, ...) {
+    if (identical(basename(command), "uv")) {
+      return(.real_processx_run(command, args, error_on_status = error_on_status, ...))
+    }
     if (!identical(args[[1]], "render")) {
       return(list(status = 0, stdout = "1.9.9\n", stderr = ""))
     }
     assign("quarto_run", list(command = command, args = args, wd = wd), envir = record_into)
     output_name <- args[which(args == "--output") + 1]
-    dir.create(file.path(wd, "report", "shell"), recursive = TRUE, showWarnings = FALSE)
-    file.create(file.path(wd, "report", "shell", output_name))
+    # render_report() points quarto at its staging folder with --output-dir
+    # (relative to the project); without it quarto uses _quarto.yml's.
+    output_dir <- if ("--output-dir" %in% args) args[which(args == "--output-dir") + 1] else file.path("report", "shell")
+    dir.create(file.path(wd, output_dir), recursive = TRUE, showWarnings = FALSE)
+    file.create(file.path(wd, output_dir, output_name))
     list(status = 0, stdout = "", stderr = "")
   }
 }
@@ -53,6 +63,14 @@
     doc_draft = paste0(base, "-draft.docx"),
     doc_final = paste0(sub("draft", "final", base), "-final.docx")
   )
+}
+
+# render_report() works in report/.staging-<id>/ and moves the finished
+# render into report/{shell,draft,final}/, so the paths the mocks see are
+# staged ones while the result carries the delivered ones.
+.is_staged <- function(path) grepl("[/\\\\]\\.staging-[0-9a-f]+[/\\\\]", path)
+.live_path <- function(fixture, role, name) {
+  file.path(fixture$project_dir, "report", role, name)
 }
 
 # --- Pre-flight validation (no mocking needed) ------------------------------
@@ -288,7 +306,12 @@ test_that("orchestrates quarto render -> apply-layout -> build_report() for stat
   ))
 
   expect_identical(record$apply_layout$status, "draft")
-  expect_identical(normalizePath(record$apply_layout$docx), normalizePath(result$shell))
+  expect_true(.is_staged(record$apply_layout$docx))
+  expect_identical(basename(record$apply_layout$docx), basename(result$shell))
+  expect_identical(
+    normalizePath(result$shell),
+    normalizePath(.live_path(fixture, "shell", "report.docx"))
+  )
 
   # Mirror render_report()'s own expression exactly (dirname() of the
   # *normalized* shell_qmd) rather than normalizing project_dir
@@ -303,7 +326,12 @@ test_that("orchestrates quarto render -> apply-layout -> build_report() for stat
   expect_identical(record$build_report$standard_footnotes_yaml, fixture$standard_footnotes_yaml)
   expect_identical(record$build_report$config_yaml, fixture$config_yaml)
 
-  expect_identical(result$draft, record$build_report$docx_out)
+  expect_true(.is_staged(record$build_report$docx_out))
+  expect_identical(basename(result$draft), basename(record$build_report$docx_out))
+  expect_identical(
+    normalizePath(dirname(result$draft)),
+    normalizePath(file.path(fixture$project_dir, "report", "draft"))
+  )
   expect_null(result$final)
 })
 
@@ -336,8 +364,13 @@ test_that("also runs finalize_document() and returns a final path for status = '
   )
 
   expect_true("document-status:FINAL" %in% record$quarto_run$args)
-  expect_identical(result$final, record$finalize$docx_out)
-  expect_identical(record$finalize$docx_in, result$draft)
+  expect_true(.is_staged(record$finalize$docx_out))
+  expect_identical(basename(result$final), basename(record$finalize$docx_out))
+  expect_identical(basename(record$finalize$docx_in), basename(result$draft))
+  expect_identical(
+    normalizePath(dirname(result$final)),
+    normalizePath(file.path(fixture$project_dir, "report", "final"))
+  )
 })
 
 # --- Opt-in post-processing steps --------------------------------------------
@@ -358,14 +391,21 @@ test_that("also runs finalize_document() and returns a final path for status = '
   )
 }
 
+# LibreOffice itself isn't needed by these tests (the steps are mocked), but
+# render_report() checks the executable exists before rendering.
+.mock_soffice_present <- function(.env = parent.frame()) {
+  local_mocked_bindings(.resolve_soffice = function(command) command, .env = .env)
+}
+
 test_that("recalculate_fields = TRUE runs styling_recalculate_fields() on each produced docx", {
   fixture <- .render_report_fixture()
   record <- new.env()
   .base_render_report_mocks(record)
+  .mock_soffice_present()
 
   recalculated <- character(0)
   local_mocked_bindings(
-    styling_recalculate_fields = function(docx, timeout = 120) {
+    styling_recalculate_fields = function(docx, timeout = 120, soffice_bin = NULL) {
       recalculated <<- c(recalculated, docx)
       invisible(docx)
     }
@@ -380,7 +420,9 @@ test_that("recalculate_fields = TRUE runs styling_recalculate_fields() on each p
     recalculate_fields = TRUE
   )
 
-  expect_identical(recalculated, result$draft)
+  # The step ran on the staged file, before the render was accepted.
+  expect_true(all(.is_staged(recalculated)))
+  expect_identical(basename(recalculated), basename(result$draft))
 })
 
 test_that("recalculate_fields = FALSE (the default) never calls styling_recalculate_fields()", {
@@ -405,9 +447,10 @@ test_that("a failing styling_recalculate_fields() only warns, and the render sti
   fixture <- .render_report_fixture()
   record <- new.env()
   .base_render_report_mocks(record)
+  .mock_soffice_present()
 
   local_mocked_bindings(
-    styling_recalculate_fields = function(docx, timeout = 120) stop("boom")
+    styling_recalculate_fields = function(docx, timeout = 120, soffice_bin = NULL) stop("boom")
   )
 
   result <- NULL
@@ -429,10 +472,11 @@ test_that("resolve_same_page_crossrefs = TRUE runs styling_resolve_same_page_cro
   fixture <- .render_report_fixture()
   record <- new.env()
   .base_render_report_mocks(record)
+  .mock_soffice_present()
 
   resolved <- character(0)
   local_mocked_bindings(
-    styling_resolve_same_page_crossrefs = function(docx, timeout = 120) {
+    styling_resolve_same_page_crossrefs = function(docx, timeout = 120, soffice_bin = NULL) {
       resolved <<- c(resolved, docx)
       invisible(docx)
     }
@@ -447,16 +491,18 @@ test_that("resolve_same_page_crossrefs = TRUE runs styling_resolve_same_page_cro
     resolve_same_page_crossrefs = TRUE
   )
 
-  expect_identical(resolved, result$draft)
+  expect_true(all(.is_staged(resolved)))
+  expect_identical(basename(resolved), basename(result$draft))
 })
 
 test_that("a failing styling_resolve_same_page_crossrefs() only warns, and the render still succeeds", {
   fixture <- .render_report_fixture()
   record <- new.env()
   .base_render_report_mocks(record)
+  .mock_soffice_present()
 
   local_mocked_bindings(
-    styling_resolve_same_page_crossrefs = function(docx, timeout = 120) stop("boom")
+    styling_resolve_same_page_crossrefs = function(docx, timeout = 120, soffice_bin = NULL) stop("boom")
   )
 
   result <- NULL
@@ -639,7 +685,10 @@ test_that("the leak probe used for the timeout test can see a live child", {
 # lets a test shape what pass 2 leaves behind (write the draft docx, append
 # to a reportifyr log, ...) and `unfilled` stands in for the docx scan.
 .run_render <- function(fixture, status = "draft", build = function(doc_dirs) NULL,
-                        unfilled = character(0), .mock_env = parent.frame(), ...) {
+                        unfilled = character(0), .mock_env = parent.frame(), .python_env = NULL, ...) {
+  if (!is.null(.python_env)) {
+    withr::local_options(quartifyr.python_env = .python_env, .local_envir = .mock_env)
+  }
   local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL), .env = .mock_env)
   local_mocked_bindings(
     styling_build_abbreviations_tex = function(...) invisible(NULL),
@@ -759,6 +808,7 @@ test_that("only this run's reportifyr log lines count toward missing_metadata", 
 
 test_that("a failing LibreOffice step still warns, and makes the result not ok", {
   fixture <- .render_report_fixture()
+  .mock_soffice_present()
   local_mocked_bindings(styling_recalculate_fields = function(...) stop("soffice hung"))
 
   expect_warning(
@@ -846,10 +896,11 @@ test_that("rejects an invalid quarto_bin before doing any work", {
   result
 }
 
-# After a failed second render: nothing from the first one is left in the
-# live folders, and its files are kept under report/.previous/.
-.expect_outputs_moved_aside <- function(fixture, first, shell_rendered = FALSE) {
-  expect_identical(file.exists(first$shell), shell_rendered)
+# After a failed second render: nothing from the first one (or from the
+# failed one) is left in the live folders, and the first one's files are kept
+# under report/.previous/.
+.expect_outputs_moved_aside <- function(fixture, first) {
+  expect_false(file.exists(first$shell))
   expect_false(file.exists(first$draft))
   expect_false(file.exists(first$final))
   previous <- file.path(fixture$project_dir, "report", ".previous")
@@ -899,8 +950,9 @@ test_that("a pass-2 failure on a second render leaves no draft or final from the
   local_mocked_bindings(build_report = function(...) stop("python exploded"), .package = "reportifyr")
 
   expect_error(.render_again(fixture), "python exploded")
-  # Pass 1 had already written this render's own shell by then.
-  .expect_outputs_moved_aside(fixture, first, shell_rendered = TRUE)
+  # Pass 1 had already written this render's own shell, but into staging.
+  .expect_outputs_moved_aside(fixture, first)
+  expect_true(file.exists(file.path(fixture$project_dir, "report", ".failed", "shell", "report.docx")))
 })
 
 test_that("a second successful render replaces the outputs and refreshes .previous/", {
@@ -941,16 +993,20 @@ test_that("a previous output that can't be moved aside stops the render", {
   skip_on_os("windows")
   fixture <- .render_report_fixture()
   first <- .first_render(fixture)
-  blocker <- file.path(fixture$project_dir, "report", ".previous", "draft", basename(first$draft))
-  dir.create(blocker, recursive = TRUE)
-  file.create(file.path(blocker, "keep"))
+  # .previous/draft is a file, so nothing can be moved into it. The shell is
+  # moved first (shell, draft, final), and must be put back.
+  previous <- file.path(fixture$project_dir, "report", ".previous")
+  unlink(previous, recursive = TRUE)
+  dir.create(previous)
+  file.create(file.path(previous, "draft"))
   local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
 
   expect_error(
     suppressWarnings(.render_again(fixture)),
     "Could not move the previous output"
   )
-  expect_true(file.exists(first$draft))
+  expect_true(all(file.exists(c(first$shell, first$draft, first$final))))
+  expect_false(dir.exists(file.path(fixture$project_dir, "report", ".failed")))
 })
 
 test_that(".move_previous_outputs() moves only what exists and reports where it went", {
@@ -974,10 +1030,10 @@ test_that(".move_previous_outputs() moves only what exists and reports where it 
 test_that(".move_previous_outputs() replaces an older .previous copy", {
   project <- withr::local_tempdir()
   paths <- .render_output_paths(project, "report")
-  dir.create(dirname(paths$final), recursive = TRUE)
-  writeLines("old", paths$final)
+  dir.create(dirname(paths$final[[1]]), recursive = TRUE)
+  writeLines("old", paths$final[[1]])
   .move_previous_outputs(project, "report")
-  writeLines("new", paths$final)
+  writeLines("new", paths$final[[1]])
   .move_previous_outputs(project, "report")
 
   kept <- file.path(project, "report", ".previous", "final", "report-final.docx")
@@ -993,7 +1049,8 @@ test_that(".render_output_paths() agrees with reportifyr::make_doc_dirs()", {
   theirs <- withr::with_dir(project, reportifyr::make_doc_dirs(paths$shell))
 
   expect_setequal(
-    normalizePath(c(paths$shell, paths$draft, paths$final), mustWork = FALSE),
+    # (the metadata sidecar next to the final docx is quartifyr's addition)
+    normalizePath(c(paths$shell, paths$draft, paths$final[[1]]), mustWork = FALSE),
     normalizePath(unlist(theirs, use.names = FALSE), mustWork = FALSE)
   )
 })
@@ -1022,7 +1079,7 @@ test_that("the result records inputs, tool versions and timestamps", {
 
   expect_setequal(
     result$inputs$role,
-    c("shell_qmd", "standard_footnotes", "config", "reference_doc", "figure", "sidecar")
+    c("shell_qmd", "quarto_yml", "standard_footnotes", "config", "reference_doc", "figure", "sidecar")
   )
   expect_identical(
     result$inputs$sha256[result$inputs$role == "figure"],
@@ -1216,4 +1273,823 @@ test_that("offline, an ordinary pass-2 failure is not relabelled", {
 
   expect_false(inherits(err, "quartifyr_offline_failure"))
   expect_match(conditionMessage(err), "python exploded")
+})
+
+# --- soffice_bin / QUARTIFYR_SOFFICE_BIN -------------------------------------
+
+test_that("soffice_bin wins over QUARTIFYR_SOFFICE_BIN, which wins over PATH", {
+  seen <- character(0)
+  local_mocked_bindings(
+    styling_recalculate_fields = function(docx, timeout = 120, soffice_bin = NULL) {
+      seen <<- c(seen, soffice_bin)
+      invisible(docx)
+    },
+    .resolve_soffice = function(command) command
+  )
+
+  withr::with_envvar(c(QUARTIFYR_SOFFICE_BIN = "/env/soffice"), {
+    .run_render(.render_report_fixture(), recalculate_fields = TRUE, soffice_bin = "/arg/soffice")
+    .run_render(.render_report_fixture(), recalculate_fields = TRUE)
+  })
+  withr::with_envvar(c(QUARTIFYR_SOFFICE_BIN = NA), {
+    .run_render(.render_report_fixture(), recalculate_fields = TRUE)
+  })
+
+  expect_identical(seen, c("/arg/soffice", "/env/soffice", "soffice"))
+})
+
+test_that("both LibreOffice steps get the same executable", {
+  seen <- list()
+  local_mocked_bindings(
+    styling_recalculate_fields = function(docx, timeout = 120, soffice_bin = NULL) {
+      seen$recalculate <<- soffice_bin
+      invisible(docx)
+    },
+    styling_resolve_same_page_crossrefs = function(docx, timeout = 120, soffice_bin = NULL) {
+      seen$crossrefs <<- soffice_bin
+      invisible(docx)
+    },
+    .resolve_soffice = function(command) command
+  )
+  .run_render(
+    .render_report_fixture(),
+    recalculate_fields = TRUE, resolve_same_page_crossrefs = TRUE, soffice_bin = "/opt/lo/soffice"
+  )
+  expect_identical(seen, list(crossrefs = "/opt/lo/soffice", recalculate = "/opt/lo/soffice"))
+})
+
+test_that("an unusable LibreOffice fails before the render starts and touches nothing", {
+  fixture <- .render_report_fixture()
+  live <- file.path(fixture$project_dir, "report", "draft", "report-draft.docx")
+  dir.create(dirname(live), recursive = TRUE)
+  writeLines("previous render", live)
+  record <- new.env()
+  .base_render_report_mocks(record)
+
+  expect_error(
+    render_report(
+      fixture$shell_qmd,
+      reference_doc = fixture$reference_doc,
+      standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+      config_yaml = fixture$config_yaml,
+      recalculate_fields = TRUE,
+      soffice_bin = file.path(fixture$project_dir, "no", "such", "soffice")
+    ),
+    "LibreOffice executable not found"
+  )
+  expect_null(record$quarto_run)
+  expect_true(file.exists(live))
+  expect_false(dir.exists(file.path(fixture$project_dir, "report", ".previous")))
+})
+
+test_that("an unusable LibreOffice is ignored when no LibreOffice step is requested", {
+  fixture <- .render_report_fixture()
+  result <- .run_render(fixture, soffice_bin = "/no/such/soffice")
+  expect_null(result$versions$libreoffice)
+})
+
+test_that("a malformed soffice_bin is rejected", {
+  fixture <- .render_report_fixture()
+  expect_error(render_report(fixture$shell_qmd, soffice_bin = ""), "soffice_bin")
+  expect_error(render_report(fixture$shell_qmd, soffice_bin = c("a", "b")), "soffice_bin")
+  expect_error(render_report(fixture$shell_qmd, soffice_bin = 1), "soffice_bin")
+})
+
+test_that("the render result records which LibreOffice ran", {
+  local_mocked_bindings(
+    styling_recalculate_fields = function(docx, timeout = 120, soffice_bin = NULL) invisible(docx),
+    .resolve_soffice = function(command) if (startsWith(command, "/")) command else paste0("/resolved/", command),
+    .soffice_info = function(command) list(path = .resolve_soffice(command), version = "LibreOffice 26.2.5.2 abc")
+  )
+  result <- .run_render(.render_report_fixture(), recalculate_fields = TRUE, soffice_bin = "soffice")
+  expect_identical(result$versions$libreoffice$path, "/resolved/soffice")
+  expect_identical(result$versions$libreoffice$version, "LibreOffice 26.2.5.2 abc")
+
+  json <- jsonlite::fromJSON(as.character(.render_result_json(result)))
+  expect_identical(json$versions$libreoffice$path, "/resolved/soffice")
+})
+
+test_that(".check_soffice() and .resolve_soffice() handle paths, bare names and non-executables", {
+  dir <- withr::local_tempdir()
+  script <- file.path(dir, "soffice")
+  writeLines("#!/bin/sh", script)
+
+  expect_s3_class(.check_soffice(file.path(dir, "missing")), "data.frame")
+  expect_s3_class(.check_soffice("definitely-not-a-real-soffice"), "data.frame")
+  expect_equal(.resolve_soffice("definitely-not-a-real-soffice"), "")
+
+  skip_on_os("windows")
+  Sys.chmod(script, "644")
+  expect_s3_class(.check_soffice(script), "data.frame")
+  Sys.chmod(script, "755")
+  expect_null(.check_soffice(script))
+  expect_identical(.resolve_soffice(script), script)
+  expect_identical(.resolve_soffice(dir), "") # a directory isn't an executable
+})
+
+test_that(".soffice_info() reports the first line of `soffice --version`", {
+  skip_on_os("windows")
+  dir <- withr::local_tempdir()
+  script <- file.path(dir, "soffice")
+  writeLines(c("#!/bin/sh", "echo 'LibreOffice 26.2.5.2 deadbeef'", "echo second line"), script)
+  Sys.chmod(script, "755")
+  info <- .soffice_info(script)
+  expect_identical(info$path, script)
+  expect_identical(info$version, "LibreOffice 26.2.5.2 deadbeef")
+  expect_null(.soffice_info(file.path(dir, "missing")))
+})
+
+# --- Stage and swap: only an accepted render reaches report/{draft,final} ----
+
+.live_docx <- function(fixture) {
+  list.files(
+    file.path(fixture$project_dir, "report", c("shell", "draft", "final")),
+    pattern = "\\.docx$", full.names = TRUE, recursive = TRUE
+  )
+}
+
+test_that("a strict render with an unfilled placeholder leaves no docx in report/draft or report/final", {
+  fixture <- .render_report_fixture()
+  err <- tryCatch(
+    .run_render(fixture, status = "final", strict = TRUE, unfilled = "gone.png"),
+    error = function(e) e
+  )
+
+  expect_s3_class(err, "quartifyr_render_incomplete")
+  expect_identical(.live_docx(fixture), character(0))
+
+  # The rejected render is kept for diagnosis, and the error's result says where.
+  failed <- file.path(fixture$project_dir, "report", ".failed")
+  expect_true(file.exists(file.path(failed, "final", "report-final.docx")))
+  expect_match(paste(readLines(file.path(failed, "FAILED")), collapse = "\n"), "strict")
+  expect_identical(
+    normalizePath(err$result$final),
+    normalizePath(file.path(failed, "final", "report-final.docx"))
+  )
+  expect_true(all(file.exists(err$result$artifacts$path)))
+})
+
+test_that("a pass-2 failure after the draft was written leaves no draft in report/draft", {
+  fixture <- .render_report_fixture()
+  err <- tryCatch(
+    .run_render(fixture, build = function(doc_dirs) stop("pass 2 died after writing the draft")),
+    error = function(e) e
+  )
+
+  expect_match(conditionMessage(err), "pass 2 died")
+  expect_identical(.live_docx(fixture), character(0))
+  expect_false(file.exists(file.path(fixture$project_dir, "report", "draft", "report-draft.docx")))
+  failed <- file.path(fixture$project_dir, "report", ".failed")
+  expect_true(file.exists(file.path(failed, "draft", "report-draft.docx")))
+  expect_match(paste(readLines(file.path(failed, "FAILED")), collapse = "\n"), "pass 2 died")
+  expect_identical(list.files(file.path(fixture$project_dir, "report"), pattern = "^\\.staging-"), character(0))
+})
+
+test_that("success, then a failure after partial writes, then success keeps the first render in .previous", {
+  fixture <- .render_report_fixture()
+  gen <- function(label) function(doc_dirs) writeLines(label, doc_dirs$doc_draft)
+
+  first <- .run_render(fixture, build = gen("gen1"))
+  expect_identical(readLines(first$draft), "gen1")
+
+  expect_error(
+    .run_render(fixture, build = function(doc_dirs) {
+      writeLines("partial", doc_dirs$doc_draft)
+      stop("second render died")
+    }),
+    "second render died"
+  )
+  previous_draft <- file.path(fixture$project_dir, "report", ".previous", "draft", "report-draft.docx")
+  expect_identical(readLines(previous_draft), "gen1")
+  expect_identical(.live_docx(fixture), character(0))
+
+  third <- .run_render(fixture, build = gen("gen3"))
+  expect_identical(readLines(third$draft), "gen3")
+  # The failed second render's partial output never displaced the first.
+  expect_identical(readLines(previous_draft), "gen1")
+})
+
+test_that("a non-strict incomplete render is still delivered, with status error", {
+  fixture <- .render_report_fixture()
+  result <- .run_render(fixture, unfilled = "gone.png")
+
+  expect_identical(result$status, "error")
+  expect_true(file.exists(result$draft))
+  expect_identical(
+    normalizePath(dirname(result$draft)),
+    normalizePath(file.path(fixture$project_dir, "report", "draft"))
+  )
+  expect_false(dir.exists(file.path(fixture$project_dir, "report", ".failed")))
+})
+
+test_that("the staging folder is gone after a successful render", {
+  fixture <- .render_report_fixture()
+  .run_render(fixture, status = "final")
+  expect_identical(list.files(file.path(fixture$project_dir, "report"), pattern = "^\\.staging-"), character(0))
+})
+
+test_that("a staging folder left by a killed render is discarded by the next one", {
+  fixture <- .render_report_fixture()
+  stale <- file.path(fixture$project_dir, "report", ".staging-deadbeef0000", "final")
+  dir.create(stale, recursive = TRUE)
+  writeLines("from a killed render", file.path(stale, "report-final.docx"))
+
+  result <- .run_render(fixture, status = "final")
+
+  expect_false(dir.exists(dirname(stale)))
+  expect_identical(readLines(result$final), "final")
+})
+
+test_that("a failed render's folder is replaced by the next failure, not accumulated", {
+  fixture <- .render_report_fixture()
+  fail_with <- function(msg) {
+    try(.run_render(fixture, build = function(doc_dirs) stop(msg)), silent = TRUE)
+  }
+  fail_with("first failure")
+  fail_with("second failure")
+  failed <- file.path(fixture$project_dir, "report", ".failed")
+  expect_match(paste(readLines(file.path(failed, "FAILED")), collapse = "\n"), "second failure")
+  expect_false(grepl("first failure", paste(readLines(file.path(failed, "FAILED")), collapse = "\n")))
+})
+
+test_that("reportifyr's metadata sidecar is repointed from the staging folder to report/final", {
+  fixture <- .render_report_fixture()
+  # Build what finalize_document() leaves in a staged final/ folder.
+  stage <- .new_stage(fixture$project_dir)
+  staged_docx <- file.path(stage$final_dir, "report-final.docx")
+  writeLines("final", staged_docx)
+  staged_rel <- file.path("report", basename(stage$root), "final", "report-final.docx")
+  writeLines(
+    sprintf('{"object_meta": {"path": "%s", "hash": "abc"}}', staged_rel),
+    file.path(stage$final_dir, "report-final_docx_metadata.json")
+  )
+
+  .promote_stage(fixture$project_dir, stage)
+
+  meta <- readLines(file.path(fixture$project_dir, "report", "final", "report-final_docx_metadata.json"))
+  expect_match(meta, "\"path\": \"report/final/report-final.docx\"", fixed = TRUE)
+  expect_false(grepl(".staging-", meta, fixed = TRUE))
+  expect_false(dir.exists(stage$root))
+})
+
+test_that(".promote_stage() undoes its moves when one of them fails", {
+  project <- withr::local_tempdir()
+  dir.create(file.path(project, "report"))
+  stage <- .new_stage(project)
+  writeLines("shell", file.path(stage$shell_dir, "report.docx"))
+  writeLines("draft", file.path(stage$draft_dir, "report-draft.docx"))
+  # report/draft is a file, so the draft can't be moved in after the shell was.
+  file.create(file.path(project, "report", "draft"))
+
+  expect_error(suppressWarnings(.promote_stage(project, stage)), "Could not move the staged output")
+  expect_true(file.exists(file.path(stage$shell_dir, "report.docx")))
+  expect_false(file.exists(file.path(project, "report", "shell", "report.docx")))
+})
+
+test_that(".with_stage() keeps the staged files under .failed when the run errors or is interrupted", {
+  project <- withr::local_tempdir()
+  dir.create(file.path(project, "report"))
+  try(.with_stage(project, "report", function(stage, outcome) {
+    writeLines("x", file.path(stage$draft_dir, "report-draft.docx"))
+    stop("kaboom")
+  }), silent = TRUE)
+  failed <- file.path(project, "report", ".failed")
+  expect_true(file.exists(file.path(failed, "draft", "report-draft.docx")))
+  expect_match(paste(readLines(file.path(failed, "FAILED")), collapse = "\n"), "kaboom")
+
+  value <- .with_stage(project, "report", function(stage, outcome) {
+    outcome$accepted <- TRUE
+    "fine"
+  })
+  expect_identical(value, "fine")
+})
+
+test_that("the render's quarto call points at the staging folder", {
+  fixture <- .render_report_fixture()
+  record <- new.env()
+  .base_render_report_mocks(record)
+  render_report(
+    fixture$shell_qmd,
+    reference_doc = fixture$reference_doc,
+    standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+    config_yaml = fixture$config_yaml
+  )
+  args <- record$quarto_run$args
+  expect_match(args[which(args == "--output-dir") + 1], "^report/\\.staging-[0-9a-f]+/shell$")
+})
+
+
+# --- Relative reference_doc / style / override; inputs hashed up front -------
+
+test_that("a relative reference_doc, style and override resolve against the caller's directory, not the project's", {
+  fixture <- .render_report_fixture()
+  outside <- withr::local_tempdir()
+  for (name in c("ref.docx", "style.yaml", "override.yaml")) {
+    file.create(file.path(outside, name))
+  }
+  seen <- new.env()
+  local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL))
+  local_mocked_bindings(
+    styling_build_abbreviations_tex = function(...) invisible(NULL),
+    styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) {
+      assign("layout", list(style = style, override = override), envir = seen)
+      invisible(docx)
+    }
+  )
+  local_mocked_bindings(run = .mock_quarto_run(seen), .package = "processx")
+  local_mocked_bindings(
+    make_doc_dirs = .mock_make_doc_dirs,
+    build_report = function(docx_in, docx_out, ...) {
+      dir.create(dirname(docx_out), recursive = TRUE, showWarnings = FALSE)
+      writeLines("draft", docx_out)
+    },
+    .package = "reportifyr"
+  )
+
+  result <- withr::with_dir(outside, render_report(
+    fixture$shell_qmd,
+    reference_doc = "ref.docx", style = "style.yaml", override = "override.yaml",
+    standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+    config_yaml = fixture$config_yaml
+  ))
+
+  args <- seen$quarto_run$args
+  expect_identical(
+    normalizePath(args[which(args == "--reference-doc") + 1]),
+    normalizePath(file.path(outside, "ref.docx"))
+  )
+  expect_identical(normalizePath(seen$layout$style), normalizePath(file.path(outside, "style.yaml")))
+  expect_identical(normalizePath(seen$layout$override), normalizePath(file.path(outside, "override.yaml")))
+
+  # What was checked and hashed is what was used.
+  expect_identical(
+    normalizePath(result$inputs$path[result$inputs$role == "reference_doc"]),
+    normalizePath(file.path(outside, "ref.docx"))
+  )
+  expect_identical(
+    normalizePath(result$inputs$path[result$inputs$role == "style"]),
+    normalizePath(file.path(outside, "style.yaml"))
+  )
+})
+
+test_that("a relative reference_doc that only exists in the caller's directory is found", {
+  fixture <- .render_report_fixture()
+  outside <- withr::local_tempdir()
+  file.create(file.path(outside, "ref.docx"))
+  .mock_all <- function() {
+    local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL), .env = parent.frame())
+  }
+  expect_error(
+    withr::with_dir(outside, render_report(fixture$shell_qmd, reference_doc = "missing.docx")),
+    "reference-doc not found: .*missing\\.docx"
+  )
+})
+
+test_that("inputs are hashed before the render, so a file changed during it keeps its starting hash", {
+  fixture <- .render_report_fixture()
+  before <- .sha256_file(fixture$config_yaml)
+  result <- .run_render(fixture, build = function(doc_dirs) writeLines("changed during the render", fixture$config_yaml))
+
+  expect_false(identical(.sha256_file(fixture$config_yaml), before))
+  expect_identical(result$inputs$sha256[result$inputs$role == "config"], before)
+})
+
+test_that("inputs list _quarto.yml, the style and override YAMLs and each Quarto extension", {
+  fixture <- .render_report_fixture()
+  style <- file.path(fixture$project_dir, "style.yaml")
+  override <- file.path(fixture$project_dir, "override.yaml")
+  writeLines("a: 1", style)
+  writeLines("b: 2", override)
+  ext <- file.path(fixture$project_dir, "_extensions", "acme", "thing")
+  dir.create(ext, recursive = TRUE)
+  writeLines("title: thing", file.path(ext, "_extension.yml"))
+  writeLines("-- filter", file.path(ext, "filter.lua"))
+
+  result <- .run_render(fixture, style = style, override = override)
+  rows <- result$inputs[result$inputs$role %in% c("quarto_yml", "style", "override", "extension"), ]
+
+  expect_setequal(rows$role, c("quarto_yml", "style", "override", "extension"))
+  expect_identical(basename(rows$path[rows$role == "extension"]), "thing")
+  expect_identical(rows$sha256[rows$role == "style"], .sha256_file(style))
+
+  hash_before <- rows$sha256[rows$role == "extension"]
+  writeLines("-- a different filter", file.path(ext, "filter.lua"))
+  again <- .run_render(fixture, style = style, override = override)
+  expect_false(identical(again$inputs$sha256[again$inputs$role == "extension"], hash_before))
+  expect_true(.validate_render_json(.render_result_json(again)))
+})
+
+test_that(".extension_table() has one row per extension directory and none without any", {
+  expect_identical(nrow(.extension_table(NULL)), 0L)
+  empty <- withr::local_tempdir()
+  expect_identical(nrow(.extension_table(empty)), 0L)
+
+  dir.create(file.path(empty, "a", "one"), recursive = TRUE)
+  dir.create(file.path(empty, "two"))
+  writeLines("x", file.path(empty, "a", "one", "_extension.yml"))
+  writeLines("y", file.path(empty, "two", "_extension.yaml"))
+  table <- .extension_table(empty)
+  expect_identical(sort(basename(table$path)), c("one", "two"))
+  expect_true(all(grepl("^[0-9a-f]{64}$", table$sha256)))
+})
+
+# --- Offline: pass-2 uv failures through the real reportifyr/pyro chain -------
+
+# A `uv` first on PATH that fails the way uv does with no index to reach: the
+# error goes to stderr, nothing to stdout, non-zero exit.
+.fake_failing_uv <- function(env = parent.frame()) {
+  bin <- withr::local_tempdir(.local_envir = env)
+  script <- file.path(bin, "uv")
+  writeLines(c(
+    "#!/bin/sh",
+    "echo 'error: Failed to fetch: `https://pypi.org/simple/lxml/`' >&2",
+    "exit 2"
+  ), script)
+  Sys.chmod(script, "755")
+  withr::local_path(bin, action = "prefix", .local_envir = env)
+  bin
+}
+
+# A mocked build_report() that runs one of reportifyr's real Python calls
+# (the real wrapper over the real pyro::run_python_script, or the real
+# validate_docx()) so the failure that comes back is the one a real offline
+# render would see, with nothing stubbed between uv and the error.
+.run_real_reportifyr_call <- function(fixture, which, ...) {
+  dir.create(file.path(fixture$project_dir, ".venv"))
+  withr::local_options(venv_dir = fixture$project_dir)
+  withr::local_options(rpfy.no_log = TRUE)
+  .run_render(
+    fixture, offline = TRUE,
+    build = function(doc_dirs) {
+      ns <- asNamespace("reportifyr")
+      if (which == "script") {
+        get("run_python_script", ns)(c("run", "-m", "reportipyr.cli", "remove-footnotes"), "Remove footnotes script")
+      } else {
+        get("validate_docx", ns)(doc_dirs$doc_in, NULL)
+      }
+    },
+    ...
+  )
+}
+
+test_that("offline, a uv failure inside reportifyr's real python wrapper is a quartifyr_offline_failure", {
+  skip_on_os("windows")
+  skip_if_not_installed("reportifyr")
+  fixture <- .render_report_fixture()
+  .fake_failing_uv()
+  err <- suppressMessages(tryCatch(.run_real_reportifyr_call(fixture, "script"), error = function(e) e))
+
+  expect_s3_class(err, "quartifyr_offline_failure")
+  expect_match(conditionMessage(err), "fill the shell with reportifyr \\(pass 2\\)")
+  # The condition reportifyr/pyro raised only says "failed."; uv's own words
+  # come from what pass 2 printed.
+  expect_match(paste(format(err), conditionMessage(err), collapse = "\n"), "Failed to fetch")
+})
+
+test_that("offline, reportifyr's validate step (which discards uv's stderr) is still recognised, by asking uv", {
+  skip_on_os("windows")
+  skip_if_not_installed("reportifyr")
+  fixture <- .render_report_fixture()
+  .fake_failing_uv()
+  err <- suppressMessages(tryCatch(.run_real_reportifyr_call(fixture, "validate"), error = function(e) e))
+
+  expect_s3_class(err, "quartifyr_offline_failure")
+  expect_match(paste(format(err), collapse = "\n"), "Failed to fetch")
+})
+
+test_that("offline, an unrelated failure with a healthy uv is left alone even after the probe", {
+  skip_on_os("windows")
+  skip_if_not_installed("reportifyr")
+  fixture <- .render_report_fixture()
+  bin <- withr::local_tempdir()
+  writeLines(c("#!/bin/sh", "exit 0"), file.path(bin, "uv"))
+  Sys.chmod(file.path(bin, "uv"), "755")
+  withr::local_path(bin, action = "prefix")
+  dir.create(file.path(fixture$project_dir, ".venv"))
+  withr::local_options(venv_dir = fixture$project_dir)
+
+  err <- tryCatch(
+    .run_render(fixture, offline = TRUE, build = function(doc_dirs) stop("validate-docx failed -- check log file")),
+    error = function(e) e
+  )
+  expect_false(inherits(err, "quartifyr_offline_failure"))
+  expect_match(conditionMessage(err), "validate-docx failed")
+})
+
+test_that("online, a pass-2 uv-looking failure is never relabelled and pass 2 isn't wrapped", {
+  fixture <- .render_report_fixture()
+  err <- tryCatch(
+    .run_render(fixture, offline = FALSE, build = function(doc_dirs) stop("error: Failed to fetch: https://pypi.org/")),
+    error = function(e) e
+  )
+  expect_false(inherits(err, "quartifyr_offline_failure"))
+})
+
+test_that(".tee_stdout() collects what is printed and still passes the value through", {
+  into <- new.env()
+  into$lines <- character(0)
+  out <- utils::capture.output(value <- .tee_stdout(function() { cat("one\ntwo\n"); 42 }, into))
+  expect_identical(value, 42)
+  expect_identical(into$lines, c("one", "two"))
+  expect_identical(out, c("one", "two")) # still shown as it happened
+  expect_identical(sink.number(), 0L)
+
+  try(.tee_stdout(function() { cat("before\n"); stop("boom") }, into), silent = TRUE)
+  expect_identical(sink.number(), 0L)
+  expect_true("before" %in% into$lines)
+})
+
+test_that("offline, an interpreter that doesn't match the project's pin is reported in the result", {
+  fixture <- .render_report_fixture()
+  dir.create(file.path(fixture$project_dir, ".venv"))
+  writeLines("version = 3.12.3", file.path(fixture$project_dir, ".venv", "pyvenv.cfg"))
+  writeLines("3.12.16", file.path(fixture$project_dir, ".python-version"))
+  withr::local_options(venv_dir = NULL, quartifyr.python_env = NULL)
+  withr::local_envvar(QUARTIFYR_PYTHON_ENV = NA)
+
+  result <- .run_render(fixture, offline = TRUE)
+  expect_identical(result$status, "warning")
+  expect_match(result$warnings, "runs Python 3.12.3, but the project pins 3.12.16")
+  expect_true(.validate_render_json(.render_result_json(result)))
+
+  # Online, uv would recreate the environment itself, so nothing is said.
+  online <- .run_render(fixture, offline = FALSE)
+  expect_identical(online$status, "ok")
+
+  # And strict turns it into a failure.
+  expect_error(.run_render(fixture, offline = TRUE, strict = TRUE), class = "quartifyr_render_incomplete")
+})
+
+# --- One Python environment for both passes (#85) ----------------------------
+
+test_that("render_report() runs pass 2 against the python_env and creates nothing in the project", {
+  .mock_python_env()
+  fixture <- .render_report_fixture()
+  venv <- .make_venv(withr::local_tempdir())
+  withr::local_options(venv_dir = NULL)
+  withr::local_envvar(UV_PROJECT_ENVIRONMENT = NA, UV_NO_SYNC = NA, QUARTIFYR_PYTHON_ENV = NA)
+  seen <- new.env()
+
+  .run_render(
+    fixture,
+    build = function(doc_dirs) {
+      assign("venv_dir", getOption("venv_dir"), envir = seen)
+      assign("uv", Sys.getenv(c("UV_PROJECT_ENVIRONMENT", "UV_NO_SYNC"), unset = "<unset>"), envir = seen)
+    },
+    .python_env = venv
+  )
+
+  expect_true(file.exists(file.path(seen$venv_dir, ".venv", "pyvenv.cfg")))
+  expect_identical(unname(seen$uv[1:2]), c(venv, "1"))
+  expect_false(any(file.exists(file.path(fixture$project_dir, c(".venv", "uv.lock", "pyproject.toml")))))
+  expect_null(getOption("venv_dir"))
+})
+
+test_that("a python_env missing a module reportifyr needs fails before anything is rendered", {
+  fixture <- .render_report_fixture()
+  local_mocked_bindings(.verify_python_env = function(env, modules = NULL) {
+    cli::cli_abort("missing pillow", class = "quartifyr_python_env_invalid", call = NULL)
+  })
+  record <- new.env()
+  .base_render_report_mocks(record)
+  withr::local_options(quartifyr.python_env = withr::local_tempdir())
+
+  expect_error(
+    render_report(
+      fixture$shell_qmd,
+      reference_doc = fixture$reference_doc,
+      standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+      config_yaml = fixture$config_yaml
+    ),
+    class = "quartifyr_python_env_invalid"
+  )
+  expect_null(record$quarto_run)
+})
+
+# --- Failure and rollback branches of the stage/swap machinery ----------------
+
+# Replaces .rename_file() with one that fails for moves whose destination
+# matches `fail_to` (a regex) and otherwise really renames.
+.fail_renames_to <- function(fail_to, env = parent.frame()) {
+  local_mocked_bindings(
+    .rename_file = function(from, to) if (grepl(fail_to, to)) FALSE else file.rename(from, to),
+    .env = env
+  )
+}
+
+test_that(".move_previous_outputs() puts everything back, replaced .previous copies included, when a move fails", {
+  project <- withr::local_tempdir()
+  paths <- .render_output_paths(project, "report")
+  for (p in c(paths$shell, paths$final[[1]])) {
+    dir.create(dirname(p), recursive = TRUE, showWarnings = FALSE)
+    writeLines(paste("live", basename(p)), p)
+  }
+  # An older .previous shell, which moving the live one in replaces (and must restore).
+  older <- file.path(project, "report", ".previous", "shell", "report.docx")
+  dir.create(dirname(older), recursive = TRUE)
+  writeLines("older previous", older)
+  .fail_renames_to("[/\\\\]final[/\\\\]report-final\\.docx$")
+
+  expect_error(.move_previous_outputs(project, "report"), "Could not move the previous output")
+
+  expect_identical(readLines(paths$shell), "live report.docx")
+  expect_identical(readLines(paths$final[[1]]), "live report-final.docx")
+  expect_identical(readLines(older), "older previous")
+  expect_identical(list.files(dirname(older), all.files = TRUE, no.. = TRUE), "report.docx") # no .replaced-* left
+})
+
+test_that(".move_previous_outputs() restores the replaced copy when the move into place itself fails", {
+  project <- withr::local_tempdir()
+  paths <- .render_output_paths(project, "report")
+  dir.create(dirname(paths$shell), recursive = TRUE)
+  writeLines("live", paths$shell)
+  older <- file.path(project, "report", ".previous", "shell", "report.docx")
+  dir.create(dirname(older), recursive = TRUE)
+  writeLines("older previous", older)
+  # The live file's move to .previous fails, after the old copy was set aside.
+  local_mocked_bindings(.rename_file = function(from, to) {
+    # Only the live file's move into .previous (not the set-aside of the old copy).
+    if (!grepl("\\.previous", from) && grepl("[/\\\\]shell[/\\\\]report\\.docx$", from) &&
+      grepl("\\.previous", to)) {
+      return(FALSE)
+    }
+    file.rename(from, to)
+  })
+
+  expect_error(.move_previous_outputs(project, "report"), "Could not move the previous output")
+  expect_identical(readLines(older), "older previous")
+  expect_identical(readLines(paths$shell), "live")
+})
+
+test_that(".move_previous_outputs() stops, touching nothing, when the old .previous copy can't be set aside", {
+  project <- withr::local_tempdir()
+  paths <- .render_output_paths(project, "report")
+  dir.create(dirname(paths$shell), recursive = TRUE)
+  writeLines("live", paths$shell)
+  older <- file.path(project, "report", ".previous", "shell", "report.docx")
+  dir.create(dirname(older), recursive = TRUE)
+  writeLines("older previous", older)
+  .fail_renames_to("\\.replaced-")
+
+  expect_error(.move_previous_outputs(project, "report"), "Could not move the previous output")
+  expect_identical(readLines(paths$shell), "live")
+  expect_identical(readLines(older), "older previous")
+})
+
+test_that(".retire_stage() has nothing to keep when the staging folder is already gone", {
+  project <- withr::local_tempdir()
+  dir.create(file.path(project, "report"))
+  stage <- list(root = file.path(project, "report", ".staging-abc"))
+  expect_null(.retire_stage(project, stage, "whatever", "report"))
+  expect_false(dir.exists(file.path(project, "report", ".failed")))
+})
+
+test_that(".retire_stage() keeps the files where they are when they can't be renamed to .failed", {
+  project <- withr::local_tempdir()
+  dir.create(file.path(project, "report"))
+  stage <- .new_stage(project)
+  writeLines("partial", file.path(stage$draft_dir, "report-draft.docx"))
+  .fail_renames_to("\\.failed$")
+
+  kept <- .retire_stage(project, stage, "disk said no", "report")
+
+  expect_identical(kept, stage$root)
+  expect_true(file.exists(file.path(stage$root, "FAILED")))
+  expect_true(file.exists(file.path(stage$draft_dir, "report-draft.docx")))
+})
+
+test_that(".promote_stage() merges into an existing intermediate_files folder instead of replacing it", {
+  project <- withr::local_tempdir()
+  live_intermediate <- file.path(project, "report", "draft", "intermediate_files")
+  dir.create(live_intermediate, recursive = TRUE)
+  writeLines("from an earlier render", file.path(live_intermediate, "report-clean.docx"))
+  stage <- .new_stage(project)
+  staged_intermediate <- file.path(stage$draft_dir, "intermediate_files")
+  dir.create(staged_intermediate)
+  writeLines("new", file.path(staged_intermediate, "report-tabs.docx"))
+  writeLines("draft", file.path(stage$draft_dir, "report-draft.docx"))
+
+  .promote_stage(project, stage)
+
+  expect_setequal(list.files(live_intermediate), c("report-clean.docx", "report-tabs.docx"))
+  expect_true(file.exists(file.path(project, "report", "draft", "report-draft.docx")))
+})
+
+test_that(".rebase_path() moves staged paths and leaves other paths and NULL alone", {
+  stage <- list(root = "/p/report/.staging-abc")
+  expect_null(.rebase_path(NULL, stage, "/p/report"))
+  expect_identical(.rebase_path("/p/report/.staging-abc/draft/a.docx", stage, "/p/report"), "/p/report/draft/a.docx")
+  expect_identical(.rebase_path("/elsewhere/a.docx", stage, "/p/report"), "/elsewhere/a.docx")
+  expect_identical(.rebase_path("/p/report/.staging-abc/draft/a.docx", stage, NULL), "/p/report/.staging-abc/draft/a.docx")
+})
+
+test_that(".soffice_info() reports no version when `soffice --version` fails", {
+  skip_on_os("windows")
+  dir <- withr::local_tempdir()
+  script <- file.path(dir, "soffice")
+  writeLines(c("#!/bin/sh", "exit 3"), script)
+  Sys.chmod(script, "755")
+  info <- .soffice_info(script)
+  expect_identical(info$path, script)
+  expect_null(info$version)
+})
+
+# --- Intermediate files, extension hashes, soffice path -----------------------
+
+test_that("a successful render's intermediate_files are moved aside by the next render, and not left live after a rejection", {
+  fixture <- .render_report_fixture()
+  keep_intermediate <- function(doc_dirs) {
+    inter <- file.path(dirname(doc_dirs$doc_draft), "intermediate_files")
+    dir.create(inter, showWarnings = FALSE)
+    writeLines("near-complete", file.path(inter, "report-tabsfigs.docx"))
+  }
+  first <- .run_render(fixture, build = keep_intermediate)
+  live <- file.path(fixture$project_dir, "report", "draft", "intermediate_files", "report-tabsfigs.docx")
+  expect_identical(readLines(live), "near-complete")
+
+  # A strict rejection of the next render: nothing from the first one is live.
+  expect_error(.run_render(fixture, strict = TRUE, unfilled = "gone.png"), class = "quartifyr_render_incomplete")
+
+  expect_false(file.exists(live))
+  previous <- file.path(fixture$project_dir, "report", ".previous", "draft", "intermediate_files", "report-tabsfigs.docx")
+  expect_identical(readLines(previous), "near-complete")
+  expect_identical(
+    list.files(file.path(fixture$project_dir, "report", "draft", "intermediate_files")),
+    character(0)
+  )
+})
+
+test_that(".render_output_paths() lists the intermediate files and .previous keeps them apart from the draft folder", {
+  paths <- .render_output_paths("/p", "report")
+  expect_setequal(
+    basename(paths$intermediate),
+    c("report-clean.docx", "report-tabs.docx", "report-tabsfigs.docx", "report-draft.docx")
+  )
+  expect_true(all(grepl("intermediate_files", paths$intermediate, fixed = TRUE)))
+  expect_identical(.previous_subdir("intermediate"), file.path("draft", "intermediate_files"))
+  expect_identical(.previous_subdir("shell"), "shell")
+})
+
+test_that("an extension's hash doesn't depend on the locale's sort order", {
+  dir <- withr::local_tempdir()
+  for (name in c("a", "B")) {
+    dir.create(file.path(dir, name))
+    writeLines("x", file.path(dir, name, "_extension.yml"))
+  }
+  writeLines("1", file.path(dir, "a", "z.lua"))
+  writeLines("2", file.path(dir, "a", "B.lua"))
+  table <- .extension_table(dir)
+  # C-locale order: upper case before lower case, whatever LC_COLLATE says.
+  expect_identical(basename(table$path), c("B", "a"))
+
+  files <- c("B.lua", "_extension.yml", "z.lua")
+  expected_lines <- paste(files, vapply(file.path(dir, "a", files), .sha256_file, character(1), USE.NAMES = FALSE), sep = "  ")
+  expect_identical(
+    # (list.files() reports forward slashes; the temporary directory may not.)
+    table$sha256[basename(table$path) == "a"],
+    paste(as.character(unclass(openssl::sha256(paste(expected_lines, collapse = "\n")))), collapse = "")
+  )
+})
+
+test_that("the LibreOffice steps get an absolute path, even for a relative soffice_bin and a different cwd", {
+  skip_on_os("windows")
+  fixture <- .render_report_fixture()
+  outside <- withr::local_tempdir()
+  tools_dir <- file.path(outside, "tools")
+  dir.create(tools_dir)
+  writeLines(c("#!/bin/sh", "echo LibreOffice test"), file.path(tools_dir, "soffice"))
+  Sys.chmod(file.path(tools_dir, "soffice"), "755")
+  seen <- NULL
+  local_mocked_bindings(
+    styling_recalculate_fields = function(docx, timeout = 120, soffice_bin = NULL) {
+      seen <<- soffice_bin
+      invisible(docx)
+    }
+  )
+
+  result <- withr::with_dir(outside, .run_render(fixture, recalculate_fields = TRUE, soffice_bin = "tools/soffice"))
+
+  expect_identical(normalizePath(seen), normalizePath(file.path(tools_dir, "soffice")))
+  expect_true(grepl("^(/|[A-Za-z]:)", seen))
+  expect_identical(normalizePath(result$versions$libreoffice$path), normalizePath(seen))
+})
+
+test_that("a bare soffice name is resolved through PATH once, and that path is what runs and is recorded", {
+  skip_on_os("windows")
+  fixture <- .render_report_fixture()
+  bin <- withr::local_tempdir()
+  writeLines(c("#!/bin/sh", "echo LibreOffice on path"), file.path(bin, "soffice"))
+  Sys.chmod(file.path(bin, "soffice"), "755")
+  withr::local_path(bin, action = "prefix")
+  withr::local_envvar(QUARTIFYR_SOFFICE_BIN = NA)
+  seen <- NULL
+  local_mocked_bindings(
+    styling_resolve_same_page_crossrefs = function(docx, timeout = 120, soffice_bin = NULL) {
+      seen <<- soffice_bin
+      invisible(docx)
+    }
+  )
+  result <- .run_render(fixture, resolve_same_page_crossrefs = TRUE)
+  expect_identical(normalizePath(seen), normalizePath(file.path(bin, "soffice")))
+  expect_identical(normalizePath(result$versions$libreoffice$path), normalizePath(seen))
 })

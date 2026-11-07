@@ -40,7 +40,8 @@ test_that("options reach render_report() with the right types", {
 
   .run_cli(c(
     "--project", "/p", "--shell", "report.qmd", "--status=final", "--strict",
-    "--quarto-timeout", "30", "--quarto-bin", "/opt/quarto", "--recalculate-fields"
+    "--quarto-timeout", "30", "--quarto-bin", "/opt/quarto", "--recalculate-fields",
+    "--soffice-bin", "/opt/lo/soffice"
   ))
 
   expect_identical(seen$shell_qmd, "/p/report.qmd")
@@ -48,6 +49,7 @@ test_that("options reach render_report() with the right types", {
   expect_true(seen$strict)
   expect_identical(seen$quarto_timeout, 30)
   expect_identical(seen$quarto_bin, "/opt/quarto")
+  expect_identical(seen$soffice_bin, "/opt/lo/soffice")
   expect_true(seen$recalculate_fields)
   expect_false(seen$resolve_same_page_crossrefs)
 })
@@ -193,4 +195,39 @@ test_that(".cli_shell_path() keeps an existing absolute shell and resolves anyth
   expect_identical(.cli_shell_path("/proj", shell), shell)
   expect_identical(.cli_shell_path("/proj", "report.qmd"), "/proj/report.qmd")
   expect_identical(.cli_shell_path("/proj", "/does/not/exist.qmd"), "/proj//does/not/exist.qmd")
+})
+
+test_that("an early-error JSON reports the tool versions that could be determined", {
+  local_mocked_bindings(render_report = function(...) stop("nope"))
+  local_mocked_bindings(
+    run = function(command, ...) list(status = 0, stdout = paste0("9.9.9 from ", command, "\n"), stderr = ""),
+    .package = "processx"
+  )
+
+  res <- .run_cli(c("--project", "/p", "--shell", "report.qmd", "--json", "--quarto-bin", "/opt/quarto"))
+  parsed <- jsonlite::fromJSON(paste(res$out, collapse = "\n"))
+
+  expect_identical(parsed$status, "error")
+  expect_identical(parsed$versions$quarto, "9.9.9 from /opt/quarto")
+  expect_identical(parsed$versions$quartifyr, as.character(utils::packageVersion("quartifyr")))
+  expect_true(.validate_render_json(paste(res$out, collapse = "\n")))
+})
+
+test_that("a strict rejection's own versions are not overwritten by the early-error fallback", {
+  local_mocked_bindings(render_report = function(...) {
+    .abort_incomplete(.fake_result("error", unfilled = "{rpfy}:gone.png"))
+  })
+  local_mocked_bindings(
+    run = function(...) list(status = 0, stdout = "7.7.7\n", stderr = ""),
+    .package = "processx"
+  )
+  res <- .run_cli(c("--project", "/p", "--shell", "report.qmd", "--json", "--strict"))
+  parsed <- jsonlite::fromJSON(paste(res$out, collapse = "\n"))
+  expect_null(parsed$versions$quarto) # the fake result has no versions, and none is invented
+})
+
+test_that(".cli_quarto_command() prefers --quarto-bin, then QUARTO_PATH, then quarto", {
+  expect_identical(.cli_quarto_command("/opt/quarto"), "/opt/quarto")
+  withr::with_envvar(c(QUARTO_PATH = "/env/quarto"), expect_identical(.cli_quarto_command(), "/env/quarto"))
+  withr::with_envvar(c(QUARTO_PATH = NA), expect_identical(.cli_quarto_command(), "quarto"))
 })

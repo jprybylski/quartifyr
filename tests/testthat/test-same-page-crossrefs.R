@@ -29,3 +29,22 @@ test_that("styling_resolve_same_page_crossrefs() defaults timeout to 120", {
 
   expect_identical(captured_args[length(captured_args)], "120")
 })
+
+test_that("styling_resolve_same_page_crossrefs() passes soffice_bin to the CLI before --timeout, and omits it by default", {
+  captured_args <- NULL
+  local_mocked_bindings(
+    .run_quartifyr_styling_cli = function(args) {
+      captured_args <<- args
+      list(status = "success", path = "report.docx")
+    }
+  )
+
+  styling_resolve_same_page_crossrefs("report.docx", soffice_bin = "/opt/lo/soffice")
+  expect_identical(
+    captured_args,
+    c("resolve-same-page-crossrefs", "--docx", "report.docx", "--soffice-bin", "/opt/lo/soffice", "--timeout", "120")
+  )
+
+  styling_resolve_same_page_crossrefs("report.docx")
+  expect_false("--soffice-bin" %in% captured_args)
+})

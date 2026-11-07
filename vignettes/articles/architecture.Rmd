@@ -124,8 +124,8 @@ incomplete rather than papered over:
 
 - **Word field recalculation** (`styling_recalculate_fields()` /
   `quartifyr-styling recalculate-fields`, headless LibreOffice) is
-  experimental: it works, but has shown non-deterministic failure modes
-  in real testing. Off by default; without it, delivered docs need one
+  experimental: it works, but has shown hangs and silent no-ops in real
+  testing (a macOS hang has since been fixed, see the README). Off by default; without it, delivered docs need one
   manual "select all, F9" in Word to populate the ToC. See
   [Styling](styling.html) and [The R package](r-package.html) for
   detail.

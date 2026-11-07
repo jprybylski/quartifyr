@@ -67,9 +67,14 @@ def _cmd_abbrevs(args: argparse.Namespace) -> int:
     return _ok(args, f"wrote {output_path}", path=str(output_path))
 
 
+SOFFICE_BIN_HELP = (
+    "LibreOffice executable (default: $QUARTIFYR_SOFFICE_BIN if set, else `soffice` on PATH)"
+)
+
+
 def _cmd_recalculate_fields(args: argparse.Namespace) -> int:
     try:
-        output_path = recalculate_fields(args.docx, timeout_seconds=args.timeout)
+        output_path = recalculate_fields(args.docx, soffice_bin=args.soffice_bin, timeout_seconds=args.timeout)
     except (FieldRecalculationError, FileNotFoundError) as exc:
         return _err(args, exc)
     return _ok(args, f"recalculated {output_path}", path=str(output_path))
@@ -77,7 +82,7 @@ def _cmd_recalculate_fields(args: argparse.Namespace) -> int:
 
 def _cmd_resolve_same_page_crossrefs(args: argparse.Namespace) -> int:
     try:
-        output_path = resolve_same_page_crossrefs(args.docx, timeout_seconds=args.timeout)
+        output_path = resolve_same_page_crossrefs(args.docx, soffice_bin=args.soffice_bin, timeout_seconds=args.timeout)
     except (SamePageCrossrefError, FileNotFoundError) as exc:
         return _err(args, exc)
     return _ok(args, f"resolved same-page crossrefs in {output_path}", path=str(output_path))
@@ -234,6 +239,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Recalculate a docx's Word ToC (page numbers, entries) in place via headless LibreOffice",
     )
     recalc.add_argument("--docx", required=True, help="Path to the docx to recalculate (modified in place)")
+    recalc.add_argument("--soffice-bin", default=None, help=SOFFICE_BIN_HELP)
     recalc.add_argument("--timeout", type=int, default=120, help="Timeout in seconds (default: 120)")
     recalc.set_defaults(func=_cmd_recalculate_fields)
 
@@ -245,6 +251,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     same_page.add_argument("--docx", required=True, help="Path to the filled docx to resolve (modified in place)")
+    same_page.add_argument("--soffice-bin", default=None, help=SOFFICE_BIN_HELP)
     same_page.add_argument("--timeout", type=int, default=120, help="Timeout in seconds (default: 120)")
     same_page.set_defaults(func=_cmd_resolve_same_page_crossrefs)
 

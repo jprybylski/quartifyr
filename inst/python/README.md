@@ -105,6 +105,11 @@ reliability caveat:
 quartifyr-styling recalculate-fields --docx path/to/report-final.docx
 ```
 
+Both LibreOffice subcommands take `--soffice-bin <path>` to name the
+executable; without it `$QUARTIFYR_SOFFICE_BIN` is used if set, else `soffice`
+on `PATH`. A missing or non-executable path is an error before LibreOffice is
+started.
+
 Apply a dynamic page header and footer, and (if the `.qmd` uses `{{<
 body-start >}}`) split the rendered docx into title-page/front-matter/body
 OOXML sections so the whole front matter numbers in lowercase roman
