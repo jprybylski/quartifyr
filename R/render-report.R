@@ -99,6 +99,16 @@
 #'   error of class `quartifyr_offline_failure` naming the step. `FALSE` sets
 #'   nothing. Renders of one project must not run concurrently: they share its
 #'   `.venv` and `report/` folders.
+#' @param fit_tables Whether to run `styling_fit_tables()` on each produced
+#'   docx after reportifyr's pass 2 (default `TRUE`; plain Python, no
+#'   LibreOffice). It gives the tables reportifyr inserted explicit column
+#'   widths from the page section they are in (so a table on a `{{<
+#'   landscape >}}` page uses the landscape width), with no column narrower
+#'   than its longest word and the font reduced in steps, to at most a 7 pt
+#'   minimum, only when needed. A table still too wide at 7 pt is recorded as
+#'   a warning in the result. `FALSE` leaves the widths to the word processor
+#'   (reportifyr's own autofit). A failure only warns and is recorded in the
+#'   result, like the LibreOffice steps.
 #' @param quarto_timeout Seconds to allow the `quarto render` subprocess
 #'   before killing it and signalling an error of class
 #'   `quartifyr_quarto_timeout`. Default `600`; `Inf` disables the limit.
@@ -228,7 +238,8 @@ render_report <- function(
   quarto_bin = NULL,
   soffice_bin = NULL,
   strict = FALSE,
-  offline = NULL
+  offline = NULL,
+  fit_tables = TRUE
 ) {
   status <- match.arg(status)
 
@@ -572,6 +583,32 @@ render_report <- function(
             run_errors <<- c(run_errors, msg)
           }
         )
+      }
+    }
+    # Table widths come from the section each table is in, so this runs on the
+    # filled docx (pass 2 inserted the tables) and before the LibreOffice steps,
+    # which paginate whatever widths are there.
+    if (isTRUE(fit_tables)) {
+      for (output_path in produced) {
+        fitted <- tryCatch(
+          withr::with_dir(project_dir, styling_fit_tables(output_path)),
+          error = function(e) {
+            msg <- paste0("styling_fit_tables() failed on ", output_path, ": ", conditionMessage(e))
+            warning(msg, call. = FALSE)
+            run_errors <<- c(run_errors, msg)
+            NULL
+          }
+        )
+        if (length(fitted$overflowing) > 0) {
+          run_warnings <- c(
+            run_warnings,
+            paste0(
+              "Table(s) ", paste(unlist(fitted$overflowing), collapse = ", "), " in ", basename(output_path),
+              " are still too wide at the minimum font size, so a word may break (tables counted from 1 ",
+              "in document order). Use fewer columns, shorter headers, or a landscape section."
+            )
+          )
+        }
       }
     }
     if (resolve_same_page_crossrefs) {

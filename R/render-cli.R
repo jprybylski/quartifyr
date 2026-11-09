@@ -19,7 +19,7 @@
   "project", "shell", "status", "reference-doc", "style", "override",
   "quarto-timeout", "quarto-bin", "soffice-bin"
 )
-.render_cli_flag_options <- c("json", "strict", "offline", "recalculate-fields", "resolve-same-page-crossrefs", "help")
+.render_cli_flag_options <- c("json", "strict", "offline", "recalculate-fields", "resolve-same-page-crossrefs", "no-fit-tables", "help")
 
 # `--project <dir> --shell <file>`: the shell is relative to the project
 # unless it is an existing absolute path.
@@ -58,6 +58,8 @@
     "  --style <file>, --override <file>   Style YAML paths (see render_report()).",
     "  --recalculate-fields            Run the headless-LibreOffice field recalculation.",
     "  --resolve-same-page-crossrefs   Run the headless-LibreOffice crossref resolution.",
+    "  --no-fit-tables                 Leave table column widths to the word processor (default: fit",
+    "                                  every table to its page section).",
     sep = "\n"
   )
 }
@@ -144,7 +146,8 @@
     status = if (is.null(parsed$status)) "draft" else parsed$status,
     strict = isTRUE(parsed$strict),
     recalculate_fields = isTRUE(parsed$`recalculate-fields`),
-    resolve_same_page_crossrefs = isTRUE(parsed$`resolve-same-page-crossrefs`)
+    resolve_same_page_crossrefs = isTRUE(parsed$`resolve-same-page-crossrefs`),
+    fit_tables = !isTRUE(parsed$`no-fit-tables`)
   )
   if (isTRUE(parsed$offline)) call_args$offline <- TRUE
   if (!is.null(parsed$`reference-doc`)) call_args$reference_doc <- parsed$`reference-doc`

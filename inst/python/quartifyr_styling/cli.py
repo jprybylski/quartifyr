@@ -21,6 +21,7 @@ from pathlib import Path
 
 from .abbreviations import AbbreviationsError, build_abbreviations_tex
 from .build_template import build_reference_docx
+from .fit_tables import FitTablesError, fit_tables
 from .layout import LayoutError, apply_layout_from_qmd
 from .recalculate_fields import FieldRecalculationError, recalculate_fields
 from .reportifyr_sync import ReportifyrSyncError, sync_reportifyr_config
@@ -86,6 +87,26 @@ def _cmd_resolve_same_page_crossrefs(args: argparse.Namespace) -> int:
     except (SamePageCrossrefError, FileNotFoundError) as exc:
         return _err(args, exc)
     return _ok(args, f"resolved same-page crossrefs in {output_path}", path=str(output_path))
+
+
+def _cmd_fit_tables(args: argparse.Namespace) -> int:
+    try:
+        result = fit_tables(args.docx)
+    except (FitTablesError, FileNotFoundError) as exc:
+        return _err(args, exc)
+    message = f"fitted {result.fitted} table(s) in {result.path}"
+    if result.shrunk:
+        message += f"; font reduced in table(s) {', '.join(map(str, result.shrunk))}"
+    if result.overflowing:
+        message += f"; WARNING: words may still break in table(s) {', '.join(map(str, result.overflowing))} (too wide at the minimum font size)"
+    return _ok(
+        args,
+        message,
+        path=str(result.path),
+        fitted=result.fitted,
+        shrunk=result.shrunk,
+        overflowing=result.overflowing,
+    )
 
 
 def _cmd_apply_layout(args: argparse.Namespace) -> int:
@@ -254,6 +275,16 @@ def build_parser() -> argparse.ArgumentParser:
     same_page.add_argument("--soffice-bin", default=None, help=SOFFICE_BIN_HELP)
     same_page.add_argument("--timeout", type=int, default=120, help="Timeout in seconds (default: 120)")
     same_page.set_defaults(func=_cmd_resolve_same_page_crossrefs)
+
+    fit = subparsers.add_parser(
+        "fit-tables",
+        help=(
+            "Fit every reportifyr table in a filled docx to the width of its page section: no column "
+            "narrower than its longest word, font reduced in steps when needed (run after reportifyr)"
+        ),
+    )
+    fit.add_argument("--docx", required=True, help="Path to the filled docx (modified in place)")
+    fit.set_defaults(func=_cmd_fit_tables)
 
     layout = subparsers.add_parser(
         "apply-layout",

@@ -184,6 +184,25 @@ rendered end to end through quartifyr's two-pass shell/fill pipeline.
 Per-participant maximum, minimum, and average observed concentration across
 the sampling period.
 
+## Non-Compartmental Parameters
+
+<!-- Fourteen columns: wider than a portrait page can show at full size with
+     reportifyr's own fixed 6-inch fit, so this sits in a landscape section.
+     {{< landscape >}}/{{< portrait >}} are markers that apply-layout turns
+     into real section breaks (same header, footer and page numbering, just a
+     landscape page), and render_report()'s table-fitting step then sizes the
+     table to that page's width, with no column narrower than its longest
+     word. Both markers must come after {{< body-start >}}. -->
+{{< landscape >}}
+
+{{< tbl_caption "TblNcaParameters" "Non-compartmental pharmacokinetic parameters per participant" >}}
+
+{rpfy}:nca-parameters.csv
+
+Terminal-phase parameters are approximate; see the table notes.
+
+{{< portrait >}}
+
 ## Concentration-Time Profile
 
 {{< fig_caption "FigConcTime" "Concentration-time profile" >}}

@@ -240,6 +240,13 @@ equivalent, `quartifyr-styling resolve-same-page-crossrefs`); see
 [`inst/python/README.md`](inst/python/README.md) for the underlying
 Python engine.
 
+Calling the pieces yourself, `quartifyr::styling_fit_tables("report-filled.docx")`
+(CLI: `quartifyr-styling fit-tables`) is the equivalent of
+`render_report()`'s table-fitting step: it gives the tables reportifyr
+inserted fixed column widths from their page section, so a wide table stays
+readable and a table between `{{< landscape >}}` and `{{< portrait >}}` uses
+the landscape width. Run it on the *filled* docx, before any LibreOffice step.
+
 ## Standing up a new org
 
 An org's look lives entirely in one YAML file, no Word template editing.

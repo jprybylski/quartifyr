@@ -2,6 +2,7 @@ from pathlib import Path
 
 import docx
 import pytest
+from docx.enum.text import WD_TAB_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from lxml import etree
@@ -439,3 +440,151 @@ def test_apply_layout_from_qmd_reads_same_page_crossref_hyperlinks(tmp_path):
         if b.get(qn("w:name"))
     ]
     assert any(name.startswith("quartifyr-crossref-target-") for name in bookmark_names)
+
+
+# --- landscape/portrait markers ---------------------------------------------
+
+
+def _build_docx_with_orientation_markers(path: Path, markers: list[str], *, markers_before_body_start: bool = False) -> None:
+    """Like ``_build_docx_with_bookmarks`` (with the title-page bookmark),
+    plus one marker paragraph per entry in ``markers`` ("landscape"/
+    "portrait") in the body, each followed by a content paragraph."""
+    document = docx.Document()
+    document.add_paragraph("Title page para")
+    section = document.sections[0]
+    section.footer.is_linked_to_previous = False
+    _add_page_field_run(section.footer.paragraphs[0])
+    _add_bookmark(document.add_paragraph(), bookmark_id="800002", name="quartifyr-front-matter-start")
+    document.add_paragraph("Front matter para")
+    if markers_before_body_start:
+        _add_bookmark(document.add_paragraph(), bookmark_id="810001", name=f"quartifyr-{markers[0]}-1")
+    _add_bookmark(document.add_paragraph(), bookmark_id="800001", name="quartifyr-body-start")
+    document.add_paragraph("Body para")
+    for n, orientation in enumerate(markers, start=1):
+        if markers_before_body_start:
+            break
+        _add_bookmark(document.add_paragraph(), bookmark_id=str(810000 + n), name=f"quartifyr-{orientation}-{n}")
+        document.add_paragraph(f"After marker {n}")
+    document.save(str(path))
+
+
+def _orientations(document) -> list[str]:
+    return [
+        "landscape" if s._sectPr.find(qn("w:pgSz")).get(qn("w:orient")) == "landscape" else "portrait"
+        for s in document.sections
+    ]
+
+
+def test_landscape_then_portrait_marker_makes_a_landscape_section_between(tmp_path):
+    docx_path = tmp_path / "test.docx"
+    _build_docx_with_orientation_markers(docx_path, ["landscape", "portrait"])
+
+    apply_layout(docx_path, header_left_text="ACME-001", status="draft", confidential_label="Confidential")
+
+    result = docx.Document(str(docx_path))
+    # title, front matter, body, landscape, portrait again
+    assert _orientations(result) == ["portrait", "portrait", "portrait", "landscape", "portrait"]
+    portrait_width, portrait_height = result.sections[2].page_width, result.sections[2].page_height
+    landscape = result.sections[3]
+    assert landscape.page_width == portrait_height
+    assert landscape.page_height == portrait_width
+    assert result.sections[4].page_width == portrait_width
+
+
+def test_trailing_landscape_does_not_turn_front_matter_or_body_landscape(tmp_path):
+    docx_path = tmp_path / "test.docx"
+    _build_docx_with_orientation_markers(docx_path, ["landscape"])
+
+    apply_layout(docx_path)
+
+    result = docx.Document(str(docx_path))
+    assert _orientations(result) == ["portrait", "portrait", "portrait", "landscape"]
+    # The title page and front matter keep the portrait dimensions too, not just the attribute.
+    for section in result.sections[:3]:
+        assert section.page_width < section.page_height
+
+
+def test_marker_sections_keep_headers_footers_and_page_number_continuity(tmp_path):
+    docx_path = tmp_path / "test.docx"
+    _build_docx_with_orientation_markers(docx_path, ["landscape", "portrait"])
+
+    apply_layout(docx_path, header_left_text="ACME-001", status="draft", confidential_label="Confidential")
+
+    result = docx.Document(str(docx_path))
+    landscape, portrait_again = result.sections[3], result.sections[4]
+    for section in (landscape, portrait_again):
+        assert section.header.paragraphs[0].text == "ACME-001\tDRAFT"
+        assert section.footer.paragraphs[0].text == "Confidential\t1"
+        assert "PAGE" in section.footer.paragraphs[0]._p.xml
+        # No restart: only the body's first section sets pgNumType.
+        assert section._sectPr.find(qn("w:pgNumType")) is None
+    assert result.sections[2]._sectPr.find(qn("w:pgNumType")).get(qn("w:start")) == "1"
+
+    # The right-aligned tab sits at each section's own content width.
+    def right_tab(section) -> int:
+        (tab,) = [t for t in section.footer.paragraphs[0].paragraph_format.tab_stops if t.alignment == WD_TAB_ALIGNMENT.RIGHT]
+        return tab.position
+
+    assert right_tab(landscape) == landscape.page_width - landscape.left_margin - landscape.right_margin
+    assert right_tab(portrait_again) == portrait_again.page_width - portrait_again.left_margin - portrait_again.right_margin
+    assert right_tab(landscape) > right_tab(portrait_again)
+    # And they do not share a part with the portrait sections.
+    assert landscape.footer._element is not result.sections[2].footer._element
+
+
+def test_repeated_marker_adds_no_extra_break(tmp_path):
+    docx_path = tmp_path / "test.docx"
+    _build_docx_with_orientation_markers(docx_path, ["portrait", "landscape", "landscape", "portrait"])
+
+    apply_layout(docx_path)
+
+    result = docx.Document(str(docx_path))
+    assert _orientations(result) == ["portrait", "portrait", "portrait", "landscape", "portrait"]
+
+
+def test_second_landscape_block_gets_its_own_section(tmp_path):
+    docx_path = tmp_path / "test.docx"
+    _build_docx_with_orientation_markers(docx_path, ["landscape", "portrait", "landscape", "portrait"])
+
+    apply_layout(docx_path, header_left_text="ACME-001", status="draft")
+
+    result = docx.Document(str(docx_path))
+    assert _orientations(result) == ["portrait", "portrait", "portrait", "landscape", "portrait", "landscape", "portrait"]
+
+
+def test_no_markers_keeps_the_final_orientation_for_every_break(tmp_path):
+    # With no markers the whole document is one orientation, so the breaks
+    # copy it as before (here a landscape document).
+    docx_path = tmp_path / "test.docx"
+    _build_docx_with_bookmarks(docx_path, include_front_matter_bookmark=True)
+    document = docx.Document(str(docx_path))
+    _set_orientation_for_test(document.sections[0], "landscape")
+    document.save(str(docx_path))
+
+    apply_layout(docx_path)
+
+    assert _orientations(docx.Document(str(docx_path))) == ["landscape", "landscape", "landscape"]
+
+
+def _set_orientation_for_test(section, orientation: str) -> None:
+    from quartifyr_styling.layout import _set_page_orientation
+
+    _set_page_orientation(section._sectPr, orientation)
+
+
+def test_marker_before_body_start_is_an_error(tmp_path):
+    docx_path = tmp_path / "test.docx"
+    _build_docx_with_orientation_markers(docx_path, ["landscape"], markers_before_body_start=True)
+
+    with pytest.raises(LayoutError, match="before .*body-start"):
+        apply_layout(docx_path)
+
+
+def test_marker_without_body_start_is_an_error(tmp_path):
+    docx_path = tmp_path / "test.docx"
+    document = docx.Document()
+    _add_bookmark(document.add_paragraph(), bookmark_id="810001", name="quartifyr-landscape-1")
+    document.save(str(docx_path))
+
+    with pytest.raises(LayoutError, match="body-start"):
+        apply_layout(docx_path)

@@ -135,7 +135,7 @@ def main() -> int:
     )
 
     checks.append(("no leftover {rpfy}: magic strings", "{rpfy}:" not in joined))
-    checks.append(("at least 7 tables present (title info + signatures + PK summary + demographics + abbreviations; synopsis is plain paragraphs, not a table)", len(document.tables) >= 7))
+    checks.append(("at least 8 tables present (title info + signatures + PK summary + NCA parameters + demographics + abbreviations; synopsis is plain paragraphs, not a table)", len(document.tables) >= 8))
 
     # build_template.py's reference-doc sets <w:updateFields w:val="true"/>
     # in settings.xml so Word auto-recalculates every field (TOC, SEQ, REF,
@@ -570,7 +570,7 @@ def main() -> int:
         "FigSectionExample",
         "FigSubsectionExample",
     ]
-    expected_table_anchors = ["TblPkSummary", "TblDemographics", "TblAppendixExample"]
+    expected_table_anchors = ["TblPkSummary", "TblNcaParameters", "TblDemographics", "TblAppendixExample"]
     checks.append(
         (
             "combined List of Figures has all 6 figures (continuous + main-body/appendix/section/subsection-scoped), in document order",
@@ -579,7 +579,7 @@ def main() -> int:
     )
     checks.append(
         (
-            "combined List of Tables has all 3 tables (continuous + appendix-scoped), in document order",
+            "combined List of Tables has all 4 tables (continuous + appendix-scoped), in document order",
             [a for a, _ in quartifyr_list_hyperlinks if a in expected_table_anchors] == expected_table_anchors,
         )
     )
@@ -626,17 +626,21 @@ def main() -> int:
         )
     )
 
-    checks.append(("document split into title/front-matter/body sections", len(document.sections) == 3))
-    title_section, front_matter_section, body_section = document.sections
+    # title page, front matter, body up to the landscape table, the landscape
+    # section, and the portrait remainder ({{< landscape >}}/{{< portrait >}} in report.qmd).
+    checks.append(("document split into title/front-matter/body + landscape + portrait sections", len(document.sections) == 5))
+    title_section, front_matter_section, body_section, landscape_section, portrait_after_section = document.sections
 
     header_expected = "ACME-001 - RPT-2026-014\tFINAL"
     checks.append(("dynamic 2-zone page header resolved from header-format:", title_section.header.paragraphs[0].text == header_expected))
     checks.append(
         (
-            "header applies to all three sections",
+            "header applies to every section, landscape one included",
             title_section.header.paragraphs[0].text
             == front_matter_section.header.paragraphs[0].text
-            == body_section.header.paragraphs[0].text,
+            == body_section.header.paragraphs[0].text
+            == landscape_section.header.paragraphs[0].text
+            == portrait_after_section.header.paragraphs[0].text,
         )
     )
     # Tab stop must actually be flush right, not landing on the Header
@@ -678,6 +682,64 @@ def main() -> int:
             body_pg_num_type is not None
             and body_pg_num_type.get(qn("w:start")) == "1"
             and body_pg_num_type.get(qn("w:fmt")) == "decimal",
+        )
+    )
+
+    # Landscape section (issue #88): only that section is landscape, it keeps
+    # the footer and numbering carries on, and the wide table in it is sized
+    # to its width with every column wide enough for its words.
+    def is_landscape(section) -> bool:
+        return section._sectPr.find(qn("w:pgSz")).get(qn("w:orient")) == "landscape" and section.page_width > section.page_height
+
+    checks.append(
+        (
+            "only the {{< landscape >}} section is landscape: title page, front matter, body and the portrait remainder keep portrait pages",
+            [is_landscape(s) for s in document.sections] == [False, False, False, True, False]
+            and all(s.page_width < s.page_height for s in (title_section, front_matter_section, body_section, portrait_after_section)),
+        )
+    )
+    checks.append(
+        (
+            "landscape and following portrait sections keep the footer (label + PAGE field) and carry the body's page numbering on",
+            all(
+                s.footer.paragraphs[0].text == f"{confidential_expected}\t1"
+                and "PAGE" in s.footer.paragraphs[0]._p.xml
+                and s._sectPr.find(qn("w:pgNumType")) is None
+                for s in (landscape_section, portrait_after_section)
+            ),
+        )
+    )
+    landscape_content_twips = int((landscape_section.page_width - landscape_section.left_margin - landscape_section.right_margin) / 635)
+    portrait_content_twips = int((body_section.page_width - body_section.left_margin - body_section.right_margin) / 635)
+    nca_tbl = next(
+        (t._tbl for t in document.tables if "{rpfy}:nca-parameters.csv" in "".join(t._tbl.xpath("./w:tblPr/w:tblDescription/@w:val"))),
+        None,
+    )
+    nca_grid = [int(g) for g in nca_tbl.xpath("./w:tblGrid/w:gridCol/@w:w")] if nca_tbl is not None else []
+    checks.append(("the 14-column NCA table is in the document", len(nca_grid) == 14))
+    checks.append(
+        (
+            "the NCA table spans the landscape page's content width (not a fixed 6 inches) in a fixed layout",
+            sum(nca_grid) == landscape_content_twips
+            and landscape_content_twips > portrait_content_twips
+            and nca_tbl.xpath("./w:tblPr/w:tblLayout/@w:type") == ["fixed"],
+        )
+    )
+    checks.append(
+        (
+            "no NCA column is narrower than about 0.4 inch (a one-character column would be ~0.1 inch)",
+            bool(nca_grid) and min(nca_grid) >= 560,
+        )
+    )
+    other_rpfy_tables = [
+        t._tbl
+        for t in document.tables
+        if "{rpfy}:" in "".join(t._tbl.xpath("./w:tblPr/w:tblDescription/@w:val")) and t._tbl is not nca_tbl
+    ]
+    checks.append(
+        (
+            "the portrait tables are fitted to the portrait content width too",
+            bool(other_rpfy_tables) and all(sum(int(g) for g in t.xpath("./w:tblGrid/w:gridCol/@w:w")) == portrait_content_twips for t in other_rpfy_tables),
         )
     )
 

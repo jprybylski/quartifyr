@@ -131,6 +131,11 @@ for the footer's left-side label (the same field `title_page.lua` renders
 on the title page). A `.qmd` with no `header-format:` and no `{{<
 body-start >}}` is left untouched -- both are opt-in.
 
+Also turns `{{< landscape >}}`/`{{< portrait >}}` markers (after `{{<
+body-start >}}`) into landscape and portrait section breaks, each break
+taking the orientation of the section it ends; see
+`../extensions/quartifyr/README.md`'s "Landscape sections".
+
 Optional `--style`/`--override` (deep-merged the same way as `build`,
 above): when given, applies that style's `equation.font` to the rendered
 docx's document-wide default math font (`word/settings.xml`'s
@@ -175,6 +180,29 @@ Python's hands) -- see
 `quartifyr_styling/same_page_crossrefs.py`'s docstring for why, and for
 this feature's own experimental/flaky-headless-LibreOffice caveat
 (inherited from, and equivalent to, `recalculate-fields`'s above).
+
+```bash
+quartifyr-styling fit-tables --docx report/draft/report-draft.docx
+```
+
+Gives each table reportifyr inserted (the ones whose alt text starts with
+`{rpfy}:`) explicit column widths, run on the *filled* docx. reportifyr
+leaves the widths of its flextables to the word processor (autofit at 100%),
+which gives a table of a dozen or more columns very narrow columns and
+header words that break mid-word, differently in Word and LibreOffice. This
+rewrites each table with a fixed layout instead: the width is the content
+width of the section the table is in (so a table on a `{{< landscape >}}`
+page uses the landscape width), no column is narrower than its longest
+unbreakable word plus the cell's padding, and the remaining width is shared
+out by how much each column's content wants. When the longest words alone
+don't fit the section, the font size is reduced in 1 pt steps, never below
+7 pt; a table that still doesn't fit is fitted to the page anyway and
+reported (`overflowing` in the JSON result, a warning in `render_report()`'s
+result). The tables quartifyr's own filters generate are left alone, and a
+document with no reportifyr tables isn't rewritten. Plain Python, no
+LibreOffice. Widths are estimated from Helvetica/Arial character metrics
+(scaled for bold and condensed fonts) rather than measured with the real
+font, and err wide. See `quartifyr_styling/fit_tables.py`'s docstring.
 
 ```bash
 quartifyr-styling sync-reportifyr-config --style styles/default.yaml --config report/config.yaml
