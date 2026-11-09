@@ -789,6 +789,47 @@ starting at "i" on the title page itself, and the body restarts at arabic
 "1". Without `{{< body-start >}}`, `apply-layout` still adds the header,
 just with no page-number split (single section throughout).
 
+### Landscape sections
+
+```markdown
+{{< body-start >}}
+
+# Results
+
+{{< landscape >}}
+
+{{< tbl_caption "TblNca" "Non-compartmental parameters" >}}
+
+{rpfy}:nca-parameters.csv
+
+{{< portrait >}}
+```
+
+`{{< landscape >}}` starts a landscape page section for the tables and
+figures that follow, and `{{< portrait >}}` returns to portrait. Each is an
+invisible bookmarked paragraph, like `{{< body-start >}}`, so it does nothing
+in a plain `quarto render`; `apply-layout` (run by `render_report()`) turns
+the markers into real section breaks with swapped page dimensions. The
+margins stay as they are, and the header, footer and page numbering carry on
+(each landscape or portrait section gets its own header and footer so the
+right-aligned tab sits at that page's width). Without a `{{< portrait >}}`
+the rest of the document stays landscape. A marker that repeats the
+orientation already in effect does nothing.
+
+- Both markers must come **after** `{{< body-start >}}`; `apply-layout`
+  stops with an error otherwise. The front matter has its own roman page
+  numbering and isn't split further.
+- Front-matter and body breaks keep their own orientation: each break takes
+  the orientation of the section it ends, not that of the final section.
+- The break is a `w:sectPr` inside the marker paragraph's `w:pPr`, which is
+  ordinary paragraph markup, so it passes through reportifyr's pass 2
+  untouched (the demo's smoke test asserts it on the filled docx).
+- Tables reportifyr fills in on a landscape page are sized to that page's
+  width by `render_report()`'s table-fitting step (`fit_tables = TRUE`, see
+  `../../python/README.md`'s `fit-tables` entry). reportifyr itself still
+  inserts figures at its own fixed width, so a figure on a landscape page
+  keeps its portrait size.
+
 ### A pStyle gotcha (if you're extending this extension)
 
 `<w:pStyle w:val="...">` must reference a style's **ID** (e.g.

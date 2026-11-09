@@ -91,9 +91,13 @@ load-bearing, not just a naming convention.
    from `OUTPUTS/`, producing `report/draft/<name>-draft.docx`.
 6. When `status = "final"`, also runs `reportifyr::finalize_document()`,
    producing `report/final/<name>-final.docx`.
-7. Optionally (`resolve_same_page_crossrefs = TRUE`, default off), runs
+7. Runs `styling_fit_tables()` on each produced docx (`fit_tables = TRUE`,
+   the default), so every table reportifyr inserted gets explicit column
+   widths from the page section it is in: wide tables stay readable and a
+   table on a `{{< landscape >}}` page uses that page's width.
+8. Optionally (`resolve_same_page_crossrefs = TRUE`, default off), runs
    `styling_resolve_same_page_crossrefs()` on each produced docx.
-8. Optionally (`recalculate_fields = TRUE`, default off), runs
+9. Optionally (`recalculate_fields = TRUE`, default off), runs
    `styling_recalculate_fields()` on each produced docx.
 
 See `vignette("styling")` for what each of those `styling_*()` calls

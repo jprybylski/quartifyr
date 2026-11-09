@@ -1,5 +1,6 @@
 # Generates the demo report's artifacts: a PK parameter summary table, a
-# participant demographics table, and a concentration-time figure, using
+# wide (14-column) NCA parameter table, a participant demographics table,
+# and a concentration-time figure, using
 # base R's built-in Theoph dataset (the same one reportifyr's own README/
 # examples use). Run from this project's root (examples/demo-report/), e.g.:
 #
@@ -40,6 +41,55 @@ write_csv_with_metadata(
   file = file.path("OUTPUTS", "tables", "pk-summary.csv"),
   config_yaml = config_yaml,
   meta_notes = "Values are per-participant summary statistics computed directly from observed concentrations; no imputation or model-based estimation was performed. This table is filled from a plain data frame, so reportifyr renders it in its own default table styling (Arial Narrow) rather than this report's own body font -- contrast with the participant demographics table below, filled from a pre-styled flextable object.",
+  meta_abbrevs = "PK",
+  row.names = FALSE
+)
+
+# A deliberately wide table (14 columns, long header words like "Accumulation"
+# next to short ones like "Kel"): the case reportifyr's own fixed 6-inch fit
+# handles badly, and what render_report()'s table-fitting step and the
+# {{< landscape >}} section in report.qmd exist for. Per-participant
+# non-compartmental parameters from the same Theoph data; the terminal
+# slope comes from the last three observations, so Kel/half-life/AUCinf
+# are rough, which is fine for a layout demonstration. Column names avoid
+# spaces and symbols: reportifyr reads the CSV back with read.csv()'s default
+# check.names = TRUE, which would turn "Dose (mg)" into "Dose..mg.".
+nca_one <- function(d) {
+  d <- d[order(d$Time), ]
+  auc_last <- sum(diff(d$Time) * (head(d$conc, -1) + tail(d$conc, -1)) / 2)
+  tail_n <- tail(seq_len(nrow(d)), 3)
+  kel <- -unname(coef(lm(log(conc) ~ Time, data = d[tail_n, ]))[2])
+  auc_inf <- auc_last + tail(d$conc, 1) / kel
+  dose_mg <- unique(d$Dose) * unique(d$Wt)
+  cl_f <- dose_mg / auc_inf
+  aumc <- sum(diff(d$Time) * (head(d$Time * d$conc, -1) + tail(d$Time * d$conc, -1)) / 2)
+  data.frame(
+    Participant = as.character(unique(d$Participant)),
+    Dose = dose_mg,
+    Cmax = max(d$conc),
+    Tmax = d$Time[which.max(d$conc)],
+    Cmin = min(d$conc),
+    Cavg = auc_last / max(d$Time),
+    AUClast = auc_last,
+    AUCinf = auc_inf,
+    Kel = kel,
+    Half_life = log(2) / kel,
+    CL_F = cl_f,
+    V_F = cl_f / kel,
+    MRT = aumc / auc_last,
+    Accumulation = 1 / (1 - exp(-kel * 12)),
+    check.names = FALSE
+  )
+}
+nca_parameters <- do.call(rbind, lapply(split(theoph, theoph$Participant), nca_one))
+nca_parameters[-1] <- lapply(nca_parameters[-1], function(x) signif(x, 3))
+nca_parameters <- nca_parameters[order(as.numeric(nca_parameters$Participant)), ]
+
+write_csv_with_metadata(
+  object = nca_parameters,
+  file = file.path("OUTPUTS", "tables", "nca-parameters.csv"),
+  config_yaml = config_yaml,
+  meta_notes = "Non-compartmental parameters per participant (dose in mg, CL_F in L/h, V_F in L, times in h); the terminal slope is estimated from the last three observations, so Kel, half-life and AUCinf are approximate. Fourteen columns, shown on a landscape page.",
   meta_abbrevs = "PK",
   row.names = FALSE
 )
@@ -131,6 +181,7 @@ ggsave_with_metadata(
 
 cat("Wrote:\n")
 cat(" -", file.path("OUTPUTS", "tables", "pk-summary.csv"), "\n")
+cat(" -", file.path("OUTPUTS", "tables", "nca-parameters.csv"), "\n")
 cat(" -", file.path("OUTPUTS", "tables", "participant-demographics.rds"), "\n")
 cat(" -", plot_file, "\n")
 cat(" -", synopsis_plot_file, "\n")

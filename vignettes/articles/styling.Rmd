@@ -257,11 +257,32 @@ at "i") and the body restarts at arabic "1". A `.qmd` with neither
 `header-format:` nor `{{< body-start >}}` is left untouched; both are
 opt-in.
 
+It also turns `{{< landscape >}}`/`{{< portrait >}}` markers placed after
+`{{< body-start >}}` into landscape and portrait section breaks, with the
+header, footer and page numbering carried across.
+
 Also reads `crossref-hyperlinks:` (default `true`); `false` strips the
 `\h` hyperlink switch from every figure/table/appendix cross-reference's
 `REF` field, document-wide. `"same-page"` can't be resolved here (no
 real pagination exists yet on the pass-1 shell); it just marks each
 crossref for the next command.
+
+## `fit-tables`: wide tables on the page
+
+```r
+quartifyr::styling_fit_tables("report/draft/report-draft.docx")
+```
+
+Run on the *filled* draft/final docx. `reportifyr` leaves the column widths
+of the tables it inserts to the word processor, which gives a table with a
+dozen or more columns very narrow columns and header words that break
+mid-word. This gives each of those tables a fixed layout: the width of the
+page section it is in (so a table between `{{< landscape >}}` and
+`{{< portrait >}}` uses the landscape width), no column narrower than its
+longest word, and, only when the words alone don't fit, a font size reduced
+in 1 pt steps to a 7 pt minimum. Tables `quartifyr` generates itself (title
+page, signatures, synopsis) are left alone. On by default in
+`render_report()` (`fit_tables = FALSE`, or `--no-fit-tables`, to skip it).
 
 ## `resolve-same-page-crossrefs`: post-fill crossref resolution
 

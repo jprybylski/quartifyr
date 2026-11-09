@@ -21,7 +21,8 @@ render_report(
   quarto_bin = NULL,
   soffice_bin = NULL,
   strict = FALSE,
-  offline = NULL
+  offline = NULL,
+  fit_tables = TRUE
 )
 }
 \arguments{
@@ -140,6 +141,16 @@ have been provisioned beforehand, by \code{initialize_quartifyr_project()} and
 error of class \code{quartifyr_offline_failure} naming the step. \code{FALSE} sets
 nothing. Renders of one project must not run concurrently: they share its
 \code{.venv} and \verb{report/} folders.}
+
+\item{fit_tables}{Whether to run \code{styling_fit_tables()} on each produced
+docx after reportifyr's pass 2 (default \code{TRUE}; plain Python, no
+LibreOffice). It gives the tables reportifyr inserted explicit column
+widths from the page section they are in (so a table on a \verb{\{\{< landscape >\}\}} page uses the landscape width), with no column narrower
+than its longest word and the font reduced in steps, to at most a 7 pt
+minimum, only when needed. A table still too wide at 7 pt is recorded as
+a warning in the result. \code{FALSE} leaves the widths to the word processor
+(reportifyr's own autofit). A failure only warns and is recorded in the
+result, like the LibreOffice steps.}
 }
 \value{
 An object of class \code{quartifyr_render_result}, a list with:

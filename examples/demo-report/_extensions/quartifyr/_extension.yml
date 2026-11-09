@@ -7,6 +7,7 @@ contributes:
   shortcodes:
     - appendix.lua
     - body_start.lua
+    - landscape.lua
   filters:
     # Order matters here -- each listed file runs as a complete pass
     # (its own Meta stage, then its own Pandoc stage) over the whole

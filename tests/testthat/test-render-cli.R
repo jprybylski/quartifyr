@@ -52,6 +52,19 @@ test_that("options reach render_report() with the right types", {
   expect_identical(seen$soffice_bin, "/opt/lo/soffice")
   expect_true(seen$recalculate_fields)
   expect_false(seen$resolve_same_page_crossrefs)
+  expect_true(seen$fit_tables)
+})
+
+test_that("--no-fit-tables turns table fitting off", {
+  seen <- NULL
+  local_mocked_bindings(render_report = function(...) {
+    seen <<- list(...)
+    .fake_result()
+  })
+
+  .run_cli(c("--project", "/p", "--shell", "report.qmd", "--no-fit-tables"))
+
+  expect_false(seen$fit_tables)
 })
 
 test_that("any render error exits 1 with a JSON error object naming its class", {

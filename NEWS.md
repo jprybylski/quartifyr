@@ -1,5 +1,35 @@
 # quartifyr
 
+# quartifyr (development version)
+
+## New features
+
+* Wide tables now fit the page, and a report can put tables on a landscape
+  page (#88).
+  * `render_report()` runs a new step after reportifyr's pass 2,
+    `styling_fit_tables()` (`quartifyr-styling fit-tables`, `fit_tables = TRUE`
+    by default, `--no-fit-tables` in `render.R`). reportifyr 0.4.0 leaves the
+    widths of its tables to the word processor, so a table of a dozen or more
+    columns got columns a few characters wide and header words that broke
+    mid-word. Each table it inserted now gets a fixed layout: the width is the
+    content width of the section the table is in (not a fixed 6 inches), no
+    column is narrower than its longest unbreakable word, and when the words
+    alone don't fit the font is reduced in 1 pt steps to a 7 pt minimum. A
+    table still too wide at 7 pt is fitted to the page and reported as a
+    warning in the result. Widths are estimated from character metrics, not
+    measured with the font.
+  * New `{{< landscape >}}` and `{{< portrait >}}` shortcodes (after
+    `{{< body-start >}}`) start and end a landscape section. `apply-layout`
+    turns them into section breaks with swapped page dimensions; each section
+    keeps its own header, footer and the body's page numbering. The section
+    break survives reportifyr's pass 2.
+
+## Bug fixes
+
+* The front-matter and body section breaks `apply-layout` inserts now take the
+  orientation of the section they end, not that of the document's final
+  section, so a trailing landscape section no longer turns them landscape too.
+
 # quartifyr 0.3.3
 
 ## New features

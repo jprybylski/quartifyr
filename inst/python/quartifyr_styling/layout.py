@@ -125,6 +125,7 @@ from ._ooxml_settings import insert_settings_child
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?\n)---\s*\n", re.DOTALL)
 _FRONT_MATTER_START_BOOKMARK = "quartifyr-front-matter-start"
 _BODY_START_BOOKMARK = "quartifyr-body-start"
+_ORIENTATION_MARKER_RE = re.compile(r"^quartifyr-(landscape|portrait)-\d+$")
 
 _BOOKMARK_START_TAG = qn("w:bookmarkStart")
 _BOOKMARK_END_TAG = qn("w:bookmarkEnd")
@@ -379,10 +380,102 @@ def _mark_crossrefs_for_same_page_resolution(document) -> None:
 
 
 
-def _insert_section_break(bookmark_p, final_sectPr) -> None:
+def _page_orientation(sectPr) -> str:
+    """``"landscape"`` or ``"portrait"``: the ``w:orient`` attribute if the
+    section sets one, otherwise inferred from its page dimensions (a
+    section with no ``w:pgSz`` at all is portrait, OOXML's default)."""
+    pgSz = sectPr.find(qn("w:pgSz"))
+    if pgSz is None:
+        return "portrait"
+    if pgSz.get(qn("w:orient")) == "landscape":
+        return "landscape"
+    width, height = pgSz.get(qn("w:w")), pgSz.get(qn("w:h"))
+    if pgSz.get(qn("w:orient")) is None and width and height and int(width) > int(height):
+        return "landscape"
+    return "portrait"
+
+
+def _set_page_orientation(sectPr, orientation: str) -> None:
+    """Makes ``sectPr`` ``orientation`` ("portrait"/"landscape"), swapping
+    the page width and height when that changes it. The margins are left
+    as they are, so a landscape section keeps the same left/right margins
+    (and so the same header/footer inset) as the portrait ones around it.
+    """
+    pgSz = sectPr.find(qn("w:pgSz"))
+    if pgSz is None:
+        return
+    if _page_orientation(sectPr) != orientation:
+        width, height = pgSz.get(qn("w:w")), pgSz.get(qn("w:h"))
+        pgSz.set(qn("w:w"), height)
+        pgSz.set(qn("w:h"), width)
+    if orientation == "landscape":
+        pgSz.set(qn("w:orient"), "landscape")
+    elif pgSz.get(qn("w:orient")) is not None:
+        del pgSz.attrib[qn("w:orient")]
+
+
+def _find_orientation_markers(document) -> list[tuple[object, str]]:
+    """``(paragraph, "landscape"|"portrait")`` for every
+    ``{{< landscape >}}``/``{{< portrait >}}`` marker, in document order."""
+    markers = []
+    for p in document.element.body.iter(qn("w:p")):
+        for bookmark in p.iter(_BOOKMARK_START_TAG):
+            match = _ORIENTATION_MARKER_RE.match(bookmark.get(qn("w:name")) or "")
+            if match:
+                markers.append((p, match.group(1)))
+                break
+    return markers
+
+
+def _insert_orientation_breaks(document, body_start_p, final_sectPr) -> list[str]:
+    """Turns the orientation markers into section breaks and returns the
+    orientation of each section they create, in order (the last one is the
+    final section's).
+
+    A break (a ``sectPr`` in the marker paragraph's ``pPr``) *ends* a
+    section, so a ``landscape`` marker ends the portrait section before it
+    and a ``portrait`` marker ends the landscape section before it. Each
+    break takes the orientation of the section it ends, never the final
+    one's. A marker that repeats the orientation already in effect adds no
+    break. ``final_sectPr`` itself is set to the orientation after the last
+    marker.
+    """
+    markers = _find_orientation_markers(document)
+    if not markers:
+        return []
+
+    paragraphs = list(document.element.body.iter(qn("w:p")))
+    body_start_index = paragraphs.index(body_start_p)
+    for marker_p, orientation in markers:
+        if paragraphs.index(marker_p) < body_start_index:
+            raise LayoutError(
+                f"{{{{< {orientation} >}}}} comes before {{{{< body-start >}}}}: landscape sections are only "
+                "supported in the body, after the front matter"
+            )
+
+    current = "portrait"
+    after_each_break: list[str] = []
+    for marker_p, orientation in markers:
+        if orientation == current:
+            continue
+        _insert_section_break(marker_p, final_sectPr, orientation=current)
+        current = orientation
+        after_each_break.append(current)
+    _set_page_orientation(final_sectPr, current)
+    return after_each_break
+
+
+def _insert_section_break(bookmark_p, final_sectPr, *, orientation: str | None = None) -> None:
     """Ends a new OOXML section at ``bookmark_p`` by cloning ``final_sectPr``
     into its ``pPr``, with any header/footerReference stripped from the
     clone first.
+
+    ``orientation`` is the orientation of the section this break ends. It
+    is ``None`` (clone as is) only when the document has no orientation
+    markers, i.e. the whole document is in one orientation. Otherwise the
+    final section's own orientation says nothing about the sections before
+    it, so the clone is set explicitly. The page-number settings are never
+    copied: a break must not restart the numbering.
 
     Stripping the references is load-bearing, confirmed via python-docx's
     own source (``docx/section.py``): ``is_linked_to_previous`` treats
@@ -399,9 +492,11 @@ def _insert_section_break(bookmark_p, final_sectPr) -> None:
     customize actually creates an independent part.
     """
     new_sectPr = copy.deepcopy(final_sectPr)
-    for ref_tag in ("w:headerReference", "w:footerReference"):
+    for ref_tag in ("w:headerReference", "w:footerReference", "w:pgNumType"):
         for ref in new_sectPr.findall(qn(ref_tag)):
             new_sectPr.remove(ref)
+    if orientation is not None:
+        _set_page_orientation(new_sectPr, orientation)
     pPr = bookmark_p.get_or_add_pPr()
     pPr.append(new_sectPr)
 
@@ -541,15 +636,27 @@ def apply_layout(
     front_matter_start_p = find_bookmark_paragraph(document, _FRONT_MATTER_START_BOOKMARK)
     body_start_p = find_bookmark_paragraph(document, _BODY_START_BOOKMARK)
 
+    has_orientation_markers = bool(_find_orientation_markers(document))
+    if has_orientation_markers and body_start_p is None:
+        raise LayoutError(
+            f"{docx_path}: {{{{< landscape >}}}}/{{{{< portrait >}}}} need {{{{< body-start >}}}} in the document "
+            "(landscape sections are only supported in the body, after the front matter)"
+        )
+
     if body_start_p is not None:
         final_sectPr = document.element.body.find(qn("w:sectPr"))
         if final_sectPr is None:
             raise LayoutError(f"{docx_path}: no trailing sectPr found in document body")
 
+        # With orientation markers the final section's orientation says
+        # nothing about the front matter and body before them (it may be
+        # landscape), so those breaks are set to portrait explicitly.
+        front_orientation = "portrait" if has_orientation_markers else None
         has_title_section = front_matter_start_p is not None
         if has_title_section:
-            _insert_section_break(front_matter_start_p, final_sectPr)
-        _insert_section_break(body_start_p, final_sectPr)
+            _insert_section_break(front_matter_start_p, final_sectPr, orientation=front_orientation)
+        _insert_section_break(body_start_p, final_sectPr, orientation=front_orientation)
+        orientation_sections = _insert_orientation_breaks(document, body_start_p, final_sectPr)
 
         # Re-open so python-docx's `sections` (computed by scanning the
         # XML) picks up the newly-inserted section(s); the in-memory
@@ -565,6 +672,11 @@ def apply_layout(
             title_section = None
             front_matter_section, body_section = document.sections[:2]
             all_sections = [front_matter_section, body_section]
+        # The sections the orientation markers start (landscape ones and
+        # the portrait ones after them), after the body's first section.
+        # Each gets its own header/footer, sized for its own page width.
+        orientation_section_objects = document.sections[len(all_sections) : len(all_sections) + len(orientation_sections)]
+        all_sections = all_sections + orientation_section_objects
 
         # IMPORTANT: unlink every section's header/footer *before* setting
         # any content on any of them. Interleaving unlink-then-modify per
@@ -622,6 +734,14 @@ def apply_layout(
         )
         if show_page_numbers:
             _set_pg_num_type(body_section, start=1, fmt="decimal")
+
+        # Landscape/portrait sections after the body's first one: same
+        # footer, with no pgNumType, so the body's page numbering carries
+        # on across them.
+        for section in orientation_section_objects:
+            _write_footer_paragraph(
+                section.footer.paragraphs[0], section, confidential_label, add_page_field=show_page_numbers
+            )
     elif header_left_text is not None:
         # No body-start marker: single section, header applies throughout,
         # no footer/page-numbering changes (there's no defined split point

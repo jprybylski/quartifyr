@@ -6,6 +6,14 @@
 # for the real end-to-end round-trip, which skips without the full
 # toolchain).
 
+# The table-fitting step (styling_fit_tables(), on by default) needs the
+# Python environment, so it is mocked for the whole file; the tests of that
+# step itself, at the end, replace this with their own mock.
+local_mocked_bindings(
+  styling_fit_tables = function(docx) invisible(list(path = docx, fitted = 0L, shrunk = list(), overflowing = list())),
+  .env = teardown_env()
+)
+
 .render_report_fixture <- function(env = parent.frame()) {
   project_dir <- withr::local_tempdir(.local_envir = env)
 
@@ -379,6 +387,7 @@ test_that("also runs finalize_document() and returns a final path for status = '
   local_mocked_bindings(check_quarto_extensions = function(...) invisible(NULL), .env = parent.frame())
   local_mocked_bindings(
     styling_build_abbreviations_tex = function(...) invisible(NULL),
+    styling_fit_tables = function(docx) invisible(list(path = docx, fitted = 0L, shrunk = list(), overflowing = list())),
     styling_apply_layout = function(docx, qmd, status, style = NULL, override = NULL) invisible(docx),
     .env = parent.frame()
   )
@@ -2092,4 +2101,94 @@ test_that("a bare soffice name is resolved through PATH once, and that path is w
   result <- .run_render(fixture, resolve_same_page_crossrefs = TRUE)
   expect_identical(normalizePath(seen), normalizePath(file.path(bin, "soffice")))
   expect_identical(normalizePath(result$versions$libreoffice$path), normalizePath(seen))
+})
+
+
+# --- Table fitting --------------------------------------------------------------
+
+test_that("fit_tables (the default) runs styling_fit_tables() on each produced docx, before the LibreOffice steps", {
+  fixture <- .render_report_fixture()
+  record <- new.env()
+  .base_render_report_mocks(record)
+  .mock_soffice_present()
+
+  calls <- character(0)
+  local_mocked_bindings(
+    styling_fit_tables = function(docx) {
+      calls <<- c(calls, paste0("fit:", basename(docx)))
+      invisible(list(path = docx, fitted = 1L, shrunk = list(), overflowing = list()))
+    },
+    styling_recalculate_fields = function(docx, timeout = 120, soffice_bin = NULL) {
+      calls <<- c(calls, "recalculate")
+      invisible(docx)
+    }
+  )
+
+  result <- render_report(
+    fixture$shell_qmd,
+    status = "draft",
+    reference_doc = fixture$reference_doc,
+    standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+    config_yaml = fixture$config_yaml,
+    recalculate_fields = TRUE
+  )
+
+  expect_identical(calls, c(paste0("fit:", basename(result$draft)), "recalculate"))
+})
+
+test_that("fit_tables = FALSE never calls styling_fit_tables()", {
+  fixture <- .render_report_fixture()
+  record <- new.env()
+  .base_render_report_mocks(record)
+  local_mocked_bindings(styling_fit_tables = function(...) stop("styling_fit_tables() should not run"))
+
+  expect_no_error(render_report(
+    fixture$shell_qmd,
+    status = "draft",
+    reference_doc = fixture$reference_doc,
+    standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+    config_yaml = fixture$config_yaml,
+    fit_tables = FALSE
+  ))
+})
+
+test_that("a failing styling_fit_tables() only warns, is recorded as an error, and the render still succeeds", {
+  fixture <- .render_report_fixture()
+  record <- new.env()
+  .base_render_report_mocks(record)
+  local_mocked_bindings(styling_fit_tables = function(docx) stop("boom"))
+
+  result <- NULL
+  expect_warning(
+    result <- render_report(
+      fixture$shell_qmd,
+      status = "draft",
+      reference_doc = fixture$reference_doc,
+      standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+      config_yaml = fixture$config_yaml
+    ),
+    "styling_fit_tables\\(\\) failed"
+  )
+  expect_false(is.null(result$draft))
+  expect_identical(result$status, "error")
+  expect_match(result$errors, "styling_fit_tables\\(\\) failed", all = FALSE)
+})
+
+test_that("a table still too wide at the minimum font size is a warning in the result", {
+  fixture <- .render_report_fixture()
+  record <- new.env()
+  .base_render_report_mocks(record)
+  local_mocked_bindings(
+    styling_fit_tables = function(docx) invisible(list(path = docx, fitted = 2L, shrunk = list(1L, 2L), overflowing = list(2L)))
+  )
+
+  result <- render_report(
+    fixture$shell_qmd,
+    status = "draft",
+    reference_doc = fixture$reference_doc,
+    standard_footnotes_yaml = fixture$standard_footnotes_yaml,
+    config_yaml = fixture$config_yaml
+  )
+
+  expect_match(result$warnings, "Table\\(s\\) 2 .* too wide at the minimum font size", all = FALSE)
 })
